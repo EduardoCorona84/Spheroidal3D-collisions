@@ -1,0 +1,84 @@
+ ntarget=
+   16000
+ iprec=
+       1
+ epsfmm=
+  0.50000E-03
+ nbox=
+     160
+ time in d3tstrcr=
+  0.83770E-02
+ scale=
+  0.10000E+01  0.10000E+01  0.10000E+01  0.10000E+01  0.10000E+01  0.10000E+01
+  0.10000E+01  0.10000E+01
+  lused7 is 
+  464006
+ nterms=
+      14      14      14      14      14      14      14      14
+ nmax=
+      14
+ finished reordering=
+       0
+ ier=
+       0
+ nboxes=
+     686
+ nlev=
+       7
+ nboxes=
+     686
+ lused7=
+  466248
+  lmptot is 
+ 1193641
+  lused7 is 
+ 1193642
+ === STEP 1 (form mp) ====
+ === STEP 2 (form lo) ====
+ === STEPS 3,4,5 ====
+ === STEP 6 (eval mp) ====
+ === STEP 7 (eval lo) ====
+ === STEP 8 (direct) =====
+ timeinfo=
+  0.36857E-01  0.11225E+00  0.53820E-02  0.39350E-01  0.10581E-01  0.15070E+00
+  0.26329E-01  0.13893E+00
+ sum(timeinfo)=
+  0.52038E+00
+ nboxes=
+     686
+ nsource=
+   16000
+ ntarget=
+   16000
+ time in fmm main=
+  0.52321E+00
+ lwlists=
+       1
+ lused total =
+ 1193642
+ memory / point = 
+  0.74603E+02
+ nsource=
+   16000
+ ntarget=
+   16000
+ after fmm, time (sec)=
+  0.53288E+00
+ after fmm, speed (points+targets/sec)=
+  0.60051E+05
+ directly, estimated time (sec)=
+  0.40219E+01
+ directly, estimated speed (points/sec)=
+  0.39782E+04
+ relative L2 error in potential=
+  0.63180E-07
+ relative L2 error in field=
+  0.14533E-08
+ directly, estimated time (sec)=
+  0.40488E+01
+ directly, estimated speed (targets/sec)=
+  0.39518E+04
+ relative L2 error in target potential=
+  0.35412E-06
+ relative L2 error in target field=
+  0.96933E-05

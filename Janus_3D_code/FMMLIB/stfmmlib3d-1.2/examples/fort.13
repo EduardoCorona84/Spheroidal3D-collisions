@@ -1,0 +1,256 @@
+ nsource=
+     100
+ ntarget=
+     100
+ epsfmm=
+  0.50000E-03
+ nbox=
+     160
+ scale=
+  0.10000E+01
+  lused7 is 
+    4811
+ nterms=
+      14
+ nmax=
+       0
+ finished reordering=
+       0
+ ier=
+       0
+ nboxes=
+       1
+ nlev=
+       0
+ nboxes=
+       1
+ lused7=
+    4815
+  lmptot is 
+    1741
+  lused7 is 
+    1742
+ === STEP 1 (form mp) ====
+ === STEP 2 (form lo) ====
+ === STEPS 3,4,5 ====
+ === STEP 6 (eval mp) ====
+ === STEP 7 (eval lo) ====
+ timeinfo=
+  0.19998E-05  0.20000E-05  0.20000E-05  0.91000E-03  0.10000E-05  0.30000E-05
+  0.30000E-05  0.00000E+00
+ nboxes=
+       1
+ nsource=
+     100
+ ntarget=
+     100
+ lwlists=
+     607
+ lused total =
+    1742
+ memory / point = 
+  0.17420E+02
+ epsfmm=
+  0.50000E-03
+ nbox=
+     160
+ scale=
+  0.10000E+01
+  lused7 is 
+    4811
+ nterms=
+      14
+ nmax=
+       0
+ finished reordering=
+       0
+ ier=
+       0
+ nboxes=
+       1
+ nlev=
+       0
+ nboxes=
+       1
+ lused7=
+    4815
+  lmptot is 
+    1741
+  lused7 is 
+    1742
+ === STEP 1 (form mp) ====
+ === STEP 2 (form lo) ====
+ === STEPS 3,4,5 ====
+ === STEP 6 (eval mp) ====
+ === STEP 7 (eval lo) ====
+ timeinfo=
+  0.20000E-05  0.20000E-05  0.20000E-05  0.77900E-03  0.99977E-06  0.20000E-05
+  0.20000E-05  0.00000E+00
+ nboxes=
+       1
+ nsource=
+     100
+ ntarget=
+     100
+ lwlists=
+     607
+ lused total =
+    1742
+ memory / point = 
+  0.17420E+02
+ epsfmm=
+  0.50000E-03
+ nbox=
+     160
+ scale=
+  0.10000E+01
+  lused7 is 
+    4811
+ nterms=
+      14
+ nmax=
+       0
+ finished reordering=
+       0
+ ier=
+       0
+ nboxes=
+       1
+ nlev=
+       0
+ nboxes=
+       1
+ lused7=
+    4815
+  lmptot is 
+    1741
+  lused7 is 
+    1742
+ === STEP 1 (form mp) ====
+ === STEP 2 (form lo) ====
+ === STEPS 3,4,5 ====
+ === STEP 6 (eval mp) ====
+ === STEP 7 (eval lo) ====
+ timeinfo=
+  0.99977E-06  0.99977E-06  0.99977E-06  0.33100E-03  0.10002E-05  0.00000E+00
+  0.10002E-05  0.00000E+00
+ nboxes=
+       1
+ nsource=
+     100
+ ntarget=
+     100
+ lwlists=
+     607
+ lused total =
+    1742
+ memory / point = 
+  0.17420E+02
+ epsfmm=
+  0.50000E-03
+ nbox=
+     160
+ scale=
+  0.10000E+01
+  lused7 is 
+    4811
+ nterms=
+      14
+ nmax=
+       0
+ finished reordering=
+       0
+ ier=
+       0
+ nboxes=
+       1
+ nlev=
+       0
+ nboxes=
+       1
+ lused7=
+    4815
+  lmptot is 
+    1741
+  lused7 is 
+    1742
+ === STEP 1 (form mp) ====
+ === STEP 2 (form lo) ====
+ === STEPS 3,4,5 ====
+ === STEP 6 (eval mp) ====
+ === STEP 7 (eval lo) ====
+ timeinfo=
+  0.10002E-05  0.10002E-05  0.10002E-05  0.35900E-03  0.99977E-06  0.99977E-06
+  0.99977E-06  0.00000E+00
+ nboxes=
+       1
+ nsource=
+     100
+ ntarget=
+     100
+ lwlists=
+     607
+ lused total =
+    1742
+ memory / point = 
+  0.17420E+02
+ epsfmm=
+  0.50000E-03
+ nbox=
+     160
+ scale=
+  0.10000E+01
+  lused7 is 
+    6107
+ finished reordering=
+       0
+ ier=
+       0
+ nboxes=
+       1
+ nlev=
+       0
+ nboxes=
+       1
+ lused7=
+    6107
+ === STEP 8 (direct) =====
+ timeinfo=
+  0.00000E+00  0.00000E+00  0.00000E+00  0.00000E+00  0.00000E+00  0.00000E+00
+  0.00000E+00  0.11580E-02
+ nboxes=
+       1
+ nsource=
+     100
+ ntarget=
+     100
+ lwlists=
+     607
+ lused total =
+    6107
+ memory / point = 
+  0.61070E+02
+ after stfmm3parttarg, time=
+  0.72190E-02
+ speed, (sources+targets)/sec=
+  0.27705E+05
+ directly, estimated time (sec)=
+  0.58000E-03
+ directly, estimated speed (points/sec)=
+  0.17241E+06
+ relative error in pot=
+  0.00000E+00
+ relative error in pre=
+  0.00000E+00
+ relative error in grad=
+  0.00000E+00
+ directly, estimated time (sec)=
+  0.59000E-03
+ directly, estimated speed (targets/sec)=
+  0.16949E+06
+ relative error in target pot=
+  0.00000E+00
+ relative error in target pre=
+  0.00000E+00
+ relative error in target grad=
+  0.00000E+00
