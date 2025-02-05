@@ -1,8 +1,8 @@
 function [x1,x2,dst,x1l,x2l,dstl] = MovingBallAlgo1(par1,par2,tol,maxit)
 
 % Get spheroid params
-C1 = par1.C; R1 = par1.R; ax1 = par1.a; by1=par1.b; cz1=par1.c; 
-C2 = par2.C; R2 = par2.R; ax2 = par2.a; by2=par2.b; cz2=par2.c;
+    C1 = par1.C; R1 = par1.R; ax1 = par1.a; by1=par1.b; cz1=par1.c; 
+    C2 = par2.C; R2 = par2.R; ax2 = par2.a; by2=par2.b; cz2=par2.c;
 
 % Diagonal matrices, Am matrices and qm. 
 % Ellipsoids are defined by qm(x) <= 1, and surface is qm(x)=1. 
