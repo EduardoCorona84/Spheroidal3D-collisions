@@ -1,6 +1,23 @@
 function spheroidalPairValidation(Ar, Deq, xc, alg, tol, maxIter)
     %This function takes in spheroid parameters, a point xc, an algorithm and then constructs a distance problem between a pair of spheroids with a known solution. The computed solution from the given algorithm is compared to the analytic solution.
 
+    if strcmp(alg, 'mb')
+        pairDistanceFunction = str2func('movingBallsPair');
+    elseif strcmp(alg,'GJKJohn')
+        pairDistanceFunction = str2func('GJKJohnsonPair');
+    elseif strcmp(alg, 'GJKSigned')
+        pairDistanceFunction = str2func('GJKSignedVolumesPair');
+    elseif strcmp(alg,'GJKJohnN')
+        pairDistanceFunction = str2func('GJKJohnsonNestPair');
+    elseif strcmp(alg, 'GJKSignedN')
+        pairDistanceFunction = str2func('GJKSignedVolumesNestPair');
+    else
+        disp('No algorithm specified, terminating.');
+        return;
+    end
+    
+    
+
     %Set up structs with params for distance algorithm.
     a = Ar^(2/3)*(Deq/2);
     b = Ar^(-1/3)*(Deq/2);
@@ -14,8 +31,7 @@ function spheroidalPairValidation(Ar, Deq, xc, alg, tol, maxIter)
     plotSpheroids(spheroids);
 
     %Find algorithm values
-    distanceAlgo = str2func(alg);
-    [x1 x2 d] = distanceAlgo(par1, par2, tol, maxIter);
+    [x1 x2 d] = pairDistanceFunction(par1, par2, tol, maxIter, true);
 
     %Find true values using the support mapping
     n = [1 0 0].';

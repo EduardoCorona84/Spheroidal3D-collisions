@@ -2,8 +2,14 @@ function[x1, x2, distances, neighbors] = allWithPairs(par, tol, maxIter, eta, al
 
 if strcmp(alg, 'mb')
     pairDistanceFunction = str2func('movingBallsPair');
-elseif strcmp(alg,'GJK')
-    pairDistanceFunction = str2func('GJKPair');
+elseif strcmp(alg,'GJKJohn')
+    pairDistanceFunction = str2func('GJKJohnsonPair');
+elseif strcmp(alg, 'GJKSigned')
+    pairDistanceFunction = str2func('GJKSignedVolumesPair');
+elseif strcmp(alg,'GJKJohnN')
+    pairDistanceFunction = str2func('GJKJohnsonNestPair');
+elseif strcmp(alg, 'GJKSignedN')
+    pairDistanceFunction = str2func('GJKSignedVolumesNestPair');
 else
     disp('No algorithm specified, terminating.');
     return;
@@ -22,33 +28,30 @@ for i=1:n
     longestSemis(i) = max([par(i).a par(i).b par(i).c]); 
 end
 
-%Treat as spheres and compute spherical distances, if distances are close enough use the moving balls algorithm and find a list of neighbors and corresponding contact points. For efficiency, only the contact points of particles with higher indices are computed at each time.
+%Treat as spheres and compute spherical distances, if distances are close enough use a distance algorithm and find a list of neighbors and corresponding contact points. 
 distances = zeros(n,n);
-x1 = cell(n,1);
-x2 = cell(n,2);
-neighbors = cell(n,1);
+x1 = cell(n,n);
+x2 = cell(n,n);
+neighbors = logical(false(n,n));
 for i = 1:n 
-    x1Local = [];
-    x2Local = [];
-    neighborsLocal = [];
     for j = i + 1:n
-        centerDistance = norm(centers(i) - centers(j));
-        semiDistance = longestSemis(i) + longestSemis(j);
-        if centerDistance >= longestSemis(i) + longestSemis(j)
-            distances(i,j) = centerDistance - semiDistance;
-        end
-        longestSemi = max([longestSemis(i) longestSemis(j)]);
-        if (distances(i,j) <= 2*eta*longestSemi) 
-            [x1New, x2New, distance] = pairDistanceFunction(par(i), par(j), tol, maxIter);
-            neighborsLocal =[neighborsLocal; j];
-            x1Local = [x1Local; x1New];
-            x2Local = [x2Local; x2New];
+        sphericalDiameter = longestSemis(i) + longestSemis(j);
+        sphericalDistance = norm(centers(i) - centers(j)) - sphericalDiameter;
+        if sphericalDistance <= eta*sphericalDistance
+            [x1New, x2New, distance] = pairDistanceFunction(par(i), par(j), tol, maxIter, false);
             distances(i,j) = distance;
+            x1{i,j} = x1New;
+            x2{j,i} = x1New;
+            x1{j,i} = x2New;
+            x2{i,j} = x2New;
+            neighbors(i,j) = 1;
+            neighbors(j,i) = 1;
+        else
+            distances(i,j) = sphericalDistance;
         end
+        distances(j,i) = distances(i,j);
     end
-    x1{i} = x1Local;
-    x2{i} = x2Local;
-    neighbors{i} = neighborsLocal;
+
 end
 
 end

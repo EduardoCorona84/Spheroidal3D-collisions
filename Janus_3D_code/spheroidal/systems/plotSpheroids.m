@@ -1,4 +1,4 @@
-function plotSpheroids(spheroids, cubeLength)
+function plotSpheroids(spheroids)
 
     n = length(spheroids);
     for i = 1:n
