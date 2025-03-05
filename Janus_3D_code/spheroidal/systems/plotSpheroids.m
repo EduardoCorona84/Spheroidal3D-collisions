@@ -1,4 +1,4 @@
-function plotSpheroids(spheroids)
+function plotSpheroids(spheroids, upper)
 
     n = length(spheroids);
     for i = 1:n
@@ -12,7 +12,7 @@ function plotSpheroids(spheroids)
         R(4,4) = 1;
         A = T*R;
         h.Matrix = A;
-        axis equal;
+        axis([-5 5 -5 5 0 upper]);
         hold on;
     end
 end

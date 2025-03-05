@@ -19,7 +19,7 @@ par2 = struct('a', a, 'b', b, 'c', b, 'C', -C, 'R', R2);
 
 [x1 x2 dMB] = movingBallsPair(par1, par2, tol, maxIter, true);
 fprintf('d MB:%f\n', dMB);
-[x1 x2 dSV] = GJKJohnsonNestPair(par1, par2, tol, maxIter, true);
+[x1 x2 dSV] = GJKSignedVolumesNestPair(par1, par2, tol, maxIter, true);
 fprintf('d SV:%f\n', dSV);
 
 

@@ -1,4 +1,4 @@
-function [x1, x2, d] = GJKJohnsonPair(par1, par2, tol, maxIter, val)
+function [x1, x2, distance, distanceIters] = GJKJohnsonPair(par1, par2, tol, maxIter, val)
 
     %Get parameters
     C1 = par1.C; R1 = par1.R; a1 = par1.a; b1=par1.b; c1=par1.c; 
@@ -11,6 +11,7 @@ function [x1, x2, d] = GJKJohnsonPair(par1, par2, tol, maxIter, val)
     end
 
     %Allocate space for needed arrays
+    distanceIters = zeros(maxIter);
     P = zeros(3,4);
     Q = zeros(3,4);
     Y = zeros(3,4);
@@ -27,11 +28,7 @@ function [x1, x2, d] = GJKJohnsonPair(par1, par2, tol, maxIter, val)
     bitStrings = logical(fliplr(bitStrings));
     cardIndices = [2 3 5 9 4 6 7 10 11 13 8 12 14 15 16];
     binaryWeights = [1 2 4 8];
-
-    %{
-    Perform the first iteration
-    ---------------------------------
-    %}
+    activeBitString = logical([0 0 0 0]);
 
     %Check if validation case
     if val 
@@ -40,120 +37,97 @@ function [x1, x2, d] = GJKJohnsonPair(par1, par2, tol, maxIter, val)
         v = C1 - C2;
     end
 
-    %Find initial point and its norm
+    %Find norm of the initial point and initialize needed values
     vNorm = norm(v);
-    p = ellipsoidSupportMapping(-v, a1, b1, c1, C1, R1);
-    q = ellipsoidSupportMapping(v, a2, b2, c2, C2, R2);
-    activeBitString = logical([0 0 0 0]);
     mu0 = 0;
 
-    %Check if centroids are overlapping, if so, return.
-    if vNorm < tol
-        x1 = p;
-        x2 = q;
-        d = 0;
-        return
-    end
 
-    %{
-    --------------------------------------------
-    End some parts of 0th Iteration
-    %}
+    for iter = 0:maxIter
 
-    iter = 0;
+        distanceIters(iter + 1) = vNorm;
 
-    while vNorm - mu0 > tol && iter < maxIter
+        %Find open index and populate needed arrays
+        newIndex = find(~activeBitString, 1, 'first');
+        P(:, newIndex) = ellipsoidSupportMapping(-v, a1, b1, c1, C1, R1);
+        Q(:, newIndex) = ellipsoidSupportMapping(v, a2, b2, c2, C2, R2);
+        Y(:, newIndex) = P(:, newIndex) - Q(:, newIndex);
+        activeBitString(newIndex) = 1;
 
-        if iter == 0
-            P(:,1) = p;
-            Q(:,1) = q;
-            v = p - q;
-            Y(:,1) = v;
-            dotProducts(1,1) = dot(v,v);
-            vNorm = norm(v);
-            activeBitString(1) = 1;
-            
-        else
-            newIndex = find(~activeBitString, 1, 'first');
-            P(:, newIndex) = p;
-            Q(:, newIndex) = q;
-            Y(:, newIndex) = P(:, newIndex) - Q(:, newIndex);
+        %Calculate error
+        delta = dot(v, Y(:, newIndex))/vNorm;
+        mu1 = max([mu0, delta]);
+        mu0 = mu1;
 
-            %Now begin the Johnson distance algorithm.
-            %update bit string, compute dot products, and find cardinality
-            activeBitString(newIndex) = 1;
-            dotProducts(activeBitString, newIndex) = (Y(:,activeBitString).'*Y(:, newIndex)).';
-            dotProducts(newIndex, activeBitString) = dotProducts(activeBitString, newIndex).';
-            
-            %Iterate up cardinality
-            for j = cardIndices
-                %Now check each subset
-                ifSubset = activeBitString | bitStrings(j,:);
-                %Check the size of the subset and that the subset is a subset of the active set. 
-                if all(ifSubset == activeBitString)
-                    minIndex = min(activeSubsetIndices);
-                    inactiveSubsetIndices = find(bitStrings(j,:) ~= activeBitString);
-                    if bitStrings(j, newIndex) == 1
-                        nonPositivityCondition = true;
-                        for k = 1:length(inactiveSubsetIndices)
-                            newBitString = bitStrings(j,:);
-                            newBitString(inactiveSubsetIndices(k)) = 1;
-                            newDecimal = dot(newBitString, binaryWeights) + 1;
-                            DeltaX(newDecimal,inactiveSubsetIndices(k)) = dot(DeltaX(j, bitStrings(j,:)), dotProducts(minIndex, bitStrings(j,:)) - dotProducts(inactiveSubsetIndices(k), bitStrings(j,:)));
+        %If within tolerance, find values and return
+        if vNorm - mu0 < tol
+            decimal = dot(activeBitString, binaryWeights) + 1;
+            x1 = P(:, activeBitString)*DeltaX(decimal, activeBitString).'./sum(DeltaX(decimal, activeBitString));
+            x2 = Q(:, activeBitString)*DeltaX(decimal, activeBitString).'./sum(DeltaX(decimal, activeBitString));
+            distance = vNorm;
+            return;
+        end
 
-                            if DeltaX(newDecimal,inactiveSubsetIndices(k)) <= 0
-                                newNonPositivityCondition = true;
-                            else
-                                newNonPositivityCondition = false;
-                            end
-                            nonPositivityCondition = nonPositivityCondition && newNonPositivityCondition;
-                        end
-
-                        positivityCondition =  all(DeltaX(j, bitStrings(j,:)) > 0);
-                        
-                        if positivityCondition & nonPositivityCondition
-                            activeBitString = bitStrings(j,:);
-                            v = Y(:,activeBitString)*DeltaX(j, activeBitString).'./sum(DeltaX(j,activeBitString));
-                            vNorm = norm(v);
-                            break;
-                        end
-                    else
+        %Now begin the Johnson distance algorithm.
+        %Compute dot products
+        dotProducts(activeBitString, newIndex) = (Y(:,activeBitString).'*Y(:, newIndex)).';
+        dotProducts(newIndex, activeBitString) = dotProducts(activeBitString, newIndex).';
+        
+        %Iterate up through cardinality
+        for j = cardIndices
+            %Now check its a subset of the active set.
+            ifSubset = activeBitString | bitStrings(j,:);
+            %Check that the subset is a subset of the active set. 
+            if all(ifSubset == activeBitString)
+                minIndex = find(bitStrings(j,:), 1, 'first');
+                inactiveSubsetIndices = find(bitStrings(j,:) ~= activeBitString);
+                %If the subset contains the new Index, calculate the Delta X values
+                if bitStrings(j, newIndex) == 1
+                    nonPositivityCondition = true;
+                    for k = 1:length(inactiveSubsetIndices)
                         newBitString = bitStrings(j,:);
-                        newBitString(newIndex) = 1;
+                        newBitString(inactiveSubsetIndices(k)) = 1;
                         newDecimal = dot(newBitString, binaryWeights) + 1;
-                        DeltaX(newDecimal, newIndex) = dot(DeltaX(j, bitStrings(j,:)), dotProducts(minIndex, bitStrings(j,:)) - dotProducts(newIndex, bitStrings(j,:)));
+                        DeltaX(newDecimal,inactiveSubsetIndices(k)) = dot(DeltaX(j, bitStrings(j,:)), dotProducts(minIndex, bitStrings(j,:)) - dotProducts(inactiveSubsetIndices(k), bitStrings(j,:)));
+
+                        if DeltaX(newDecimal,inactiveSubsetIndices(k)) <= 0
+                            newNonPositivityCondition = true;
+                        else
+                            newNonPositivityCondition = false;
+                        end
+                        nonPositivityCondition = nonPositivityCondition && newNonPositivityCondition;
                     end
+
+                    positivityCondition =  all(DeltaX(j, bitStrings(j,:)) > 0);
+
+                    %Check if the solution conditions are satisfied.
+                    if positivityCondition && nonPositivityCondition
+                        activeBitString = bitStrings(j,:);
+                        v = Y(:,activeBitString)*DeltaX(j, activeBitString).'./sum(DeltaX(j,activeBitString));
+                        vNorm = norm(v);
+                        break;
+                    end
+                %If newIndex not a part of the subset, compute DeltaX for subsets containing the current subset (bitString) and newIndex.
+                else
+                    newBitString = bitStrings(j,:);
+                    newBitString(newIndex) = 1;
+                    newDecimal = dot(newBitString, binaryWeights) + 1;
+                    DeltaX(newDecimal, newIndex) = dot(DeltaX(j, bitStrings(j,:)), dotProducts(minIndex, bitStrings(j,:)) - dotProducts(newIndex, bitStrings(j,:)));
                 end
-                
             end
+            
         
         end
 
         %Check if overlapping
         if vNorm < tol
+            distanceIters(iter + 1) = vNorm;
             decimal = dot(activeBitString, binaryWeights) + 1;
-            weights = DeltaX(decimal, activeBitString).'./sum(DeltaX(decimal, activeBitString));
-            x1 = P(:,activeBitString)*weights;
-            x2 = Q(:,activeBitString)*weights;
-            d = 0;
+            x1 = P(:,activeBitString)*DeltaX(decimal, activeBitString).'./sum(DeltaX(decimal, activeBitString));
+            x2 = Q(:,activeBitString)*DeltaX(decimal, activeBitString).'./sum(DeltaX(decimal, activeBitString));
+            distance = 0;
             return
         end
-        
-        %Find next support point and compute the error.
-        p = ellipsoidSupportMapping(-v, a1, b1, c1, C1, R1);
-        q = ellipsoidSupportMapping(v, a1, b1, c1, C2, R2);
-        w = p - q;
-        delta = dot(v, w)/vNorm;
-        mu1 = max([mu0, delta]);
-        iter = iter + 1;
-        mu0 = mu1;
     end 
-    %Compute final quantities.
-    decimal = dot(activeBitString, binaryWeights) + 1;
-    weights = DeltaX(decimal, activeBitString).'./sum(DeltaX(decimal, activeBitString));
-    x1 = P(:,activeBitString)*weights;
-    x2 = Q(:,activeBitString)*weights;
-    d = vNorm;
 end
  
 

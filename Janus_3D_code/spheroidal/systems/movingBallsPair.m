@@ -1,4 +1,4 @@
-function [x1, x2, d] = movingBallsPair(par1, par2, tol, maxIter, val)
+function [x1, x2, d, distanceIters] = movingBallsPair(par1, par2, tol, maxIter, val)
 
 %get parameters of the ellipsoids.
 %for notation:
@@ -14,6 +14,8 @@ if isequal(size(C1),[1 3])
     C1 = C1.';
     C2 = C2.';
 end
+
+distanceIters = zeros(maxIter);
 
 %make relevant SPD matrices for ellipsoids
 D1 = diag([a1 b1 c1].^-2);
@@ -38,6 +40,7 @@ eps_theta = sqrt((2*tol)/(maxCurv1 + maxCurv2));
 %Find initial points using the centers of the ellipsoids and compute distances
 iter = 1;
 [x1, x2, d] = findIntersection(C1, C2, A1, A2, C1, C2);
+distanceIters(iter) = d;
 if d == 0
     return;
 end
@@ -50,6 +53,7 @@ while (~bothTol && iter < maxIter)
     S2 = x2 - gamma2.*(A2*(x2 - C2));
     
     [x1New, x2New, dNew] = findIntersection(S1, S2, A1, A2, C1, C2);
+    distanceIters(iter) = dNew;
     if (dNew == 0)
         x1 = x1New;
         x2 = x2New;

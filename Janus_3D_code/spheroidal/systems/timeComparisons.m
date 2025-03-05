@@ -11,10 +11,15 @@ total = 15;
 timeLargeMBLow = zeros(10,1);
 timeLargeGJKJohnLow = zeros(10,1);
 timeLargeGJKJohnNLow = zeros(10,1);
+timeLargeGJKSignedLow = zeros(10,1);
+timeLargeGJKSignedNLow = zeros(10,1);
 
 timeLargeMBHigh = zeros(10,1);
 timeLargeGJKJohnHigh = zeros(10,1);
 timeLargeGJKJohnNHigh = zeros(10,1);
+timeLargeGJKSignedHigh = zeros(10,1);
+timeLargeGJKSignedNHigh = zeros(10,1);
+
 
 for i=1:10
     spheroids = RSA(cubeLength, Ar, Deq, total);
@@ -29,6 +34,12 @@ for i=1:10
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKJohnN');
     time = timeit(f);
     timeLargeGJKJohnNLow(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSigned');
+    time = timeit(f);
+    timeLargeGJKSignedLow(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSignedN');
+    time = timeit(f);
+    timeLargeGJKSignedNLow(i) = time;
 
     tol = 1e-8;
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'mb');
@@ -40,15 +51,21 @@ for i=1:10
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKJohnN');
     time = timeit(f);
     timeLargeGJKJohnNHigh(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSigned');
+    time = timeit(f);
+    timeLargeGJKSignedHigh(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSignedN');
+    time = timeit(f);
+    timeLargeGJKSignedNHigh(i) = time;
 end
 
-boxchart([timeLargeMBLow timeLargeGJKJohnLow timeLargeGJKJohnNLow]);
+boxchart([timeLargeMBLow timeLargeGJKJohnLow timeLargeGJKJohnNLow timeLargeGJKSignedLow timeLargeGJKSignedNLow]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'LargeAspectRatioLowAccuracy.pdf');
 
 
-boxchart([timeLargeMBHigh timeLargeGJKJohnHigh timeLargeGJKJohnNHigh]);
+boxchart([timeLargeMBHigh timeLargeGJKJohnHigh timeLargeGJKJohnNHigh timeLargeGJKSignedHigh timeLargeGJKSignedNHigh]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'LargeAspectRatioHighAccuracy.pdf');
@@ -60,10 +77,14 @@ Ar = 2;
 timeMediumMBLow = zeros(10,1);
 timeMediumGJKJohnLow = zeros(10,1);
 timeMediumGJKJohnNLow = zeros(10,1);
+timeMediumGJKSignedLow = zeros(10,1);
+timeMediumGJKSignedNLow = zeros(10,1);
 
 timeMediumMBHigh = zeros(10,1);
 timeMediumGJKJohnHigh = zeros(10,1);
 timeMediumGJKJohnNHigh = zeros(10,1);
+timeMediumGJKSignedHigh = zeros(10,1);
+timeMediumGJKSignedNHigh = zeros(10,1);
 
 for i=1:10
     spheroids = RSA(cubeLength, Ar, Deq, total);
@@ -78,6 +99,12 @@ for i=1:10
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKJohnN');
     time = timeit(f);
     timeMediumGJKJohnNLow(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSigned');
+    time = timeit(f);
+    timeMediumGJKSignedLow(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSignedN');
+    time = timeit(f);
+    timeMediumGJKSignedNLow(i) = time;
 
     tol = 1e-8;
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'mb');
@@ -89,15 +116,21 @@ for i=1:10
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKJohnN');
     time = timeit(f);
     timeMediumGJKJohnNHigh(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSigned');
+    time = timeit(f);
+    timeMediumGJKSignedHigh(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSignedN');
+    time = timeit(f);
+    timeMediumGJKSignedNHigh(i) = time;
 end
 
-boxchart([timeMediumMBLow timeMediumGJKJohnLow timeMediumGJKJohnNLow]);
+boxchart([timeMediumMBLow timeMediumGJKJohnLow timeMediumGJKJohnNLow timeMediumGJKSignedLow timeMediumGJKSignedNLow]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'MediumAspectRatioLowAccuracy.pdf');
 
 
-boxchart([timeMediumMBHigh timeMediumGJKJohnHigh timeMediumGJKJohnNHigh]);
+boxchart([timeMediumMBHigh timeMediumGJKJohnHigh timeMediumGJKJohnNHigh timeMediumGJKSignedHigh timeMediumGJKSignedNHigh]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'MediumAspectRatioHighAccuracy.pdf');
@@ -107,10 +140,15 @@ Ar = 1/8;
 timeSmallMBLow = zeros(10,1);
 timeSmallGJKJohnLow = zeros(10,1);
 timeSmallGJKJohnNLow = zeros(10,1);
+timeSmallGJKSignedLow = zeros(10,1);
+timeSmallGJKSignedNLow = zeros(10,1);
+
 
 timeSmallMBHigh = zeros(10,1);
 timeSmallGJKJohnHigh = zeros(10,1);
 timeSmallGJKJohnNHigh = zeros(10,1);
+timeSmallGJKSignedHigh = zeros(10,1);
+timeSmallGJKSignedNHigh = zeros(10,1);
 
 for i=1:10
     spheroids = RSA(cubeLength, Ar, Deq, total);
@@ -124,7 +162,13 @@ for i=1:10
     timeSmallGJKJohnLow(i) = time;
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKJohnN');
     time = timeit(f);
-    timeSmallJKJohnNLow(i) = time;
+    timeSmallGJKJohnNLow(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSigned');
+    time = timeit(f);
+    timeSmallGJKSignedLow(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSignedN');
+    time = timeit(f);
+    timeSmallGJKSignedNLow(i) = time;
 
     tol = 1e-8;
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'mb');
@@ -136,21 +180,27 @@ for i=1:10
     f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKJohnN');
     time = timeit(f);
     timeSmallGJKJohnNHigh(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSigned');
+    time = timeit(f);
+    timeSmallGJKSignedHigh(i) = time;
+    f = @() allWithPairs(spheroids, tol, maxIter, eta, 'GJKSignedN');
+    time = timeit(f);
+    timeSmallGJKSignedNHigh(i) = time;
 end
 
-boxchart([timeSmallMBLow timeSmallGJKJohnLow timeSmallGJKJohnNLow]);
+boxchart([timeSmallMBLow timeSmallGJKJohnLow timeSmallGJKJohnNLow timeSmallGJKSignedLow timeSmallGJKSignedNLow]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'SmallAspectRatioLowAccuracy.pdf');
 
 
-boxchart([timeSmallMBHigh timeSmallGJKJohnHigh timeSmallGJKJohnNHigh]);
+boxchart([timeSmallMBHigh timeSmallGJKJohnHigh timeSmallGJKJohnNHigh timeSmallGJKSignedHigh timeSmallGJKSignedNHigh]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'SmallAspectRatioHighAccuracy.pdf');
 
 %Test for heterogenous mixture of spheroid aspect ratios
-
+%{
 Ar = [1/8 2 8];
 timeHeteroMBLow = zeros(10,1);
 timeHeteroGJKJohnLow = zeros(10,1);
@@ -196,3 +246,4 @@ boxchart([timeHeteroMBHigh timeHeteroGJKJohnHigh timeHeteroGJKJohnNHigh]);
 xlabel('algorithm');
 ylabel('time (s)');
 saveas(gcf, 'HeteroAspectRatioHighAccuracy.pdf');
+%}

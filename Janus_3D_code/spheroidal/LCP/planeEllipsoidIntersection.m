@@ -1,0 +1,23 @@
+function [x1, x2, d] = planeEllipsoidIntersection(par, planeNormal, planePoint)
+    
+    %Find the rotation matrix for the ellipsoid
+    R = par.R;
+    
+    %Find the center of the ellipsoid
+    C = par.C;
+    
+    %Find the semi-axes of the ellipsoid
+    a = par.a;
+    b = par.b;
+    c = par.c;
+    
+    %This closed solution is given by lagrange multipliers, see my notes.
+    temp = R*diag([a b c].^2)*R.'*planeNormal;
+    x1 = C - sqrt(dot(planeNormal, temp))^(-1).*temp;
+    x2 = x1;
+    x2(3) = 0;
+
+    d = dot(planeNormal, x1 - planePoint);
+
+
+end
