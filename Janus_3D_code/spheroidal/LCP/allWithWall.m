@@ -1,4 +1,4 @@
-function [x1, x2, distances, neighbors] = allWithWall(par, eta)
+function [x1, x2, distances, neighbors] = allWithWall(par, planeNormal, planePoint, eta)
     n = length(par); 
 
     % Initialize arrays 
@@ -17,7 +17,7 @@ function [x1, x2, distances, neighbors] = allWithWall(par, eta)
     neighbors = logical(false(n,1));
 
     for i=1:n
-        [x1New, x2New, d] = planeEllipsoidIntersection(par(i), [0 0 1].', [0 0 0].');
+        [x1New, x2New, d] = planeEllipsoidIntersection(par(i), planeNormal, planePoint);
         distances(i) = d;
         if d<= eta*longestSemis(i)
             x1{i} = x1New;

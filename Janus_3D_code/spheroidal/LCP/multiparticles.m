@@ -1,20 +1,29 @@
 addpath('../systems');
 addpath(genpath('../../LCPsolvers'))
-spheroids = RSA(10, 2, 2, 4);
 
-for i = 1:length(spheroids)
-    spheroids(i).C = spheroids(i).C + [0 0 5].';
+
+initialConfiguration = RSA(10, 2, 1.5, 50);
+for i =1:length(initialConfiguration)
+    initialConfiguration(i).C = initialConfiguration(i).C + [0 0 5].';
 end
 
-
-totalSteps  = 1000;
+totalSteps = 5000;
 timeStart = 0;
-timeEnd = 2;
+timeEnd = 5;
+configurations = simulationFloor(initialConfiguration, totalSteps, timeStart, timeEnd);
 
-configurations = simulation(spheroids, totalSteps, timeStart, timeEnd);
 
+fig = figure;
+fig.Visible = 'off';
+hundredfpsSigned = VideoWriter('100fpsSignedMulti.avi');
+hundredfpsSigned.FrameRate = 1000;
+hundredfpsSigned.Quality = 100;
+open(hundredfpsSigned);
+
+hundredfpsSignedCount = 0;
 for i = 1:length(configurations)
-    clf;
-    plotSpheroids(configurations{i}, 15);
-    pause(0.001);
+    plotSpheroids(configurations{i}, 10);
+    writeVideo(hundredfpsSigned, getframe);
 end
+close(hundredfpsSigned);
+

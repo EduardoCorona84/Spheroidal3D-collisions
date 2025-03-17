@@ -16,8 +16,11 @@ function [x1, x2, d] = planeEllipsoidIntersection(par, planeNormal, planePoint)
     x1 = C - sqrt(dot(planeNormal, temp))^(-1).*temp;
     x2 = x1;
     x2(3) = 0;
+    %find intersection point of the plane and the line
+    %t = dot(planeNormal, planePoint - x1)/dot(planeNormal, planeNormal);
+    %x2 = x1 +t*planeNormal;
 
     d = dot(planeNormal, x1 - planePoint);
-
+    d = max([d, 0]);
 
 end
