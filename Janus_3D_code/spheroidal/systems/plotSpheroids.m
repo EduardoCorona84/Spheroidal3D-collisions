@@ -12,7 +12,8 @@ function plotSpheroids(spheroids, upper)
         R(4,4) = 1;
         A = T*R;
         h.Matrix = A;
-        axis([-5 5 -5 5 0 upper]);
+        axis([-7.5 7.5 -7.5 7.5 0 upper]);
         hold on;
     end
+    hold off;
 end
