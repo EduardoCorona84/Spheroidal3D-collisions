@@ -27,11 +27,11 @@ N   = size(A,2);
 
 Q   = A'*A;
 c   = A'*b;
-normQ   = norm(Q);
+normQ   = norm(Q); % lipschitz const of Q
 %% use cvx to check that we have the correct answer
 cvx_begin
         variable xRef(N)
-        minimize sum_square(A*xRef-b)/2 
+        minimize 1/2*dot(xRef, Q*xRef) - dot(xRef,c) 
         subject to 
         0 <= xRef
 cvx_end 
@@ -40,9 +40,9 @@ errFcn  = @(x) norm( x - xRef )/nrmXref;
 
 % TODO: Note I think we can maybe make this slightly more efficient by not
 % providing an upper bound...
-prox          = @(x0,d,u,varargin) proj_rank1_box(0,Inf,x0,d,u);
+prox        = @(x0,d,u,varargin) proj_rank1_box(0,Inf,x0,d,u);
 h           = @(x) any(x < 0)*Inf; 
-fcnGrad     = @(x) normSquaredFunction(x,A,[],b);
+fcnGrad     = @(x) quadprog(x,Q,c);
 
 %% Solve with zeroSR1
 % code from git@github.com:stephenbeckr/zeroSR1.git
