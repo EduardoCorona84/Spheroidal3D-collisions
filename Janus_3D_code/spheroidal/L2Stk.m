@@ -1,142 +1,141 @@
 function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
-%--------------------------------------------------------------------%
-% 
-% %--------------------------------------------------------------------%
-if nargin==0
-    LOCAL_test_L2Stk();
-    return;
-end
+    %{
+        An implementation of the Laplace to Stokes single layer potential.
 
-% Self evaluation ----------------------------------------------
-if isempty(Xeval)
-    % nu_x_spectral=zeros(size(sigma_x,1),size(sigma_x,2),ns); nu_y_spectral=nu_x_spectral; nu_z_spectral=nu_x_spectral; 
-    nu_x_spectral=repmat([1,0,0],size(sigma_x,1),size(sigma_x,2),ns);
-    nu_y_spectral=repmat([0,1,0],size(sigma_x,1),size(sigma_x,2),ns);
-    nu_z_spectral=repmat([0,0,1],size(sigma_x,1),size(sigma_x,2),ns);
+        Inputs
+            Xeval       -   target points
+            pars        -   parameters needed for to calculate spheroidal Laplace LPs
+            sigma_x     -  
+            sigma_y     -
+            sigma_z     -
+            ns          -   number of spheroidal bodies
+    %}
+
+    if nargin==0
+        LOCAL_test_L2Stk();
+        return;
+    end
+
+    % Self evaluation ----------------------------------------------
+    if isempty(Xeval)
+        nu_x_spectral=repmat([1,0,0],size(sigma_x,1),size(sigma_x,2),ns);
+        nu_y_spectral=repmat([0,1,0],size(sigma_x,1),size(sigma_x,2),ns);
+        nu_z_spectral=repmat([0,0,1],size(sigma_x,1),size(sigma_x,2),ns);
+
+        % i=1
+        pars.sigma=sigma_x; pars.get_shc;
+        SL1=spheroidalSL(pars); % SL self always returns N-D array
+        [SP1dx,SP1dy,SP1dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+        
+        % i=2
+        pars.sigma=sigma_y; pars.get_shc;
+        SL2=spheroidalSL(pars);
+        [SP2dx,SP2dy,SP2dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+        
+        % i=3
+        pars.sigma=sigma_z; pars.get_shc;
+        SL3=spheroidalSL(pars);
+        [SP3dx,SP3dy,SP3dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+    % All to targets
+    else
+        % Demand consistent inputs.
+        % It should be up to the user to provide the right input.
+        assert(isa(Xeval, "cell"), ...
+            "The evaluation points (i.e. the first argument) need to have type " + ...
+            "'cell' of size 1 x ns. Each cell should contain the target points " + ...
+            "for the associated body, and each cell should be of size nt x 3, where " + ...
+            "nt is the number of target points on the body.");
+        nu_x_spectral=cell(1,ns); nu_y_spectral=nu_x_spectral; nu_z_spectral=nu_x_spectral; 
+        for i=1:ns
+            nu_x_spectral{i} = repmat([1,0,0],size(Xeval{i},1),1);
+            nu_y_spectral{i} = repmat([0,1,0],size(Xeval{i},1),1);
+            nu_z_spectral{i} = repmat([0,0,1],size(Xeval{i},1),1);
+        end
+
+        % i=1
+        pars.sigma=sigma_x; pars.get_shc;
+        SL1=spheroidalSL(pars,Xeval); % CHECKED: same as MatVec('SL') when all near.
+        [SP1dx,SP1dy,SP1dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+        
+        % i=2
+        pars.sigma=sigma_y; pars.get_shc;
+        SL2=spheroidalSL(pars,Xeval);
+        [SP2dx,SP2dy,SP2dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+        
+        % i=3
+        pars.sigma=sigma_z; pars.get_shc;
+        SL3=spheroidalSL(pars,Xeval);
+        [SP3dx,SP3dy,SP3dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+    end
+
+    % extra term y dot sigma, for each i=1,2,3
+    % Yself=pars.get_X();
+    % y_src_x=Yself(:,1); y_src_y=Yself(:,2); y_src_z=Yself(:,3);
+    new_sig=zeros(size(sigma_x));
+    % np=size(sigma_x,1);
+    for i=1:ns
+        if ~pars.oblate(i)
+            Xloc=prolate_spheroid_shape(pars.p,pars.u0(i),pars.a(i));
+        else
+            Xloc=oblate_spheroid_shape(pars.p,pars.u0(i),pars.a(i));
+        end
+        new_sig(:,:,i)=sigma_x(:,:,i).*Xloc(:,1)+sigma_y(:,:,i).*Xloc(:,2)+sigma_z(:,:,i).*Xloc(:,3);
+    end
+    pars.sigma=new_sig;
+    pars.get_shc();
+    [Fdx,Fdy,Fdz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+
+    % add up contribution from all spheroids on target point
+    % Stk_x=zeros(size(Xeval,1),1); Stk_y=Stk_x; Stk_z=Stk_x;
     % for i=1:ns
-    %     nu_x_spectral(:,:,) = repmat([1,0,0],size(sigma_x,1),1);
-    %     nu_y_spectral{i} = repmat([0,1,0],size(sigma_x,1),1);
-    %     nu_z_spectral{i} = repmat([0,0,1],size(sigma_x,1),1);
+    %     Stk_x=Stk_x + 1/2.*(SL1(:,:,i)-Xeval(:,1,i).*SP1dx(:,:,i)-Xeval(:,2,i).*SP2dx(:,:,i)-Xeval(:,3,i).*SP3dx(:,:,i)+Fdx(:,:,i));
+    %     Stk_y=Stk_y + 1/2.*(SL2(:,:,i)-Xeval(:,1,i).*SP1dy(:,:,i)-Xeval(:,2,i).*SP2dy(:,:,i)-Xeval(:,3,i).*SP3dy(:,:,i)+Fdy(:,:,i));
+    %     Stk_z=Stk_z + 1/2.*(SL3(:,:,i)-Xeval(:,1,i).*SP1dz(:,:,i)-Xeval(:,2,i).*SP2dz(:,:,i)-Xeval(:,3,i).*SP3dz(:,:,i)+Fdz(:,:,i));
     % end
 
-    % i=1
-    pars.sigma=sigma_x; pars.get_shc;
-    SL1=spheroidalSL(pars); % SL self always returns N-D array
-    [SP1dx,SP1dy,SP1dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-    
-    % i=2
-    pars.sigma=sigma_y; pars.get_shc;
-    SL2=spheroidalSL(pars);
-    [SP2dx,SP2dy,SP2dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-    
-    % i=3
-    pars.sigma=sigma_z; pars.get_shc;
-    SL3=spheroidalSL(pars);
-    [SP3dx,SP3dy,SP3dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-
-
-% All to targets
-else
-    if ~isa(Xeval, "cell") && size(Xeval,3)~=ns
-        Xeval=pars.get_X_targets(Xeval);
-    end
-    nu_x_spectral=cell(1,ns); nu_y_spectral=nu_x_spectral; nu_z_spectral=nu_x_spectral; 
-    for i=1:ns
-        nu_x_spectral{i} = repmat([1,0,0],size(Xeval{i},1),1);
-        nu_y_spectral{i} = repmat([0,1,0],size(Xeval{i},1),1);
-        nu_z_spectral{i} = repmat([0,0,1],size(Xeval{i},1),1);
-    end
-
-    % i=1
-    pars.sigma=sigma_x; pars.get_shc;
-    SL1=spheroidalSL(pars,Xeval); % CHECKED: same as MatVec('SL') when all near.
-    [SP1dx,SP1dy,SP1dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-    % CHECKED: also same as MatVec_gradSP when all near.
-    
-    % i=2
-    pars.sigma=sigma_y; pars.get_shc;
-    SL2=spheroidalSL(pars,Xeval);
-    [SP2dx,SP2dy,SP2dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-    
-    % i=3
-    pars.sigma=sigma_z; pars.get_shc;
-    SL3=spheroidalSL(pars,Xeval);
-    [SP3dx,SP3dy,SP3dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-
-end
-
-% extra term y dot sigma, for each i=1,2,3
-% Yself=pars.get_X();
-% y_src_x=Yself(:,1); y_src_y=Yself(:,2); y_src_z=Yself(:,3);
-new_sig=zeros(size(sigma_x));
-% np=size(sigma_x,1);
-for i=1:ns
-    if ~pars.oblate(i)
-        Xloc=prolate_spheroid_shape(pars.p,pars.u0(i),pars.a(i));
-    else
-        Xloc=oblate_spheroid_shape(pars.p,pars.u0(i),pars.a(i));
-    end
-    new_sig(:,:,i)=sigma_x(:,:,i).*Xloc(:,1)+sigma_y(:,:,i).*Xloc(:,2)+sigma_z(:,:,i).*Xloc(:,3);
-end
-pars.sigma=new_sig;
-pars.get_shc();
-[Fdx,Fdy,Fdz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-
-% add up contribution from all spheroids on target point
-% Stk_x=zeros(size(Xeval,1),1); Stk_y=Stk_x; Stk_z=Stk_x;
-% for i=1:ns
-%     Stk_x=Stk_x + 1/2.*(SL1(:,:,i)-Xeval(:,1,i).*SP1dx(:,:,i)-Xeval(:,2,i).*SP2dx(:,:,i)-Xeval(:,3,i).*SP3dx(:,:,i)+Fdx(:,:,i));
-%     Stk_y=Stk_y + 1/2.*(SL2(:,:,i)-Xeval(:,1,i).*SP1dy(:,:,i)-Xeval(:,2,i).*SP2dy(:,:,i)-Xeval(:,3,i).*SP3dy(:,:,i)+Fdy(:,:,i));
-%     Stk_z=Stk_z + 1/2.*(SL3(:,:,i)-Xeval(:,1,i).*SP1dz(:,:,i)-Xeval(:,2,i).*SP2dz(:,:,i)-Xeval(:,3,i).*SP3dz(:,:,i)+Fdz(:,:,i));
-% end
-
-if isempty(Xeval)
-    [Xloc,~]=pars.get_X();
-    np_div=size(Xloc,1)/ns;
-    np=round(np_div);
-    if abs(np_div-np)>1e-8
-        error("\n size of target on surface is not multiple of ns\n")
-    end
-    if isa(sigma_x,"cell")
-        Stk_x=cell(1,ns); Stk_y=Stk_x; Stk_z=Stk_x;
-        for i=1:ns
-            Xloc_i=Xloc((i-1)*np+1:i*np,:);
-            Stk_x{i}=1/2.*(SL1{i}-Xloc_i(:,1).*SP1dx{i}-Xloc_i(:,2).*SP2dx{i}-Xloc_i(:,3).*SP3dx{i}+Fdx{i});
-            Stk_y{i}=1/2.*(SL2{i}-Xloc_i(:,1).*SP1dy{i}-Xloc_i(:,2).*SP2dy{i}-Xloc_i(:,3).*SP3dy{i}+Fdy{i});
-            Stk_z{i}=1/2.*(SL3{i}-Xloc_i(:,1).*SP1dz{i}-Xloc_i(:,2).*SP2dz{i}-Xloc_i(:,3).*SP3dz{i}+Fdz{i});
+    if isempty(Xeval)
+        [Xloc,~]=pars.get_X();
+        np_div=size(Xloc,1)/ns;
+        np=round(np_div);
+        if abs(np_div-np)>1e-8
+            error("\n size of target on surface is not multiple of ns\n")
+        end
+        if isa(sigma_x,"cell")
+            Stk_x=cell(1,ns); Stk_y=Stk_x; Stk_z=Stk_x;
+            for i=1:ns
+                Xloc_i=Xloc((i-1)*np+1:i*np,:);
+                Stk_x{i}=1/2.*(SL1{i}-Xloc_i(:,1).*SP1dx{i}-Xloc_i(:,2).*SP2dx{i}-Xloc_i(:,3).*SP3dx{i}+Fdx{i});
+                Stk_y{i}=1/2.*(SL2{i}-Xloc_i(:,1).*SP1dy{i}-Xloc_i(:,2).*SP2dy{i}-Xloc_i(:,3).*SP3dy{i}+Fdy{i});
+                Stk_z{i}=1/2.*(SL3{i}-Xloc_i(:,1).*SP1dz{i}-Xloc_i(:,2).*SP2dz{i}-Xloc_i(:,3).*SP3dz{i}+Fdz{i});
+            end
+        else
+            Stk_x=zeros(size(sigma_x,1),size(sigma_x,2),ns); Stk_y=Stk_x; Stk_z=Stk_x;
+            for i=1:ns
+                Xloc_i=Xloc((i-1)*np+1:i*np,:);
+                Stk_x(:,:,i)=1/2.*(SL1(:,:,i)-Xloc_i(:,1).*SP1dx(:,:,i)-Xloc_i(:,2).*SP2dx(:,:,i)-Xloc_i(:,3).*SP3dx(:,:,i)+Fdx(:,:,i));
+                Stk_y(:,:,i)=1/2.*(SL2(:,:,i)-Xloc_i(:,1).*SP1dy(:,:,i)-Xloc_i(:,2).*SP2dy(:,:,i)-Xloc_i(:,3).*SP3dy(:,:,i)+Fdy(:,:,i));
+                Stk_z(:,:,i)=1/2.*(SL3(:,:,i)-Xloc_i(:,1).*SP1dz(:,:,i)-Xloc_i(:,2).*SP2dz(:,:,i)-Xloc_i(:,3).*SP3dz(:,:,i)+Fdz(:,:,i));
+            end
         end
     else
-        Stk_x=zeros(size(sigma_x,1),size(sigma_x,2),ns); Stk_y=Stk_x; Stk_z=Stk_x;
-        for i=1:ns
-            Xloc_i=Xloc((i-1)*np+1:i*np,:);
-            Stk_x(:,:,i)=1/2.*(SL1(:,:,i)-Xloc_i(:,1).*SP1dx(:,:,i)-Xloc_i(:,2).*SP2dx(:,:,i)-Xloc_i(:,3).*SP3dx(:,:,i)+Fdx(:,:,i));
-            Stk_y(:,:,i)=1/2.*(SL2(:,:,i)-Xloc_i(:,1).*SP1dy(:,:,i)-Xloc_i(:,2).*SP2dy(:,:,i)-Xloc_i(:,3).*SP3dy(:,:,i)+Fdy(:,:,i));
-            Stk_z(:,:,i)=1/2.*(SL3(:,:,i)-Xloc_i(:,1).*SP1dz(:,:,i)-Xloc_i(:,2).*SP2dz(:,:,i)-Xloc_i(:,3).*SP3dz(:,:,i)+Fdz(:,:,i));
-        end
-    end
-
-
-else
-    % return cell/array of contribution from each spheroid separately.
-    if isa(Xeval,"cell")
-        Stk_x=cell(1,ns); Stk_y=Stk_x; Stk_z=Stk_x;
-        for i=1:ns
-            Stk_x{i}=1/2.*(SL1{i}-Xeval{i}(:,1).*SP1dx{i}-Xeval{i}(:,2).*SP2dx{i}-Xeval{i}(:,3).*SP3dx{i}+Fdx{i});
-            Stk_y{i}=1/2.*(SL2{i}-Xeval{i}(:,1).*SP1dy{i}-Xeval{i}(:,2).*SP2dy{i}-Xeval{i}(:,3).*SP3dy{i}+Fdy{i});
-            Stk_z{i}=1/2.*(SL3{i}-Xeval{i}(:,1).*SP1dz{i}-Xeval{i}(:,2).*SP2dz{i}-Xeval{i}(:,3).*SP3dz{i}+Fdz{i});
-        end
-    else
-        Stk_x=zeros(size(Xeval,1),size(sigma_x,2),ns); Stk_y=Stk_x; Stk_z=Stk_x;
-        for i=1:ns
-            Stk_x(:,:,i)=1/2.*(SL1(:,:,i)-Xeval(:,1,i).*SP1dx(:,:,i)-Xeval(:,2,i).*SP2dx(:,:,i)-Xeval(:,3,i).*SP3dx(:,:,i)+Fdx(:,:,i));
-            Stk_y(:,:,i)=1/2.*(SL2(:,:,i)-Xeval(:,1,i).*SP1dy(:,:,i)-Xeval(:,2,i).*SP2dy(:,:,i)-Xeval(:,3,i).*SP3dy(:,:,i)+Fdy(:,:,i));
-            Stk_z(:,:,i)=1/2.*(SL3(:,:,i)-Xeval(:,1,i).*SP1dz(:,:,i)-Xeval(:,2,i).*SP2dz(:,:,i)-Xeval(:,3,i).*SP3dz(:,:,i)+Fdz(:,:,i));
+        % return cell/array of contribution from each spheroid separately.
+        if isa(Xeval,"cell")
+            Stk_x=cell(1,ns); Stk_y=Stk_x; Stk_z=Stk_x;
+            for i=1:ns
+                Stk_x{i}=1/2.*(SL1{i}-Xeval{i}(:,1).*SP1dx{i}-Xeval{i}(:,2).*SP2dx{i}-Xeval{i}(:,3).*SP3dx{i}+Fdx{i});
+                Stk_y{i}=1/2.*(SL2{i}-Xeval{i}(:,1).*SP1dy{i}-Xeval{i}(:,2).*SP2dy{i}-Xeval{i}(:,3).*SP3dy{i}+Fdy{i});
+                Stk_z{i}=1/2.*(SL3{i}-Xeval{i}(:,1).*SP1dz{i}-Xeval{i}(:,2).*SP2dz{i}-Xeval{i}(:,3).*SP3dz{i}+Fdz{i});
+            end
+        else
+            Stk_x=zeros(size(Xeval,1),size(sigma_x,2),ns); Stk_y=Stk_x; Stk_z=Stk_x;
+            for i=1:ns
+                Stk_x(:,:,i)=1/2.*(SL1(:,:,i)-Xeval(:,1,i).*SP1dx(:,:,i)-Xeval(:,2,i).*SP2dx(:,:,i)-Xeval(:,3,i).*SP3dx(:,:,i)+Fdx(:,:,i));
+                Stk_y(:,:,i)=1/2.*(SL2(:,:,i)-Xeval(:,1,i).*SP1dy(:,:,i)-Xeval(:,2,i).*SP2dy(:,:,i)-Xeval(:,3,i).*SP3dy(:,:,i)+Fdy(:,:,i));
+                Stk_z(:,:,i)=1/2.*(SL3(:,:,i)-Xeval(:,1,i).*SP1dz(:,:,i)-Xeval(:,2,i).*SP2dz(:,:,i)-Xeval(:,3,i).*SP3dz(:,:,i)+Fdz(:,:,i));
+            end
         end
     end
 end
-
-
-
 
 function LOCAL_test_L2Stk()
     % Test Stokes operator made from Laplace operators on a system of 3
@@ -301,7 +300,6 @@ function LOCAL_test_L2Stk()
     xlabel("p");
     ylabel("scaled 2-norm")
     title("L2Stk (all spectral) error from Kernel\_Eval");
-
 end
 
 function E=PtChargeE(ptch,Xptch,Y)
@@ -323,7 +321,5 @@ function E=PtChargeE(ptch,Xptch,Y)
     end
     E=Etemp./(4*pi)*ptch;
     E=reshape(E,n,3);
-end
-
 end
 
