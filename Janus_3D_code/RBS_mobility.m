@@ -1002,6 +1002,12 @@ else
         % solve LCP using Barzilai Borwein PGD
         [lam ,err ,iter, ~, ~, ~] = ...
         BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+        case 'L-BFGS-B'
+            [];
+        case 'P-L-BFGS'
+            [];
+        case 'zeroSR1'
+        
         otherwise
         % solve LCP using Barzilai Borwein PGD
         [lam ,err ,iter, ~, ~, ~] = ...
