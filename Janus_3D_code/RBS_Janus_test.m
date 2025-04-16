@@ -6,7 +6,7 @@ e_south=1;
 
 rd=[1];
 n=2;
-Cdst=4;
+Cdst=2; % TODO nic  change back to 4
 fname='2x2x2_new_charge_distribution_auf_PC';
 ep=.3;
 Nt=500;

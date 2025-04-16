@@ -909,7 +909,8 @@ end
 % by employing only self interaction (block-diagonal) for TD and SD. 
 
 % Different criteria can be added as needed
-matfree = ~Fparams.denseMV || numF+numFS > 1; 
+% TODO nic change this back 
+matfree = ~Fparams.denseMV;% || numF+numFS > 1; 
 bkdiag=false; 
 
 if ~matfree
@@ -965,6 +966,9 @@ tol_rel=parslv.col_tolrel; %1e-6;
 tol_abs=parslv.col_tolabs; %1e-9; 
 profile=1;
 
+x0 = zeros(size(bvec));
+
+
 if matfree
     switch parslv.colsolver
         case 'Newton'
@@ -1004,6 +1008,13 @@ else
         BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
     end
 end
+
+% TODO Remove: 
+save('./LCPSolvers/LCP_test_case_nic.mat', ...
+    'Amat', 'bvec', 'x0', ...
+    'max_iter', 'tol_rel', 'tol_abs', ...
+    'profile',...
+    'lam','err', 'iter');
 
 fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'],err,iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1173,29 +1184,29 @@ if col
    display(F_c(1:3,:));
    
    if ~isempty(mu_c)
-   %Update sigma, mu, U and VW
-   mu   = mu    + mu_c; 
-   sigma= sigma + rho_c; 
-   U   = Lapp(Kernels.SD,(mu+sigma)); 
-   
-   if ~isempty(Fparams.Tshell)
-       U = U + Ush; 
-   end
-   
-   CU  = Nullsp.C*U; 
-   IU  = CU(vind); 
-   WxI = CU(wind); 
-   
-    if ~iscell(W)
-        VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,n3)); 
-        VW(4:6,:) = tau\(rdt.*reshape(WxI,3,n3)); 
-    else
-        IUv = reshape(IU,3,n3); WxIv = reshape(WxI,3,n3); 
-        for j=1:n3
-            VW(1:3,j) = (1/sum(W{j}))*IUv(:,j); 
-            VW(4:6,j) = tau{j}\WxIv(:,j);
-        end
-    end
+       %Update sigma, mu, U and VW
+       mu   = mu    + mu_c;
+       sigma = sigma + rho_c;
+       U   = Lapp(Kernels.SD,(mu+sigma));
+
+       if ~isempty(Fparams.Tshell)
+           U = U + Ush;
+       end
+
+       CU  = Nullsp.C * U;
+       IU  = CU(vind);
+       WxI = CU(wind);
+
+       if ~iscell(W)
+           VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,n3));
+           VW(4:6,:) = tau\(rdt.*reshape(WxI,3,n3));
+       else
+           IUv = reshape(IU,3,n3); WxIv = reshape(WxI,3,n3);
+           for j=1:n3
+               VW(1:3,j) = (1/sum(W{j}))*IUv(:,j);
+               VW(4:6,j) = tau{j}\WxIv(:,j);
+           end
+       end
    end
    
    fprintf('\n Time for contact force correction: %e',toc);  

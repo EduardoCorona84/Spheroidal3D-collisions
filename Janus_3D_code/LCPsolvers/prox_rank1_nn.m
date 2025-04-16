@@ -4,14 +4,18 @@ if all(x > 0)
     y = x; 
     return 
 end
-
+if ~exist('u', 'var') || isempty(u)
+    y = x; 
+    y(x<0) = 0;
+    
+end
 if ~exist('plotFlag', 'var') || isempty(plotFlag)
     plotFlag = false; 
 end
 
 N = length(x); 
 alphas = d .* x ./ u; 
-alphasSorted = sort(alphas);
+alphasSorted = sort(alphas); % nlog(n) cry...
 f = ones(N,1);
 for i = 1:N
     ai = alphasSorted(i);

@@ -53,7 +53,10 @@ rho     = eps;     % Descent direction test parameter used to test if the Newton
 
 %--- Setup values need while iterating ------------------------------------
 
-convergence = zeros(max_iter,1); % Used when profiling to measure the convergence rate
+convergence = [];
+if profile 
+    convergence = zeros(max_iter,1); % Used when profiling to measure the convergence rate
+end
 
 err     = Inf;         % Current error measure
 x       = x0;          % Current iterate

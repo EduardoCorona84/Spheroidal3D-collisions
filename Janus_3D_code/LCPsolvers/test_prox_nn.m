@@ -1,14 +1,14 @@
-plotFlag = false;
-Ns = arrayfun(@(e) round(10^e), 1:0.5:6);
+plotFlag = true;
+Ns = arrayfun(@(e) round(10^e), 1:0.5:4);
 times = zeros(length(Ns));
-for i = 1:length(Ns)
+for i = 1:1%length(Ns)
     N = Ns(i);
     x = 100*randn(N,1);
     d = abs(100*randn(N,1));
     u = 100*randn(N,1);
     
     tic
-    y = prox_rank1_nn(x,d,u, plotFlag);
+    y = prox_rank1_nn(x, d, u, plotFlag);
     times(i) = toc();
 
     res = x-y;
@@ -24,7 +24,7 @@ for i = 1:length(Ns)
     % cvx_end
     % t2 = toc;
     disp(['N = ' num2str(N)])
-    disp(['  My Algo ' num2str(t1) 's'])
+    disp(['  My Algo ' num2str(times(i)) 's'])
     % disp(['  CVX ' num2str(t2) 's'])
     % disp(['  yCvx = ' num2str(yCvx')])
     % disp(['  y = ' num2str(y')])
@@ -34,9 +34,9 @@ for i = 1:length(Ns)
     fprintf('  L(ystar) = %.4g\n', L(y)) 
 end
 
-gcf
-clf
-hold on
-plot(Ns,times)
-xlabel("Ns")
-ylabel("Wall time (s)")
+% gcf
+% clf
+% hold on
+% plot(Ns,times)
+% xlabel("Ns")
+% ylabel("Wall time (s)")

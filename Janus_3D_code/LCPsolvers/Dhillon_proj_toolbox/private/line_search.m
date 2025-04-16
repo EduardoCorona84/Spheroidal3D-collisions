@@ -21,7 +21,11 @@ end
         delx = out.x - x;
         if DO_AX
             Ax = A*x;
-            fc = fx_Ax(Ax);
+            if nargin(fx_Ax)==2
+                fc = fx_Ax(x,Ax);
+            else 
+                fc = fx_Ax(Ax);
+            end
         else
             fc = fx(x);
         end
