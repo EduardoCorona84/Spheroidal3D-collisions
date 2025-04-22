@@ -1,13 +1,15 @@
 %{
-    Test code for Laplace to Stokes single layer with two prolate
+    Test code for Laplace to Stokes single layer potential with two prolate
     spheroids.
 
     The density, sigma, is randomized.
+
+    Expected performance for Stokes: 1e-6.
 %}
+
 
 clear;
 
-DESIRED_TOL = 1e-6;
 CHECK_LAPLACE_FLAG = false;
 CHECK_STOKES_FLAG = true;
 CHECK_RUN_OLD_CODE = false;

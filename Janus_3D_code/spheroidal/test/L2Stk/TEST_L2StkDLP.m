@@ -109,15 +109,15 @@ if CHECK_STOKES_FLAG
     integrand_DLz = RdotN .* Rvec_z .* RdotSigma .* r_inv_5;
 
     % Integrate
-    SLx = -(3/(4*pi)) * integrate(integrand_SLx);
-    SLy = -(3/(4*pi)) * integrate(integrand_SLy);
-    SLz = -(3/(4*pi)) * integrate(integrand_SLz);
+    DLx = -(3/(4*pi)) * integrate(integrand_DLx);
+    DLy = -(3/(4*pi)) * integrate(integrand_DLy);
+    DLz = -(3/(4*pi)) * integrate(integrand_DLz);
 
     % Now, actually calculate result from L2Stk and compare.
     target_pts = cell(1, 1);
     target_pts{1} = Xtrg;
-    [L2Stkx, L2Stky, L2Stkz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
+    [L2StkDLPx, L2StkDLPy, L2StkDLPz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
 
     fprintf("\n inf error of Stokes double layer potential in x: %e, in y: %e, in z: %e\n", ...
-        max(norm(L2Stkx{1}-SLx)), max(norm(L2Stky{1}-SLy)),max(norm(L2Stkz{1}-SLz)));
+        max(norm(L2StkDLPx{1}-DLx)), max(norm(L2StkDLPy{1}-DLy)),max(norm(L2StkDLPz{1}-DLz)));
 end
