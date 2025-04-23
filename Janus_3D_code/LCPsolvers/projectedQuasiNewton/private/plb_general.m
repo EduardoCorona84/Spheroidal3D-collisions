@@ -1,4 +1,4 @@
-function out = plb_quad(A, b, x0, options)
+function out = plb_general(fgFcn, x0, options)
 % P_LBFGS -- This function solves the following optimization problem
 %  min (1/2)x^TAX + x^Tb, subject to x \ge 0
 % 
@@ -20,13 +20,6 @@ function out = plb_quad(A, b, x0, options)
 % Extended from code from Version 1.2 (c) 2009  Dongmin Kim  and Suvrit Sra
 % Extended by Stephen Becker for comparison in ~2014
 % Extend by April 2024 Nic Rummel for quadratic program instead of nnlsq
-
-fx = @(x) 1/2*dot(x,A*x) + dot(x,b); 
-gfx= @(x) A*x+b;
-% Reuse the matvec when possible
-fx_Ax = @(x, Ax) 1/2*dot(x, Ax) + dot(x,b); 
-gfx_Ax= @(Ax) Ax + b ;
-
 %% ------------------------------------------------------
 %  INITIALIZATION
 %  ------------------------------------------------------
@@ -59,16 +52,13 @@ last = 1;
 
 out.x = x0;
 out.oldx = x0;
-out.obj = fx(x0);
+[out.obj,out.grad]  = fgFcn(x0);
 out.oldobj = out.obj;
-out.grad = gfx(x0);
 out.oldgrad = out.grad;
 out.srch = -out.grad;
 
-[out.x, flag] = line_search(out, fx, gfx, options);
-
-out.grad = gfx(out.x);
-out.obj = fx(out.x);
+[out.x, ~] = line_search(out, fgFcn, options);
+[out.obj, out.grad]  = fgFcn(out.x);
 
 % Stephen adding:
 out.objHist = out.obj;
@@ -116,13 +106,8 @@ while true
     out.srch = -out.srch;
     out.srch(gp) = 0;
     % SRB's linesearch version can make use of the mat vec
-    [out.x, flag, ~, Ax] = line_search(out, fx, gfx, options, fx_Ax, A);
-
-    if isempty(Ax)
-        Ax = A*out.x;
-    end
-    out.grad = gfx_Ax(Ax);
-    out.obj  = fx_Ax(out.x, Ax);
+    [out.x ,~] = line_search(out, fgFcn, options);
+    [out.obj, out.grad] = fgFcn(out.x);
     % SRB adding:
     out.objHist = [out.objHist; out.obj];
     if isfield(options, 'errFcn')

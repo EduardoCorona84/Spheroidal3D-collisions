@@ -1,4 +1,4 @@
-function out = solnls(A, b, x0, opt)
+function out = pqn_solnls(A, b, x0, opt)
 %
 % function out = solnls(A, b, x0, opt)
 % Solve a nonnegative least squares problem,

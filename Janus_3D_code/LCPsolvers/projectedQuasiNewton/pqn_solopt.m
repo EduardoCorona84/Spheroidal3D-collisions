@@ -1,4 +1,4 @@
-function options = solopt(varargin)
+function options = pqn_solopt(varargin)
 % SOLOPT  --  Creates a default options structure
 %
 % OPTIONS = SOLOPT

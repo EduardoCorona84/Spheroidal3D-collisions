@@ -4,6 +4,7 @@ if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;
 end
 [dirname, ~,~] = fileparts(mfilePath);
+[dirname, ~] = fileparts(dirname);
 addpath(genpath(dirname))
 %%
 % build test problem so we can isolate just the solvers
@@ -96,16 +97,16 @@ semilogy(info.err(:,3), '-.' );
 %% P_LBFGS (PQN that we want)
 tic
 x0 = zeros(size(Q,2),1);
-opt = solopt();
+opt = pqn_solopt();
 opt.errFcn = errFcn;
 opt.algo = 'PLB';
 
-out_quad = solquad(Q, -c, x0, opt);
+out_quad = pqn_solquad(Q, -c, x0, opt);
 semilogy(out_quad.err, ':' );
 tm4 = toc;
 solverStr = 'p-lbfgs';
 fprintf('Final error for %15s is %.2e, took %.2g seconds\n', solverStr, errFcn(x_p_lbfgs), tm4 );
-out_nnls = solnls(A, b, x0, opt);
+out_nnls = pqn_solnls(A, b, x0, opt);
 assert(norm(out_nnls.x - out_quad.x) / norm(out_nnls.x) < 10*eps(),...
     'These algorithms should give equivalent output');
 % finish plotting
