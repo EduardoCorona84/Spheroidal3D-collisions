@@ -3,7 +3,6 @@ function [SYnssh,SYns]=SDY(p,Mat,oblate,fvals)
 % or single layer of Ynm/(uu^2-cos^2(u))^(1/2) on
 % surface of spheroid with eccentricity 1/uu, semimajor axis 1/uu
 % Parameters: p=order of spheroidal harmonic expansion, 
-% Mat=layer operator ('DL', 'SL', or 'SP') 
 if nargin==2
     oblate=false;
     [u,v]=gl_grid(p);
@@ -56,7 +55,7 @@ end
 
 % Apply Laplace kernel to spheroidal harmonic functions, and 
 % extract eigenvalues from singular quadrature
-%----------------------------------------------------------%
+
 if strcmp(Mat,'SL')
     SYns = SMns*Y2;
     SYnssh = shAna(SYns);
@@ -66,10 +65,9 @@ elseif strcmp(Mat,'DL')
 elseif strcmp(Mat,'SP')
     SYns= Spns*Y2;
     SYnssh = shAna(SYns);
+elseif strcmp(Mat, 'DP')
+    error("Not implemented.");
 else
-    sprintf("Invalid input for Layer Operator. Must be 'SL' for single layer, 'DL' for double layer, or 'SP' for S'.")
-    return
-
-%----------------------------------------------------------%
-
+    error_msg = "Invalid input for layer potential: must be 'SL', 'DL', 'SP', or 'DP'.";
+    error(error_msg);
 end

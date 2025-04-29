@@ -102,7 +102,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         end
     
         % Calculate spectra on surface with outward normal
-        [spectra_surf,~,~]=DPspectrum(p,u0,oblate);
+        [spectra_surf,~,~]=DPspectrum(p,u0,a,oblate);
     
         %reshape so that each column of SP_coefs corresponds to each function 
         % on each spheroid
@@ -207,7 +207,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
             %%%%%%%%%%%%% where Yr was %%%%%%%%%%%
     
             for nu_ind=1:nvarin+1
-                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),u_k,v_k,nu_sph_list{nu_ind},oblate(k));
+                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_k,v_k,nu_sph_list{nu_ind},oblate(k));
                 
                 FYr = (spectra_nm_prime + spectra_nm).*Yr(1:nt_r,:)+spectra_n1m.*Yr(nt_r+1:end,:);
                 SP_k=FYr*shc(:,:,k);
@@ -234,12 +234,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                 end
             end
         end
-    
-    
-    % Target points given
-    % -----------------------------------------------------------------------
-    elseif nargin > 1
-    
+    elseif nargin > 1 % Target points given
         if isa(X, "cell")
             Xt=X;
         else
@@ -299,17 +294,9 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                 if d~=3
                     error("Dimensions of target point array should be N x 3.")
                 end
-            
-                % spectra_regions={spectra_int(:,k),spectra_surf(:,k),spectra_ext(:,k)};
-                
+
                 % Convert targets to spheroidal coords
                 S=cart2spheroidal(Xtk,a(k),oblate(k));
-    
-                % %% test %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % figure;
-                % plot3(Xtk(:,1),Xtk(:,2),Xtk(:,3)); hold on;
-                % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        
                 u_x=S(:,1);
                 
                 % split up interior/surface/exterior
@@ -362,7 +349,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                         end
                         v_x_r=v_x_r_real;
     
-                        [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),u_x_r,v_x_r,nu_r_sph,oblate(k));
+                        [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_x_r,v_x_r,nu_r_sph,oblate(k));
                 
                         [Fr,Fp]=solid_harmonic_prime(p,u0(k),u_x_r,oblate(k));
                         nt_r=length(u_x_r);
@@ -396,7 +383,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                             for nu_ind=1:nvarin
                                 nu_r_cart=nu_r_cell{nu_ind};
                                 [nu_r_sph,~] = cartNu2spheroidal(nu_r_cart,Sr,a(k),oblate(k));
-                                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),u_x_r,v_x_r,nu_r_sph,oblate(k));
+                                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_x_r,v_x_r,nu_r_sph,oblate(k));
                                 FYr = (spectra_nm_prime.*Fp + spectra_nm.*Fr).*Yr(1:nt_r,:)+spectra_n1m.*Fr.*Yr(nt_r+1:end,:);
                                 SP_r_cell{nu_ind}=FYr*shc(:,:,k);
                             end
@@ -472,7 +459,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
             L = legendre_otc(p,1j.*u0,1,1,1);
         else
             % \frac{(n-m)!}{(n+m)!} (-1)^m sqrt(u_0^2-1)
-            anm = anm_base .* sqrt(u0.^2 - 1)
+            anm = anm_base .* sqrt(u0.^2 - 1);
             L = legendre_otc(p,u0,1,1,1);
         end
 
@@ -516,13 +503,13 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
             end
         else
             if norm(abs(u_x)-u0)<1e-14
-                [lambda_nm_prime,lambda_nm,lambda_n1m]=DPspectrum(p,u0,oblate);
+                [lambda_nm_prime,lambda_nm,lambda_n1m]=DPspectrum(p,u0,a,oblate);
                 lambda_nm_prime = lambda_nm_prime.'./sqrt(u_x.^2+v_x.^2).*nu_u;
                 lambda_nm = lambda_nm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2)));
                 lambda_n1m = -lambda_n1m.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2));
             else
                 anm = -1 .* anm_base .* sqrt(u0.^2+1);
-                L = legendre_otc(p,1j.*u0,1);
+                L = legendre_otc(p,1j.*u0,1,1,1);
                 if abs(u_x)-u0<1e-14 % interior
                     gnm=L{4};
                 elseif abs(u_x)-u0>1e-14 % exterior
