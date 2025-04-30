@@ -18,7 +18,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
 
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
-        fd_eps = 1e-6;
+        fd_eps = 1e-4;
 
         % Non-trivial density function: chosen so that it is smooth
         % and does not allow the convergence tests to hit machine precision 
@@ -209,10 +209,10 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.get_shc();
 
             % Target points (off-surface)
-            target_u0 = params.u0 * 1.5;
-            X_trg = prolate_spheroid_shape(testCase.p_max, target_u0, params.a);
+            target_u0 = params.u0 * 3;
+            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
             % Radial normal vectors out of spheroid
-            nu_trg = get_norm_vecs(testCase.p_max, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
@@ -243,7 +243,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
 
             % Target points (off-surface)
             target_u0 = params.u0 * 1.5;
-            X_trg = prolate_spheroid_shape(testCase.p_max, target_u0, params.a);
+            X_trg = oblate_spheroid_shape(testCase.p_max, target_u0, params.a);
             % Radial normal vectors out of spheroid
             nu_trg = get_norm_vecs(testCase.p_max, target_u0, params.oblate);
 

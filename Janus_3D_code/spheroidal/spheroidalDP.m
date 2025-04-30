@@ -97,7 +97,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         
         Y=zeros(nt,sp);
         for n=0:p  %loop over terms in spheroidal harmonic expansion
-            Yn=Ynm(n,[],acos(v_x)',phi_x);
+            Yn = Ynm(n,[],acos(v_x)',phi_x);
             Y(:,n^2+1:(n+1)^2)=Yn;
         end
     
@@ -133,7 +133,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
     %  Self Eval, arbitrary normal.
     % ------------------------------------------------------------------------
     elseif isempty(X)
-        % When want to get surface dS/dnu with arbitrary normal,
+        % When we want to get surface dS/dnu with arbitrary normal,
         % to avoid error in converting coordinates, enter X=[] with nu vectors
         % to perform on-surface calculations.
     
@@ -173,12 +173,12 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         Yr=zeros(nt_r*2,sp);
     
         for n=0:p  %loop over terms in spheroidal harmonic expansion
-            % Yn=Ynm(n,[],acos(v_x_r)',phi_x_r);
             Yn=Ynm(n,[],real(acos(v_k))',phi_k); % v_x_r exceeds [-1,1] by 1e-8, but acos() returns imaginary values. Impose real values for Ynm.
             Yr(1:nt_r,n^2+1:(n+1)^2)=Yn;
-            % Yn1 = Ynm(n+1,-n:n,acos(v_x_r)',phi_x_r);
+
             Yn1=Ynm(n+1,-n:n,real(acos(v_k))',phi_k); 
-            yn1_scale=sqrt((2*n+1)/(2*n+3).*(n+(-n:n)+1)./(n-(-n:n)+1));
+            yn1_scale = sqrt((2*n+1)/(2*n+3).*(n+(-n:n)+1)./(n-(-n:n)+1));
+
             Yr(nt_r+1:end,n^2+1:(n+1)^2) = yn1_scale.*Yn1;
         end
         %%%%%%%%%%%%%%%%%%%%%
@@ -186,12 +186,6 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         for k=1:ns  %loop over each spheroid surface we want to evaluate
             [~,Xself_k]=params.get_X(k);
             S=cart2spheroidal(Xself_k,a(k),oblate(k));
-            % v_k=S(:,2);
-            % if abs(v_k-real(v_k))>1e-10
-            %     error("v_k imaginary\n")
-            % end
-            % v_k=real(v_k);
-            % phi_k=S(:,3);
     
             u_k=u0(k).*ones(size(v_k));
     
@@ -203,13 +197,11 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                 [nu_sph_temp,~]=cartNu2spheroidal(nu_list{nu_ind+1},S,a(k),oblate(k));
                 nu_sph_list{nu_ind+1}=nu_sph_temp;
             end
-          
-            %%%%%%%%%%%%% where Yr was %%%%%%%%%%%
     
             for nu_ind=1:nvarin+1
                 [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_k,v_k,nu_sph_list{nu_ind},oblate(k));
                 
-                FYr = (spectra_nm_prime + spectra_nm).*Yr(1:nt_r,:)+spectra_n1m.*Yr(nt_r+1:end,:);
+                FYr = (spectra_nm_prime + spectra_nm).*Yr(1:nt_r,:) + spectra_n1m.*Yr(nt_r+1:end,:);
                 SP_k=FYr*shc(:,:,k);
     
                 if isReal
@@ -365,9 +357,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                             Yr(nt_r+1:end,n^2+1:(n+1)^2) = yn1_scale.*Yn1;
                         end
     
-                        % solid spheroidal harmonics
-                        % FYr=Fr.*Yr;
-                        % FYr_matrix = repmat(FYr,1,nf);
+                        % Solid spheroidal harmonics
                         FYr = (spectra_nm_prime.*Fp + spectra_nm.*Fr).*Yr(1:nt_r,:)...
                             +spectra_n1m.*Fr.*Yr(nt_r+1:end,:);
     
@@ -437,109 +427,127 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                 end
             end
         end
-    
-    end
-    %--------------------------------------------------------------------%
-    end
-    
-    
-    function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum(p, u0, a, oblate)
-        %{
-            Calculates the coefficients for D'^-, D'^+, and D' on the surface of the spheroid. 
-        %}
-        sp = (p+1)^2;
-        ii = (1:sp)';
-        nn = floor(sqrt(ii-1));
-        mm = ii - nn.^2 - nn - 1;
-        anm_base = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm));
 
-        if oblate
-            % \frac{(n-m)!}{(n+m)!} (-1)^{m+1} sqrt(u_0^2+1)
-            anm = anm_base .* -1 .* sqrt(u0.^2 + 1);
-            L = legendre_otc(p,1j.*u0,1,1,1);
-        else
-            % \frac{(n-m)!}{(n+m)!} (-1)^m sqrt(u_0^2-1)
-            anm = anm_base .* sqrt(u0.^2 - 1);
-            L = legendre_otc(p,u0,1,1,1);
-        end
-
-        P = L{1}; Q = L{2}; dP = L{3}; dQ = L{4};
-        lambda_nm_prime = anm .* sqrt(u0.^2 - 1) .* dP .* dQ ./ a;
-        lambda_nm = anm .* P .* Q;
-        lambda_n1m = lambda_nm;
     end
+end
+    
+    
+function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum(p, u0, a, oblate)
+    %{
+        Calculates the coefficients for D'^-, D'^+, and D' on the surface of the spheroid. 
+    %}
+    sp = (p+1)^2;
+    ii = (1:sp)';
+    nn = floor(sqrt(ii-1));
+    mm = ii - nn.^2 - nn - 1;
+    anm_base = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm));
+
+    if oblate
+        % \frac{(n-m)!}{(n+m)!} (-1)^{m+1} sqrt(u_0^2+1)
+        anm = anm_base .* -1 .* sqrt(u0.^2 + 1);
+        L = legendre_otc(p,1j.*u0,1,1,1);
+    else
+        % \frac{(n-m)!}{(n+m)!} (-1)^m sqrt(u_0^2-1)
+        anm = anm_base .* sqrt(u0.^2 - 1);
+        L = legendre_otc(p,u0,1,1,1);
+    end
+
+    error("Test");
+
+    P = L{1}; Q = L{2}; dP = L{3}; dQ = L{4};
+    % Coefficient of D' of surface
+    lambda_nm_prime = anm .* sqrt(u0.^2 - 1) .* dP .* dQ ./ a;
+
+    % Coefficient associated with D[Y_n^m]
+    lambda_nm = anm .* P .* Q;
+
+    % Coefficient associated with D[Y_{n+1}^m]
+    lambda_n1m = lambda_nm;
+end
      
-    function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v_x,nu,oblate)
-        %{
-            Calculates the normal derivative of the Laplace DLP with arbitrary normal vector.
+function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v_x,nu,oblate)
+    %{
+        Calculates the normal derivative of the Laplace DLP with arbitrary normal vector.
+        Resulting vectors are of size N x sp, where N is the number of target points.
 
-            nu -> [nu_u,nu_v,nu_phi] Nx x 3 normal vector in spheroidal basis
+        nu -> [nu_u,nu_v,nu_phi] Nx x 3 normal vector in spheroidal basis
 
-            Resulting vectors are of size N x sp, where N is the number of target points.
-        %}
-        sp=(p+1)^2;
-        ii = (1:sp)'; nn = floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
-        anm_base = factorial(nn-mm)./factorial(nn+mm).*(-1).^mm;
-        nu_u = nu(:,1); nu_v = nu(:,2); nu_phi = nu(:,3);
+        Note that terms relating to f_n^mY_n^m are ignored and are handled outside of this function.
+        For example, 
+    %}
+    sp=(p+1)^2;
+    ii = (1:sp)'; nn = floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
+    anm_base = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm));
+    nu_u = nu(:,1); nu_v = nu(:,2); nu_phi = nu(:,3);
 
-        if ~oblate
-            if norm(abs(u_x)-u0)<1e-14 % on surface with arbitrary nu
-                [lambda_nm_prime,lambda_nm,lambda_n1m] = DPspectrum(p,u0,a,oblate);
-                lambda_nm_prime = (lambda_nm_prime.') .* gradient_factor .* nu_u;
-                lambda_nm = (lambda_nm.') .* ((nn'+1).*v_x.*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2-1).*(1-v_x.^2)));
-                lambda_n1m = -(lambda_n1m.') .* (nn'-mm'+1).*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2));
-            else % off-surface
-                % Re-calculate coefficients associated with Y_n^m.
-                anm=anm_base.*sqrt(u0.^2-1);
-                L = legendre_otc(p,u0,1,1,1);
-                if abs(u_x)-u0<1e-14 % interior
-                    gnm = L{4};
-                elseif abs(u_x)-u0>1e-14 % exterior
-                    gnm = L{3};
-                end
-                lambda_nm_prime = anm.'.*gnm.'.*sqrt((u_x.^2-1)./(u_x.^2-v_x.^2)).*nu_u;
-                lambda_nm = anm.'.*gnm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2-1).*(1-v_x.^2)));
-                lambda_n1m = -anm.'.*gnm.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2));
-            end
+    if ~oblate
+        anm = anm_base .* (u0.^2-1); % bnm
+        L = legendre_otc(p,u0,1,1,1);
+        if abs(u_x)-u0 < 1e-14 % interior
+            gnm = L{4}; % Q'(u_0)
+        elseif abs(u_x)-u0 > 1e-14 % exterior
+            gnm = L{3}; % P'(u_0)
+        end
+
+        if norm(abs(u_x)-u0)<1e-14 % on surface with arbitrary nu
+            [lambda_nm_prime,lambda_nm,lambda_n1m] = DPspectrum(p,u0,a,oblate);
+            lambda_nm_prime = (lambda_nm_prime.') ./ sqrt(u_x.^2-v_x.^2) .* nu_u ./  a;
+            
+            lambda_nm_term1 = ((nn'+1) .* v_x) ./ sqrt((u_x.^2 - v_x.^2).*(1 - v_x.^2)) .* nu_v;
+            lambda_nm_term2 = 1j.*mm'.*nu_phi./sqrt((u_x.^2-1).*(1-v_x.^2));
+            lambda_nm = (lambda_nm.') .* (lambda_nm_term1 + lambda_nm_term2) ./ a;
+
+            lambda_n1m = -(lambda_n1m.') .* (nn'-mm'+1).*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2)) ./ a;
+        else % off-surface.
+            lambda_nm_prime = anm.' .* gnm.' .* sqrt((u_x.^2-1)./(u_x.^2-v_x.^2)) .* nu_u ./ a;
+
+            lambda_nm_term1 = ((nn'+1) .* v_x) ./ sqrt((u_x.^2 - v_x.^2).*(1 - v_x.^2)) .* nu_v;
+            lambda_nm_term2 = 1j .* mm' ./ sqrt((u_x.^2-1).*(1-v_x.^2)) .* nu_phi;
+            lambda_nm = anm.' .* gnm.' .*(lambda_nm_term1 + lambda_nm_term2) ./ a;
+            
+            lambda_n1m = -anm.' .* gnm.' .* (nn'-mm'+1)./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2)) .*nu_v ./ a;
+        end
+    else
+        anm = -1 .* anm_base .* (u0.^2+1); % cnm
+        L = legendre_otc(p,1j.*u0,1,1,1);
+        if abs(u_x)-u0<1e-14 % interior
+            gnm=L{4};
+        elseif abs(u_x)-u0>1e-14 % exterior
+            gnm=L{3};
+        end
+        if norm(abs(u_x)-u0)<1e-14
+            [lambda_nm_prime,lambda_nm,lambda_n1m]=DPspectrum(p,u0,a,oblate);
+            lambda_nm_prime = lambda_nm_prime.'./sqrt(u_x.^2+v_x.^2).*nu_u;
+            lambda_nm = lambda_nm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2)));
+            lambda_n1m = -lambda_n1m.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2));
         else
-            if norm(abs(u_x)-u0)<1e-14
-                [lambda_nm_prime,lambda_nm,lambda_n1m]=DPspectrum(p,u0,a,oblate);
-                lambda_nm_prime = lambda_nm_prime.'./sqrt(u_x.^2+v_x.^2).*nu_u;
-                lambda_nm = lambda_nm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2)));
-                lambda_n1m = -lambda_n1m.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2));
-            else
-                anm = -1 .* anm_base .* sqrt(u0.^2+1);
-                L = legendre_otc(p,1j.*u0,1,1,1);
-                if abs(u_x)-u0<1e-14 % interior
-                    gnm=L{4};
-                elseif abs(u_x)-u0>1e-14 % exterior
-                    gnm=L{3};
-                end
-                lambda_nm_prime = 1j.*anm.'.*gnm.'.*sqrt((u_x.^2+1)./(u_x.^2+v_x.^2)).*nu_u;
-                lambda_nm = anm.'.*gnm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2)));
-                lambda_n1m = -anm.'.*gnm.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2));
-            end
+            lambda_nm_prime = 1j.*anm.'.*gnm.'.*sqrt((u_x.^2+1)./(u_x.^2+v_x.^2)).*nu_u ./ a;
+            lambda_nm = anm.'.*gnm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2))) ./ a;
+            lambda_n1m = -anm.'.*gnm.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2)) ./ a;
         end
+    end
+end
+
+function [Fr, Fp]=solid_harmonic_prime(p, u0, u_x, oblate)
+    %{
+        Solid spheroidal harmonics can be written as f_n^m(u)Y_n^m(v, phi).
+        This function returns what Fr = f_n^m is (and its derivative as Fp), depending 
+        on whether we are in the exterior or interior.
+    %}
+    Fr=ones(size(u_x,1),(p+1)^2); Fp=ones(size(u_x,1),(p+1)^2);
+
+    if oblate
+        u_x = 1j.*u_x;
     end
 
-    function [F,Fp]=solid_harmonic_prime(p,u0,u_x,oblate)
-        F=ones(size(u_x,1),(p+1)^2);
-        Fp=ones(size(u_x,1),(p+1)^2);
-        if nargin < 4
-            oblate = false;
-        end
-        if oblate
-            u_x = 1j.*u_x;
-        end
-        % if abs(u_x)-u0 < 1e-14 
-        if abs(u_x)-u0 < -1e-14 
-            PQ=legendre_otc(p,u_x,1,1);
-            P=PQ{1}; dP=PQ{3};
-            F=P.'; Fp=dP.';
-        elseif abs(u_x)-u0 > 1e-14
-            PQ=legendre_otc(p,u_x,1,1,1);
-            Q=PQ{2}; dQ=PQ{4};
-            F=Q.'; Fp=dQ.';
-        end
+    if abs(u_x)-u0 < -1e-14 % Interior
+        PQ=legendre_otc(p,u_x,1,1);
+        P=PQ{1}; dP=PQ{3};
+        Fr=P.'; Fp=dP.';
+    elseif abs(u_x)-u0 > 1e-14 % Exterior
+        PQ=legendre_otc(p,u_x,1,1,1);
+        Q=PQ{2}; dQ=PQ{4};
+        Fr=Q.'; Fp=dQ.';
     end
+end
     

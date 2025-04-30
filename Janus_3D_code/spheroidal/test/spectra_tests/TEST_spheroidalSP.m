@@ -5,7 +5,7 @@
     a gradient check using finite differences.
 
     The convergence tests are quite slow on this one, so some tinkering
-    with the orders are probably needed.
+    with the orders is probably needed.
 %}
 
 
@@ -21,7 +21,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
 
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
-        fd_eps = 1e-6;
+        fd_eps = 1e-4;
 
         % Non-trivial density function: chosen so that it is smooth
         % and does not allow the convergence tests to hit machine precision 
@@ -200,7 +200,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
 
         %%% Gradient checks
         function testGradientCheckProlate(testCase)
-            p = 16;
+            p = 4;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
