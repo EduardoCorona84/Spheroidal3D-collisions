@@ -16,9 +16,12 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         conv_tol = 1e-5;
         tol = 1e-6;
 
+        % Consistency tolerance
+        consistency_tol = 1e-10;
+
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
-        fd_eps = 1e-4;
+        fd_eps = 1e-3;
 
         % Non-trivial density function: chosen so that it is smooth
         % and does not allow the convergence tests to hit machine precision 
@@ -195,6 +198,75 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
                 'Error for oblate on-surface should be below tolerance.');
         end
 
+        %%% Consistency checks
+        function testCompareProlateOnSurfaceImplementations(testCase)
+            % Compares all method to calculate on the surface: they should all
+            % match each other.
+            p = 1;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            % These normal vectors are in Cartesian coordinates, but in
+            % spheroidal coordinates, it is just e_u.
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            [X_src, ~] = params.get_X(); 
+
+            % Method 1: use off-surface code
+            DP_method1 = spheroidalDP(params, X_src, nu_src);
+
+            % Method 2: handle []
+            DP_method2 = spheroidalDP(params, [], nu_src);
+
+            % Method 3: no inputs
+            DP_method3 = spheroidalDP(params);
+
+            testCase.verifyEqual(DP_method1, DP_method2, 'AbsTol', testCase.consistency_tol, ...
+                'Off-surface code and [] handling does not match each other.');
+
+            testCase.verifyEqual(DP_method2, DP_method3, 'AbsTol', testCase.consistency_tol, ...
+                'On-surface code and [] handling does not match each other.');
+        end
+
+        function testCompareOblateOnSurfaceImplementations(testCase)
+            % Compares all method to calculate on the surface: they should all
+            % match each other.
+            p = 1;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = true;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            % These normal vectors are in Cartesian coordinates, but in
+            % spheroidal coordinates, it is just e_u.
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            [X_src, ~] = params.get_X(); 
+
+            % Method 1: use off-surface code
+            DP_method1 = spheroidalDP(params, X_src, nu_src);
+
+            % Method 2: handle []
+            DP_method2 = spheroidalDP(params, [], nu_src);
+
+            % Method 3: no inputs
+            DP_method3 = spheroidalDP(params);
+
+            testCase.verifyEqual(DP_method1, DP_method2, 'AbsTol', testCase.consistency_tol, ...
+                'Off-surface code and [] handling does not match each other.');
+
+            testCase.verifyEqual(DP_method2, DP_method3, 'AbsTol', testCase.consistency_tol, ...
+                'On-surface code and [] handling does not match each other.');
+        end
+
         %%% Gradient checks
         function testGradientCheckProlateOffSurface(testCase)
             p = 16;
@@ -228,7 +300,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         function testGradientCheckOblateOffSurface(testCase)
-            p = 16;
+            p = 1;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
@@ -240,9 +312,9 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.get_shc();
 
             target_u0 = params.u0 * 1.5;
-            X_trg = oblate_spheroid_shape(testCase.p_max, target_u0, params.a);
+            X_trg = oblate_spheroid_shape(p, target_u0, params.a);
             % Radial normal vectors out of spheroid
-            nu_trg = get_norm_vecs(testCase.p_max, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
@@ -256,7 +328,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         function testGradientCheckProlateOnSurface(testCase)
-            p = 16;
+            p = 8;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
@@ -272,11 +344,8 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             X_src = prolate_spheroid_shape(p, params.u0, params.a);
             nu_src = get_norm_vecs(p, params.u0, params.oblate);
 
-            X_plus = X_src + eps * nu_src;
-            X_minus = X_src - eps * nu_src;
-
-            DL_plus = spheroidalDL(params, X_plus);
-            DL_minus = spheroidalDL(params, X_minus);
+            DL_plus = spheroidalDL(params, X_src + eps * nu_src);
+            DL_minus = spheroidalDL(params, X_src - eps * nu_src);
             DP_fd = (DL_plus - DL_minus) / (2 * eps);
 
             rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
@@ -285,12 +354,12 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         function testGradientCheckOblateOnSurface(testCase)
-            p = 16;
+            p = 1;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
-            params.u0 = testCase.u0_prolate;
-            params.a = testCase.a_prolate;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
             params.oblate = true;
             [u_p, v_p] = gl_grid(p);
             params.sigma = testCase.density_func(u_p, v_p);

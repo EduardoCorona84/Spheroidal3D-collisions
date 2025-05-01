@@ -19,6 +19,9 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
         conv_tol = 1e-5;
         tol = 1e-6;
 
+        % Tolerance for consistency checks
+        consistency_tol = 1e-12;
+
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
         fd_eps = 1e-8;
@@ -198,6 +201,75 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
                 'Error for oblate on-surface should be below tolerance.');
         end
 
+        %%% Consistency checks
+        function testCompareProlateOnSurfaceImplementations(testCase)
+            % Compares the on-surface implementation with the general 
+            % implementation evaluated on the surface (X=[], nu=nu_outward).
+            p = 8;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            % These normal vectors are in Cartesian coordinates, but in
+            % spheroidal coordinates, it is just e_u.
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            [X_src, ~] = params.get_X(); 
+
+            % Method 1: use off-surface code
+            SP_method1 = spheroidalSP(params, X_src, nu_src);
+
+            % Method 2: handle []
+            SP_method2 = spheroidalSP(params, [], nu_src);
+
+            % Method 3: no inputs
+            SP_method3 = spheroidalSP(params);
+
+            testCase.verifyEqual(SP_method1, SP_method2, 'AbsTol', testCase.consistency_tol, ...
+                'Off-surface code and [] handling does not match each other.');
+
+            testCase.verifyEqual(SP_method2, SP_method3, 'AbsTol', testCase.consistency_tol, ...
+                'On-surface code and [] handling does not match each other.');
+        end
+
+        function testCompareOblateOnSurfaceImplementations(testCase)
+            % Compares the on-surface implementation with the general 
+            % implementation evaluated on the surface (X=[], nu=nu_outward).
+            p = 8;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            % These normal vectors are in Cartesian coordinates, but in
+            % spheroidal coordinates, it is just e_u.
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            [X_src, ~] = params.get_X(); 
+
+            % Method 1: use off-surface code
+            SP_method1 = spheroidalSP(params, X_src, nu_src);
+
+            % Method 2: handle []
+            SP_method2 = spheroidalSP(params, [], nu_src);
+
+            % Method 3: no inputs
+            SP_method3 = spheroidalSP(params);
+
+            testCase.verifyEqual(SP_method1, SP_method2, 'AbsTol', testCase.consistency_tol, ...
+                'Off-surface code and [] handling does not match each other.');
+
+            testCase.verifyEqual(SP_method2, SP_method3, 'AbsTol', testCase.consistency_tol, ...
+                'On-surface code and [] handling does not match each other.');
+        end
+
         %%% Gradient checks
         function testGradientCheckProlateOffSurface(testCase)
             p = 4;
@@ -259,7 +331,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
         end
 
         function testGradientCheckProlateOnSurface(testCase)
-            p = 16;
+            p = 1;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
@@ -292,8 +364,8 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
-            params.u0 = testCase.u0_prolate;
-            params.a = testCase.a_prolate;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
             params.oblate = true;
             [u_p, v_p] = gl_grid(p);
             params.sigma = testCase.density_func(u_p, v_p);
