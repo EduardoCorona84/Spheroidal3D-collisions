@@ -21,7 +21,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
 
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
-        fd_eps = 1e-4;
+        fd_eps = 1e-8;
 
         % Non-trivial density function: chosen so that it is smooth
         % and does not allow the convergence tests to hit machine precision 
@@ -57,7 +57,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             % Radial normal vectors out of spheroid
             nu_trg = get_norm_vecs(testCase.p_max, target_u0, params_ref.oblate);
 
-            DP_ref = spheroidalSP(params_ref, X_trg, nu_trg);
+            SP_ref = spheroidalSP(params_ref, X_trg, nu_trg);
 
             % Loop over lower orders
             errors = zeros(size(p_orders));
@@ -71,9 +71,9 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
                 params_p.sigma = testCase.density_func(u_p, v_p);
                 params_p.get_shc();
 
-                DP_p = spheroidalSP(params_p, X_trg, nu_trg);
+                SP_p = spheroidalSP(params_p, X_trg, nu_trg);
 
-                errors(i) = norm(DP_p - DP_ref, inf) / norm(DP_ref, inf);
+                errors(i) = norm(SP_p - SP_ref, inf) / norm(SP_ref, inf);
             end
 
             % Ensures that the errors are at least decreasing by a factor
@@ -102,7 +102,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             % Radial normal vectors out of spheroid
             nu_trg = get_norm_vecs(testCase.p_max, target_u0, params_ref.oblate);
 
-            DP_ref = spheroidalSP(params_ref, X_trg, nu_trg);
+            SP_ref = spheroidalSP(params_ref, X_trg, nu_trg);
 
             % Loop over lower orders
             errors = zeros(size(p_orders));
@@ -116,9 +116,9 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
                 params_p.sigma = testCase.density_func(u_p, v_p);
                 params_p.get_shc();
 
-                DP_p = spheroidalSP(params_p, X_trg, nu_trg);
+                SP_p = spheroidalSP(params_p, X_trg, nu_trg);
 
-                errors(i) = norm(DP_p - DP_ref, inf) / norm(DP_ref, inf);
+                errors(i) = norm(SP_p - SP_ref, inf) / norm(SP_ref, inf);
             end
 
             testCase.verifyTrue(all(errors(2:end) < errors(1:end-1) / 10), ...
@@ -139,7 +139,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             params_ref.get_shc();
 
             % By default, we have outward normal vectors
-            DP_ref = spheroidalSP(params_ref);
+            SP_ref = spheroidalSP(params_ref);
 
             errors = zeros(size(p_orders));
             for i = 1:length(p_orders)
@@ -152,11 +152,11 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
                 params_p.sigma = testCase.density_func(u_p, v_p);
                 params_p.get_shc();
 
-                DP_p_full = spheroidalSP(params_p);
+                SP_p_full = spheroidalSP(params_p);
 
                 % We use spherical transforms for spheroidal transforms, so this should be OK.
-                DP_p_interp = interpsh(DP_p_full, testCase.p_max);
-                errors(i) = norm(DP_p_interp - DP_ref, inf) / norm(DP_ref, inf);
+                SP_p_interp = interpsh(SP_p_full, testCase.p_max);
+                errors(i) = norm(SP_p_interp - SP_ref, inf) / norm(SP_ref, inf);
             end
 
             testCase.verifyLessThan(errors(end), testCase.conv_tol, ...
@@ -175,7 +175,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             params_ref.get_shc();
 
             % By default, we have outward normal vectors
-            DP_ref = spheroidalSP(params_ref);
+            SP_ref = spheroidalSP(params_ref);
 
             errors = zeros(size(p_orders));
             for i = 1:length(p_orders)
@@ -188,10 +188,10 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
                 params_p.sigma = testCase.density_func(u_p, v_p);
                 params_p.get_shc();
 
-                DP_p_full = spheroidalSP(params_p);
+                SP_p_full = spheroidalSP(params_p);
 
-                DP_p_interp = interpsh(DP_p_full, testCase.p_max);
-                errors(i) = norm(DP_p_interp - DP_ref, inf) / norm(DP_ref, inf);
+                SP_p_interp = interpsh(SP_p_full, testCase.p_max);
+                errors(i) = norm(SP_p_interp - SP_ref, inf) / norm(SP_ref, inf);
             end
 
             testCase.verifyLessThan(errors(end), testCase.conv_tol, ...
@@ -199,7 +199,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
         end
 
         %%% Gradient checks
-        function testGradientCheckProlate(testCase)
+        function testGradientCheckProlateOffSurface(testCase)
             p = 4;
             eps = testCase.fd_eps;
 
@@ -211,28 +211,26 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            % Target points (off-surface)
             target_u0 = params.u0 * 1.5;
             X_trg = prolate_spheroid_shape(testCase.p_max, target_u0, params.a);
             % Radial normal vectors out of spheroid
             nu_trg = get_norm_vecs(testCase.p_max, target_u0, params.oblate);
 
-            DP_spectral = spheroidalSP(params, X_trg, nu_trg);
+            SP_spectral = spheroidalSP(params, X_trg, nu_trg);
 
-            % Calculate using Finite Differences
             X_plus = X_trg + eps * nu_trg;
             X_minus = X_trg - eps * nu_trg;
 
-            DL_plus = spheroidalSL(params, X_plus);
-            DL_minus = spheroidalSL(params, X_minus);
-            DP_fd = (DL_plus - DL_minus) / (2 * eps);
+            SL_plus = spheroidalSL(params, X_plus);
+            SL_minus = spheroidalSL(params, X_minus);
+            SP_fd = (SL_plus - SL_minus) / (2 * eps);
 
-            rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
+            rel_err = norm(SP_spectral - SP_fd, inf) / norm(SP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
                 'Gradient check failed for prolate case.');
         end
 
-        function testGradientCheckOblate(testCase)
+        function testGradientCheckOblateOffSurface(testCase)
             p = 16;
             eps = testCase.fd_eps;
 
@@ -244,21 +242,78 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            % Target points (off-surface)
             target_u0 = params.u0 * 1.5;
             X_trg = prolate_spheroid_shape(testCase.p_max, target_u0, params.a);
             % Radial normal vectors out of spheroid
             nu_trg = get_norm_vecs(testCase.p_max, target_u0, params.oblate);
 
-            DP_spectral = spheroidalSP(params, X_trg, nu_trg);
+            SP_spectral = spheroidalSP(params, X_trg, nu_trg);
 
-            DL_plus = spheroidalSL(params, X_trg + eps * nu_trg);
-            DL_minus = spheroidalSL(params, X_trg - eps * nu_trg);
-            DP_fd = (DL_plus - DL_minus) / (2 * eps);
+            SL_plus = spheroidalSL(params, X_trg + eps * nu_trg);
+            SL_minus = spheroidalSL(params, X_trg - eps * nu_trg);
+            SP_fd = (SL_plus - SL_minus) / (2 * eps);
 
-            rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
+            rel_err = norm(SP_spectral - SP_fd, inf) / norm(SP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
                 'Gradient check failed for oblate case.');
+        end
+
+        function testGradientCheckProlateOnSurface(testCase)
+            p = 16;
+            eps = testCase.fd_eps;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            SP_spectral = spheroidalSP(params);
+
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+
+            X_plus = X_src + eps * nu_src;
+            X_minus = X_src - eps * nu_src;
+
+            SL_plus = spheroidalSL(params, X_plus);
+            SL_minus = spheroidalSL(params, X_minus);
+            SP_fd = (SL_plus - SL_minus) / (2 * eps);
+
+            rel_err = norm(SP_spectral - SP_fd, inf) / norm(SP_spectral, inf);
+            testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
+                'Prolate on-surface gradient check failed to meet tolerance.');
+        end
+
+        function testGradientCheckOblateOnSurface(testCase)
+            p = 16;
+            eps = testCase.fd_eps;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = true;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            SP_spectral = spheroidalSP(params);
+
+            X_src = oblate_spheroid_shape(p, params.u0, params.a);
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+
+            X_plus = X_src + eps * nu_src;
+            X_minus = X_src - eps * nu_src;
+
+            SL_plus = spheroidalSL(params, X_plus);
+            SL_minus = spheroidalSL(params, X_minus);
+            SP_fd = (SL_plus - SL_minus) / (2 * eps);
+
+            rel_err = norm(SP_spectral - SP_fd, inf) / norm(SP_spectral, inf);
+            testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
+                'Prolate on-surface gradient check failed to meet tolerance.');
         end
     end
 end

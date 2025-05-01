@@ -196,7 +196,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         %%% Gradient checks
-        function testGradientCheckProlate(testCase)
+        function testGradientCheckProlateOffSurface(testCase)
             p = 16;
             eps = testCase.fd_eps;
 
@@ -208,7 +208,6 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            % Target points (off-surface)
             target_u0 = params.u0 * 3;
             X_trg = prolate_spheroid_shape(p, target_u0, params.a);
             % Radial normal vectors out of spheroid
@@ -216,7 +215,6 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
-            % Calculate using Finite Differences
             X_plus = X_trg + eps * nu_trg;
             X_minus = X_trg - eps * nu_trg;
 
@@ -226,10 +224,10 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
 
             rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
-                'Gradient check failed for prolate case.');
+                'Gradient check failed for prolate case: should be below tolerance.');
         end
 
-        function testGradientCheckOblate(testCase)
+        function testGradientCheckOblateOffSurface(testCase)
             p = 16;
             eps = testCase.fd_eps;
 
@@ -241,7 +239,6 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            % Target points (off-surface)
             target_u0 = params.u0 * 1.5;
             X_trg = oblate_spheroid_shape(testCase.p_max, target_u0, params.a);
             % Radial normal vectors out of spheroid
@@ -255,7 +252,65 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
 
             rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
-                'Gradient check failed for oblate case.');
+                'Gradient check failed for oblate case: should be below tolerance.');
+        end
+
+        function testGradientCheckProlateOnSurface(testCase)
+            p = 16;
+            eps = testCase.fd_eps;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            DP_spectral = spheroidalDP(params);
+
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+
+            X_plus = X_src + eps * nu_src;
+            X_minus = X_src - eps * nu_src;
+
+            DL_plus = spheroidalDL(params, X_plus);
+            DL_minus = spheroidalDL(params, X_minus);
+            DP_fd = (DL_plus - DL_minus) / (2 * eps);
+
+            rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
+            testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
+                'Prolate on-surface gradient check failed to meet tolerance.');
+        end
+
+        function testGradientCheckOblateOnSurface(testCase)
+            p = 16;
+            eps = testCase.fd_eps;
+
+            params = SpheroidalParameters;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = true;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            DP_spectral = spheroidalDP(params);
+
+            X_src = oblate_spheroid_shape(p, params.u0, params.a);
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+
+            X_plus = X_src + eps * nu_src;
+            X_minus = X_src - eps * nu_src;
+
+            DL_plus = spheroidalDL(params, X_plus);
+            DL_minus = spheroidalDL(params, X_minus);
+            DP_fd = (DL_plus - DL_minus) / (2 * eps);
+
+            rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
+            testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
+                'Prolate on-surface gradient check failed to meet tolerance.');
         end
     end
 end
