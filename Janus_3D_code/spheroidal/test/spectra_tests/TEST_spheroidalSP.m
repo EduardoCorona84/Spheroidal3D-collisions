@@ -331,7 +331,7 @@ classdef TEST_spheroidalSP < matlab.unittest.TestCase
         end
 
         function testGradientCheckProlateOnSurface(testCase)
-            p = 1;
+            p = 16;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;

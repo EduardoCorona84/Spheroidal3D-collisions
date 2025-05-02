@@ -102,7 +102,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         end
     
         % Calculate spectra on surface with outward normal
-        [spectra_surf,~,~]=DPspectrum(p,u0,a,oblate);
+        [spectra_surf,~,~]=DPspectrum(p,u0,params.a,oblate);
     
         %reshape so that each column of SP_coefs corresponds to each function 
         % on each spheroid
@@ -442,24 +442,20 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum(p, u0, a, oblate)
     mm = ii - nn.^2 - nn - 1;
     anm_base = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm));
 
+    L = [];
     if oblate
-        % \frac{(n-m)!}{(n+m)!} (-1)^{m+1} sqrt(u_0^2+1)
-        anm = anm_base .* -1 .* sqrt(u0.^2 + 1);
+        anm = anm_base .* -1 .* (u0.^2 + 1); % cnm
         L = legendre_otc(p,1j.*u0,1,1,1);
     else
-        % \frac{(n-m)!}{(n+m)!} (-1)^m sqrt(u_0^2-1)
-        anm = anm_base .* sqrt(u0.^2 - 1);
+        anm = anm_base .* (u0.^2 - 1); % bnm
         L = legendre_otc(p,u0,1,1,1);
     end
 
     P = L{1}; Q = L{2}; dP = L{3}; dQ = L{4};
+
     % Coefficient of D' of surface
-    lambda_nm_prime = anm .* sqrt(u0.^2 - 1) .* dP .* dQ ./ a;
-
-    % Coefficient associated with D[Y_n^m]
-    lambda_nm = anm .* P .* Q;
-
-    % Coefficient associated with D[Y_{n+1}^m]
+    lambda_nm_prime = anm.' .* sqrt(u0.^2 - 1) .* dP.' .* dQ.' ./ a;
+    lambda_nm = anm .* ((dQ .* P + dP .* Q) ./ 2) ./ a;
     lambda_n1m = lambda_nm;
 end
      
@@ -471,7 +467,6 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
         nu -> [nu_u,nu_v,nu_phi] Nx x 3 normal vector in spheroidal basis
 
         Note that terms relating to f_n^mY_n^m are ignored and are handled outside of this function.
-        For example, 
     %}
     sp=(p+1)^2;
     ii = (1:sp)'; nn = floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
@@ -489,13 +484,13 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
 
         if norm(abs(u_x)-u0)<1e-14 % on surface with arbitrary nu
             [lambda_nm_prime,lambda_nm,lambda_n1m] = DPspectrum(p,u0,a,oblate);
-            lambda_nm_prime = (lambda_nm_prime.') ./ sqrt(u_x.^2-v_x.^2) .* nu_u ./  a;
+            lambda_nm_prime = lambda_nm_prime ./ sqrt(u_x.^2-v_x.^2) .* nu_u;
             
             lambda_nm_term1 = ((nn'+1) .* v_x) ./ sqrt((u_x.^2 - v_x.^2).*(1 - v_x.^2)) .* nu_v;
             lambda_nm_term2 = 1j.*mm'.*nu_phi./sqrt((u_x.^2-1).*(1-v_x.^2));
-            lambda_nm = (lambda_nm.') .* (lambda_nm_term1 + lambda_nm_term2) ./ a;
+            lambda_nm = (lambda_nm.') .* (lambda_nm_term1 + lambda_nm_term2);
 
-            lambda_n1m = -(lambda_n1m.') .* (nn'-mm'+1).*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2)) ./ a;
+            lambda_n1m = -(lambda_n1m.') .* (nn'-mm'+1).*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2));
         else % off-surface.
             lambda_nm_prime = anm.' .* gnm.' .* sqrt((u_x.^2-1)./(u_x.^2-v_x.^2)) .* nu_u ./ a;
 
@@ -515,7 +510,7 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
         end
         if norm(abs(u_x)-u0)<1e-14
             [lambda_nm_prime,lambda_nm,lambda_n1m]=DPspectrum(p,u0,a,oblate);
-            lambda_nm_prime = lambda_nm_prime.'./sqrt(u_x.^2+v_x.^2).*nu_u;
+            lambda_nm_prime = lambda_nm_prime ./ sqrt(u_x.^2+v_x.^2) .* nu_u;
             lambda_nm = lambda_nm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2)));
             lambda_n1m = -lambda_n1m.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2));
         else

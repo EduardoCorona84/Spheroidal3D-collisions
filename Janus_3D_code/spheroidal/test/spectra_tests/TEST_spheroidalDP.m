@@ -17,11 +17,11 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         tol = 1e-6;
 
         % Consistency tolerance
-        consistency_tol = 1e-10;
+        consistency_tol = 1e-14;
 
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
-        fd_eps = 1e-3;
+        fd_eps = 1e-6;
 
         % Non-trivial density function: chosen so that it is smooth
         % and does not allow the convergence tests to hit machine precision 
@@ -202,9 +202,10 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         function testCompareProlateOnSurfaceImplementations(testCase)
             % Compares all method to calculate on the surface: they should all
             % match each other.
-            p = 1;
+            p = 16;
 
             params = SpheroidalParameters;
+            params.isReal = true;
             params.u0 = testCase.u0_prolate;
             params.a = testCase.a_prolate;
             params.oblate = false;
@@ -311,7 +312,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            target_u0 = params.u0 * 1.5;
+            target_u0 = params.u0 * 3;
             X_trg = oblate_spheroid_shape(p, target_u0, params.a);
             % Radial normal vectors out of spheroid
             nu_trg = get_norm_vecs(p, target_u0, params.oblate);
@@ -328,7 +329,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         function testGradientCheckProlateOnSurface(testCase)
-            p = 8;
+            p = 16;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
@@ -339,6 +340,14 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
+            % These normal vectors are in Cartesian coordinates, but in
+            % spheroidal coordinates, it is just e_u.
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            [X_src, ~] = params.get_X(); 
+
+            % Method 1: use off-surface code
+            DP_method1 = spheroidalDP(params, [], nu_src);
+
             DP_spectral = spheroidalDP(params);
 
             X_src = prolate_spheroid_shape(p, params.u0, params.a);
@@ -348,7 +357,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             DL_minus = spheroidalDL(params, X_src - eps * nu_src);
             DP_fd = (DL_plus - DL_minus) / (2 * eps);
 
-            rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
+            rel_err = norm(DP_method1 - DP_fd, inf) / norm(DP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
                 'Prolate on-surface gradient check failed to meet tolerance.');
         end
