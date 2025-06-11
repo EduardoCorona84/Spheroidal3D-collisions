@@ -24,14 +24,21 @@ opts = struct( ...
     'verbose',25, ...
     'nmax',max_iter, ...
     'tol',tol_rel, ...
-    'x0', x0 ...
+    'x0', x0, ...
+    'errFcn', @(x) NaN ...
 );
 
 [x, iter, errStruct, ~] = zeroSR1(fcnGrad,[],h,prox,opts);
-fK = errStruct(end,1);
-fKm1 = errStruct(end-1,1);
-gNorm =  errStruct(end,2);
+fK = errStruct.f(end);
+fKm1 = errStruct.f(end-1);
+gNorm =  errStruct.gnorm(end);
 err = min(abs(fK  - fKm1) / max([fK, fKm1, 1]), gNorm);
+
+convergence = [];
+if profile
+    % TODO, technically, we would want this match the above err...
+    convergence = errStruct;
+end
 
 if iter == max_iter
     flag = 8;
@@ -41,12 +48,6 @@ end
 
 flag = 6;
 msg = 'local minima';
-
-convergence = [];
-if profile
-    % TODO, technically, we would want this match the above err...
-    convergence = errStruct(:,2);
-end
 
 end
 

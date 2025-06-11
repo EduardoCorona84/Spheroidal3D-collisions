@@ -176,22 +176,27 @@ getGradient     = @(varargin) getGradientFcn(fcn,grad, varargin{:});
 fxold   = Inf;
 t       = 1/L; % initial stepsize
 stepsizes = zeros(nmax,1 + (SR1||BFGS)); % records some statisics
+errStruct   = struct(...
+        'f', zeros( 1, nmax+1 ),...
+        'gnorm',zeros( 1, nmax+1 ),...
+        'step', zeros( 1, nmax ), ...
+        'xk', zeros(length(xk), nmax+1));
+
 if ~isempty(errFcn)
     if ~isa(errFcn,'function_handle')
         error('errFcn must be a function');
     end
-    errStruct   = zeros( nmax, 4 ); % f, norm(gx), step, err
-else
-    errStruct   = zeros( nmax, 3 ); % f, norm(gx), step
+    errStruct.err = zeros( 1, nmax );
 end
 skipBB = false;
 stag   = 0;
 
 
-gradient        = getGradient(xk);
+[gradient,f_xk]        = getGradient(xk);
 gradient_old    = gradient;
-f_xk            = [];
-
+errStruct.f(1) = f_xk;
+errStruct.gnorm(1) = norm(gradient);
+errStruct.xk(:,1) = xk;
 % -----------------------------------------------------------------
 % ------------ Begin algorithm ------------------------------------
 % -----------------------------------------------------------------
@@ -325,7 +330,17 @@ for nit = 1:nmax
         end
         
     end
-    
+    % test my proximal operator
+    % xk = prox_tmp(xk_old + p, diagH, vk);
+    % try
+    %     HH = (diag(diagH) + vk*vk');
+    %     L = @(x) dot(xk_old + p - x, HH \ (xk_old + p - x));
+    %     if L(xtmp) ~= L(xk) && L(xtmp) ~= 0
+    %         disp(L(xk))
+    %         disp(L(xtmp))
+    %     end
+    % end
+    % end
     norm_grad = norm( xk - xk_old );
     if any(isnan(xk)) || norm(xk) > 1e10
         stag = Inf; % will cause it to break
@@ -345,24 +360,34 @@ for nit = 1:nmax
     df  = abs(fx - fxold)/abs(fxold);
     fxold = fx;
     
-    if (df < tol) || ( t < 1e-10 ) || (isnan(fx) ) || norm_grad < grad_tol
-        stag = stag + 1;
-    end
+    % if (df < tol) || ( t < 1e-10 ) || (isnan(fx) ) || norm_grad < grad_tol
+    %     stag = stag + 1;
+    % end
     
     if VERBOSE && (~rem(nit,VERBOSE) || stag>maxStag )
         fprintf(fid,'Iter: %5d, f: % 7.3e, df: %.2e, ||grad||: %.2e, step %.2e\n',...
             nit,fx,df, norm_grad, t);
     end
     
-    errStruct(nit,1)    = fx;
-    errStruct(nit,2)    = norm_grad;
-    errStruct(nit,3)    = t;
+    errStruct.f(nit+1)       = fx;
+    errStruct.gnorm(nit+1)   = norm_grad;
+    errStruct.step(nit)    = t;
+    errStruct.xk(:,nit+1)  = xk;
     if ~isempty(errFcn)
-        errStruct(nit,4)    = errFcn( xk );
+        phi = min(xk, gradient);
+        errStruct.err(nit) = 0.5 * dot(phi, phi);%errFcn( xk );
         if VERBOSE && (~rem(nit,VERBOSE) || stag>maxStag )
-            fprintf(fid,'\b, err %.2e\n', errStruct(nit,4) );
+            fprintf(fid,'\b, err %.2e\n', errStruct.err(nit) );
+        end
+        if nit > 1
+            if (abs(errStruct.err(nit) - errStruct.err(nit-1)) / errStruct.err(nit-1)  < 1e-4...
+                || errStruct.err(nit) < 1e-11  ) 
+               stag = Inf;
+            end
         end
     end
+
+    
     
 
     if stag > maxStag
@@ -374,7 +399,13 @@ end
 
 if nit == nmax && VERBOSE, myDisp('Maxed out iteration limit'); end
 if nit < nmax
-    errStruct = errStruct( 1:nit, : );
+    errStruct.f = errStruct.f(1:nit+1);
+    errStruct.gnorm = errStruct.gnorm(1:nit+1);
+    errStruct.step = errStruct.step(1:nit);
+    errStruct.xk = errStruct.xk(:,1:nit+1);
+    if ~isempty(errFcn)
+        errStruct.err = errStruct.err(1:nit);
+    end
     stepsizes = stepsizes( 1:nit, : );
 end
 
@@ -429,3 +460,51 @@ function varargout = setOptsSubFcn(RECORD_OPTS, opts, field, default, mn, mx, em
         defaultOpts.(field) = out;
     end
 end
+
+
+function x = prox_tmp(xbar, d, u)
+if isempty(u)
+     x = max(xbar, 0);
+     return 
+end
+if all(xbar >= 0)
+    x = xbar;
+    return 
+end
+if length(d) < length(u)
+    assert(isscalar(d))
+    d = ones(length(u),1)*d;
+end
+% Checked that this is implemented correctly
+b = 1 ./ d;
+denom = sqrt(1 + dot(u .* b, u));
+v = b .* u / denom;
+% Double checked this with the thm
+alphas = -xbar ./ (d .* v);
+alphas = sort(alphas);
+N = length(xbar);
+Ls = zeros(N,1);
+for n = 1:N
+    alpha = alphas(n);
+    lambda = xbar + alpha * d .* v;
+    mask = lambda > 0;
+    Ls(n) = alpha + dot(v, xbar) - dot(v(mask), lambda(mask));
+end
+[ix, ~] = find(Ls < 0, 1, 'last');
+if isempty(ix) % This means that all the constraints are active.
+    alphastar = dot(v,xbar);
+else
+    alpha = alphas(ix);
+    lambda = xbar + alpha * d .* v;
+    mask = lambda > 0 | (lambda == 0 & d .* v > 0);
+    alphastar = (dot(v,xbar) - dot(v(mask), xbar(mask))) / (dot(v(mask), d(mask).*v(mask)) - 1 );
+end
+
+% idiot checks
+lambdastar = xbar + alphastar * d .* v;
+assert(abs(alphastar + dot(v, xbar) - dot(v(mask), lambdastar(mask))) < 1e-12 )
+assert(alphas(ix) < alphastar && (ix == length(d) || alphastar < alphas(ix+1)) ) 
+
+x = max(xbar + alphastar*d.*v, 0);
+
+end % prox
