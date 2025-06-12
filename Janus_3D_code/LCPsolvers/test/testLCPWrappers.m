@@ -12,7 +12,7 @@ load('LCP_test_case_nic.mat', ...
     'profile');
 %% CVX
 N = size(Amat,2);
-cvx_begin
+cvx_begin quiet
         variable xRef(N)
         minimize 1/2*dot(xRef, Amat*xRef) + dot(xRef,bvec) 
         % subject to 
@@ -48,14 +48,17 @@ err_zerosr1 = norm(x_zerosr1 - xRef) / norm(xRef);
 %% 'my zerosr1' 
 fcnGrad = @(x) quadprog(x,Amat,-bvec);
 tic
+opts= struct();
 [x_nic, iter_nic, errStruct_nic] = zeroSr1_nic(fcnGrad, x0, opts);
 t_nic = toc;
 err_nic = norm(x_nic - xRef) / norm(xRef);
-
-%%
-
 %% proxQuasiNewton 
-% opts = struct('r', 2, 'kappa', 1 /2 / norm(Amat,2));
+opts = struct('r', 1);
+tic
+[x_pq, iter_pq, errStruct_pq] = proxQuasiNewton(fcnGrad, x0, opts);
+t_pq = toc;
+err_pq = norm(x_pq - xRef) / norm(xRef);
+
 %%
 fprintf('Algo     | Rel Err | Time | Iter\n')
 fprintf('BBGPD    | %.2g | %.1g s | %d\n', err_bbpgd, t_bbpgd, iter_bbpgd);
@@ -63,6 +66,7 @@ fprintf('L-BFGS-B | %.2g | %.1g s | %d\n', err_lbfgsb, t_lbfgsb, iter_lbfgsb);
 fprintf('P-L-BFGS | %.2g | %.1g s | %d\n', err_plbfgs, t_plbfgs, iter_plbfgs);
 fprintf('ZEROSR1  | %.2g | %.1g s | %d\n', err_zerosr1, t_zerosr1, iter_zerosr1);
 fprintf('nic      | %.2g | %.1g s | %d\n', err_nic, t_nic, iter_nic);
+fprintf('proxQN   | %.2g | %.1g s | %d\n', err_pq, t_pq, iter_pq);
 
 %%
 % Amatvec = @(x) Amat*x; 

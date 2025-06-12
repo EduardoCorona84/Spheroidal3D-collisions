@@ -68,7 +68,7 @@ if ~isfield(opts, 'gamma')
 end
 
 if ~isfield(opts, 'tau')
-    warning("Tau should be set as the 1/Lhat the the best estimate of the lipschitz constant of the the A mat");
+    % warning("Tau should be set as the 1/Lhat the the best estimate of the lipschitz constant of the the A mat");
     opts.tau = 1;
 end
 
@@ -81,7 +81,7 @@ if ~isfield(opts, 'tau_max')
 end
 
 if ~isfield(opts, 'kappa')
-    warning("Tau should be set as the 1/Lhat the the best estimate of the lipschitz constant of the the A mat");
+    % warning("Tau should be set as the 1/Lhat the the best estimate of the lipschitz constant of the the A mat");
     opts.kappa = 1;
 end
 
@@ -97,10 +97,12 @@ N = length(s_k);
 
 tau_bb2 = dot(s_k,y_k) / norm(y_k,2)^2;
 tau_bb2 = clip(tau_bb2, opts.tau_min, opts.tau_max);
-if tau_bb2 == opts.tau_min; warning('Convexity of cost function is stagnating'); end
+if tau_bb2 == opts.tau_min
+    warning('Convexity of cost function is stagnating')
+end
 d = opts.gamma* tau_bb2 * ones(N,1);
 
-% TODO: describe why this check is important
+% TODO: this is a curvature check
 if dot(s_k - d .* y_k, y_k) <= 1e-8 * norm(y_k,2)^2 * norm(s_k - d .* y_k,2)^2
     u = zeros(N,1);
 else
@@ -118,7 +120,7 @@ if all(xbar >= 0)
     x = xbar;
     return 
 end
-% Checked that this is implemented correctly
+% Sherman-Morrison update: B = 1./d - vv^T
 b = 1 ./ d;
 denom = sqrt(1 + dot(u .* b, u));
 v = b .* u / denom;
