@@ -48,12 +48,17 @@ err_zerosr1 = norm(x_zerosr1 - xRef) / norm(xRef);
 %% 'my zerosr1' 
 fcnGrad = @(x) quadprog(x,Amat,-bvec);
 tic
-opts= struct();
+opts = struct( 'Q', Amat );
 [x_nic, iter_nic, errStruct_nic] = zeroSr1_nic(fcnGrad, x0, opts);
 t_nic = toc;
 err_nic = norm(x_nic - xRef) / norm(xRef);
 %% proxQuasiNewton 
-opts = struct('r', 1);
+Lhat = max(svd(Amat));
+opts = struct('r', 20, ...
+    ... % 'tau', 1 / Lhat, ...
+    ... % 'kappa', 1 / Lhat, ...
+    'Q', Amat ...
+    );
 tic
 [x_pq, iter_pq, errStruct_pq] = proxQuasiNewton(fcnGrad, x0, opts);
 t_pq = toc;

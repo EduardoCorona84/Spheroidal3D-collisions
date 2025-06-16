@@ -36,9 +36,17 @@ for k = 1:opts.max_iter
     grad_km1 = grad_k;
 
     % quasi-newton step -k * H_k * g_k
-    p = - opts.kappa * (d_k .* grad_km1 + u_k * dot(u_k, grad_k));
-
-    xbar = x_km1 + p;
+    p = - (d_k .* grad_km1 + u_k * dot(u_k, grad_k));
+    if isfield(opts, 'Q')
+        % For QP, this is the optimal step length (see page 56 of N&W)
+        kappa = -dot(p, grad_k)/ dot(p, opts.Q*p);
+        % c1 = 1e-4;
+        % c2 = 0.9;
+        % [f_test, grad_test] = fcnGrad(x_k + kappa * p);
+        % assert( f_test <= f_k + c1*kappa*dot(grad_k, p), 'Sufficient decrease condition not satisfied');
+        % assert( dot(grad_test, p) >= c2 *dot(grad_k, p), 'Curvature condition not satisfied');
+    end
+    xbar = x_km1 + kappa*p;
     x_k = prox_rank1(xbar, d_k, u_k);
     [f_k, grad_k] = fcnGrad(x_k);
 end

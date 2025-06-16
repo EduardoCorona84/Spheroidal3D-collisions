@@ -19,6 +19,7 @@ x_k = max(0, x_km1 + p0);
 [f_k, grad_k] = fcnGrad(x_k);
 
 % quasi-newton iterations
+kappa = opts.kappa;
 for k = 1:opts.max_iter
     [converged, errStruct] = checkConvergence(k, f_k, x_k, ...
         grad_k, errStruct, opts);
@@ -30,16 +31,38 @@ for k = 1:opts.max_iter
 
     s_k = x_k - x_km1;
     y_k = grad_k - grad_km1;
-    [d, U, V] = updateHk(k, s_k, y_k, opts);
-
-    x_km1 = x_k;
-    grad_km1 = grad_k;
+    [d, H_k, V, Lambda, opts] = updateHk(k, s_k, y_k, opts);
 
     % quasi-newton step
-    p = -opts.kappa * (d .* grad_km1 + U * (U' * grad_k));
-    xbar = x_km1 + p;
+    p = -H_k * grad_k;
+    if isfield(opts, 'Q')
+        % For QP, this is the optimal step length (see page 56 of N&W)
+        kappa = -dot(p, grad_k)/ dot(p, opts.Q*p);
+        c1 = 1e-4;
+        c2 = 0.9;
+        [f_test, grad_test] = fcnGrad(x_k + kappa * p);
+        assert( f_test <= f_k + c1*kappa*dot(grad_k, p), 'Sufficient decrease condition not satisfied');
+        assert( dot(grad_test, p) >= c2 *dot(grad_k, p), 'Curvature condition not satisfied');
+    end
+    xbar = x_k + kappa * p;
+    % if kappa <= opts.kappa / 2^5
+    %     kappa = opts.kappa;
+    % end
+    % % armijo linesearch TODO remove
+    % for t = 1:10 
+    %     xbar = x_k + kappa* p;
+    %     [fnew, ~] = fcnGrad(xbar);
+    %     % fpred = f_k + dot(p, grad_k + (diag(1 ./ d) + V * diag(Lambda) * V')* p);
+    %     if fnew > f_k %|| fnew / fpred > 2
+    %         kappa = kappa / 2;
+    %     else 
+    %         break
+    %     end
+    % end
     % proximal step
-    x_k = prox(xbar, d, V);
+    x_km1 = x_k;
+    x_k = prox(xbar, d, V, Lambda);
+    grad_km1 = grad_k;
     [f_k, grad_k] = fcnGrad(x_k);
 end
 
@@ -60,7 +83,7 @@ function opts = defaultOpts(opts, N)
     end
 
     if ~isfield(opts, 'tol_abs')
-        opts.tol_abs = 1e-11;
+        opts.tol_abs = 1e-7;
     end
 
     if ~isfield(opts, 'gamma')
@@ -94,7 +117,7 @@ function opts = defaultOpts(opts, N)
     opts.Y = zeros(N, opts.r);
 end % defaultOpts
 
-function [d, U, V] = updateHk(k, s_k, y_k, opts)
+function [d, H, V, Lambda, opts] = updateHk(k, s_k, y_k, opts)
 
 assert(0 < opts.tau_min, "tau_min must be positive");
 assert(opts.tau_min < opts.tau_max, "tau_max must be larger than tau_min");
@@ -117,46 +140,96 @@ opts.Y(:,r) = y_k;
 
 S = opts.S(:,1:r);
 Y = opts.Y(:,1:r);
-ApD = zeros(r,r);
-for i = 1:r
-    for j = 1:i-1
-        ApD(i,j) = dot(S(:,i), Y(:,j));  
-        ApD(j,i) = ApD(i,j);
-    end
-    ApD(i,i) = dot(S(:,i), Y(:,i));
-end
+% ApD = zeros(r,r);
+% for i = 1:r
+%     for j = 1:r
+%         ApD(i,j) = dot(S(:,i), Y(:,j));  
+%     end
+% end
+% 
+% BB = chol(S'*diag(1 ./ d)*S - ApD); % for B
+% HH = chol(ApD' - Y'*diag(d)*Y); % for H
+% V = (Y - diag(1 ./ d)*S) / BB;
+% U = (S - diag(d)*Y) / HH;
 
-BB = chol(S'*diag(1 ./ d)*S - ApD); % for B
-HH = chol(ApD - Y'*diag(d)*Y); % for H
-V = (Y - diag(1 ./ d)*S) / BB;
-U = (S - diag(d)*Y) / HH;
-
-% idiot check 1
-H = diag(d) + U*U';
-B = diag(1 ./ d) - V*V';
-N = length(s_k);
-assert(norm(B*H - eye(N)) < 1e-9)
-
-% idiot check 2 
-Hfast = H; 
-Bfast = B;
+%% BFGS 
+% U = zeros(N, 2*r);
+% Sigma = zeros(2*r,1);
+V = zeros(N, 2*r);
+Lambda = zeros(2*r,1);
 H = diag(d);
 B = diag(1./d);
-for j = 1:r 
+for j = 1:r
     s = S(:,j); 
-    y = Y(:,j);
-    H = H + 1/dot(s - H*y,y)*(s - H*y)*(s - H*y)';
-    B = B + 1/dot(y - B*s,s)*(y - B*s)*(y - B*s)';
+    y = Y(:,j); 
+    rho = 1 / dot(y,s);
+    assert(1/rho > 1e-8);
+    U = (eye(N) - rho*y*s');
+    H = U'*H*U + rho*s*s';
+
+    a = B*s / dot(s, B*s);
+    b = y / dot(y,s);
+    
+    B = B - a*a' + b*b';
+    Lambda(2*(j-1)+1) = -1;
+    Lambda(2*(j-1)+2) = 1;
+    V(:, 2*(j-1)+1) = a;
+    V(:, 2*(j-1)+2) = b;
 end
 
-assert(norm(B - Bfast) < 1e-9)
-assert(norm(H - Hfast) < 1e-9)
+
+%% SR1
+% idiot check 2 
+% Hfast = H; 
+% Bfast = B;
+% U = zeros(N, r);
+% Sigma = zeros(r,1);
+% V = zeros(N, r);
+% Lambda = zeros(r,1);
+% H = diag(d);
+% B = diag(1./d);
+% for j = 1:r 
+%     s = S(:,j); 
+%     y = Y(:,j);
+%     % update H (and mem)
+%     denomH = dot(s - H*y,y);
+%     sigma = sign(denomH);
+%     denomH = sqrt(sigma*denomH);
+%     assert(isreal(denomH));
+%     u = (s - H*y) / denomH;
+%     H = H + sigma*(u*u');
+%     % update H (and mem)
+%     denomB = dot(y - B*s,s);
+%     lambda = sign(denomB);
+%     denomB = sqrt(lambda*denomB);
+%     assert(isreal(denomB));
+%     v = (y - B*s) / denomB;
+%     B = B +lambda*(v*v');
+%     % Store for proof of concept
+%     U(:,j) = u;
+%     Sigma(j) = sigma;
+%     V(:,j) = v;
+%     Lambda(j) = lambda;
+% end
+% assert(norm(B*H - eye(N)) < 1e-8)
+% assert(norm(B - Bfast) < 1e-9*norm(B))
+% assert(norm(H - Hfast) < 1e-9*norm(H))
+
+% idiot check 1
+% H = diag(d) + U*diag(Sigma)*U';
+% B = diag(1 ./ d) + V*diag(Lambda)*V';
+% N = length(s_k);
+% assert(norm(B*H - eye(N)) < 1e-8)
 
 end % updateHk
 
-function x = prox(xbar, d, V)
+function x = prox(xbar, d, V, Lambda)
+    if all(xbar >= 0)
+        x = xbar;
+        return 
+    end
     N = length(xbar); %#ok<NASGU>
-    B = diag(1./d)-V*V';
+    B = diag(1./d)+V*diag(Lambda)*V';
     cvx_begin quiet
         variable z(N)
         minimize( dot(xbar-z,B*(xbar-z)) )
