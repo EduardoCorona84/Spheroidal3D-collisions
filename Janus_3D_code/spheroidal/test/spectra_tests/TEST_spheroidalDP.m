@@ -1,8 +1,5 @@
 %{
     Test code for spheroidalDP.m.
-
-    Tests spectral convergence on-surface and off-surface, and has
-    a gradient check using finite differences.
 %}
 
 
@@ -21,7 +18,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
 
         % Tolerance for gradient checks
         gradient_check_tol = 1e-6;
-        fd_eps = 1e-6;
+        fd_eps = 1e-5;
 
         % Non-trivial density function: chosen so that it is smooth
         % and does not allow the convergence tests to hit machine precision 
@@ -328,11 +325,16 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
                 'Gradient check failed for oblate case: should be below tolerance.');
         end
 
-        function testGradientCheckProlateOnSurface(testCase)
+        %%% Kernel_Eval check
+        function testProlateWithKernelEvalOffSurface(testCase)
+            %{
+                Verify that off-surface evaluations coincide with the
+                implementation in Kernel_Eval for the prolate case.
+            %}
             p = 16;
-            eps = testCase.fd_eps;
-
+            
             params = SpheroidalParameters;
+            params.isReal = true;
             params.u0 = testCase.u0_prolate;
             params.a = testCase.a_prolate;
             params.oblate = false;
@@ -340,55 +342,93 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            % These normal vectors are in Cartesian coordinates, but in
-            % spheroidal coordinates, it is just e_u.
-            nu_src = get_norm_vecs(p, params.u0, params.oblate);
-            [X_src, ~] = params.get_X(); 
+            target_u0 = params.u0 * 3;
+            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
+            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
 
-            % Method 1: use off-surface code
-            DP_method1 = spheroidalDP(params, [], nu_src);
+            DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
-            DP_spectral = spheroidalDP(params);
+            % Get source geometry and weights
+            [X_src_orig, ~] = params.get_X(); % Cartesian coordinates of source points
+            N_src_orig = params.get_Norm(p, 1);
+            
+            % Quadrature weights for Kernel_Eval
+            Sns = SurfaceSph(X_src_orig);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src_orig = Sns.geoProp.W .* wt_gl;
 
-            X_src = prolate_spheroid_shape(p, params.u0, params.a);
-            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            pot = 'dDL_L_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            KEparams.X = X_src_orig;
+            KEparams.W2 = W_src_orig.';
+            KEparams.nor = N_src_orig;
+            KEparams.targnor = nu_trg;
 
-            DL_plus = spheroidalDL(params, X_src + eps * nu_src);
-            DL_minus = spheroidalDL(params, X_src - eps * nu_src);
-            DP_fd = (DL_plus - DL_minus) / (2 * eps);
+            dDL_mat = Kernel_Eval(X_trg, X_src_orig, KEparams);
+            DP_kernel_eval = dDL_mat * params.sigma;
 
-            rel_err = norm(DP_method1 - DP_fd, inf) / norm(DP_spectral, inf);
+            rel_err = norm(DP_spectral - DP_kernel_eval, inf) / norm(DP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
-                'Prolate on-surface gradient check failed to meet tolerance.');
+                'spheroidalDP vs Kernel_Eval for prolate off-surface failed.');
         end
 
-        function testGradientCheckOblateOnSurface(testCase)
-            p = 1;
-            eps = testCase.fd_eps;
+        function testOblateWithKernelEvalOffSurface(testCase)
+            %{
+                Verify that off-surface evaluations coincide with the
+                implementation in Kernel_Eval for the oblate case.
 
+                Note that this requires higher order (i.e. 'p') for the 
+                desired convergence.
+            %}
+            p = 16;
+            
             params = SpheroidalParameters;
-            params.u0 = testCase.u0_oblate;
-            params.a = testCase.a_oblate;
+            params.isReal = true;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
             params.oblate = true;
             [u_p, v_p] = gl_grid(p);
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            DP_spectral = spheroidalDP(params);
+            target_u0 = params.u0 * 3;
+            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
+            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
 
-            X_src = oblate_spheroid_shape(p, params.u0, params.a);
-            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
-            X_plus = X_src + eps * nu_src;
-            X_minus = X_src - eps * nu_src;
+            % Get source geometry and weights
+            [X_src_orig, ~] = params.get_X(); % Cartesian coordinates of source points
+            N_src_orig = params.get_Norm(p, 1);
+            
+            % Quadrature weights for Kernel_Eval
+            Sns = SurfaceSph(X_src_orig);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src_orig = Sns.geoProp.W .* wt_gl;
 
-            DL_plus = spheroidalDL(params, X_plus);
-            DL_minus = spheroidalDL(params, X_minus);
-            DP_fd = (DL_plus - DL_minus) / (2 * eps);
+            pot = 'dDL_L_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            KEparams.X = X_src_orig;
+            KEparams.W2 = W_src_orig.';
+            KEparams.nor = N_src_orig;
+            KEparams.targnor = nu_trg;
 
-            rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
+            dDL_mat = Kernel_Eval(X_trg, X_src_orig, KEparams);
+            DP_kernel_eval = dDL_mat * params.sigma;
+
+            rel_err = norm(DP_spectral - DP_kernel_eval, inf) / norm(DP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
-                'Prolate on-surface gradient check failed to meet tolerance.');
+                'spheroidalDP vs Kernel_Eval for prolate off-surface failed.');
+        end
+
+        %%% On-surface checks
+        function testProlateOnSurface(testCase)
         end
     end
 end

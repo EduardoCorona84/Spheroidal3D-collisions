@@ -453,19 +453,20 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
         function nor = get_Norm(obj,ext_p,part_num)
             % find normal to self surface
 
-            % if nargin==1
-            %     if obj.p == 0
-            %         fprintf("no p values stored, using p=8.\n ")
-            %         np=2*8*(8+1);
-            %         [theta_x,phi_x]=gl_grid(8);
-            %     else
-            %         np=2*obj.p*(obj.p+1);
-            %         [theta_x,phi_x]=gl_grid(obj.p);
-            %     end
-            % else
-            np=2*ext_p*(ext_p+1);
-            [theta_x,phi_x]=gl_grid(ext_p);
-            % end
+            if nargin==1
+                if obj.p == 0
+                    fprintf("no p values stored, using p=8.\n ")
+                    np=2*8*(8+1);
+                    [theta_x,phi_x]=gl_grid(8);
+                else
+                    np=2*obj.p*(obj.p+1);
+                    [theta_x,phi_x]=gl_grid(obj.p);
+                end
+                part_num = 1;
+            else
+                np=2*ext_p*(ext_p+1);
+                [theta_x,phi_x]=gl_grid(ext_p);
+            end
             ui=obj.u0(part_num);
             obl=obj.oblate(part_num);
             v_x=cos(theta_x);
