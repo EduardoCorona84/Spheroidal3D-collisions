@@ -853,7 +853,19 @@ den = 10000*(den==0)+den;
 
 end
 
-function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
+function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt, saveLCPs)
+
+persistent A_list b_list save_iter
+
+if ~exist('saveLCPs', 'var') || isempty(saveLCPs)
+    saveLCPs = true; % TODO: change this to false
+end
+if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter))
+    A_list = {};
+    b_list = {};
+    save_iter = 1;
+end
+
 
 parslv = Fparams.parslv; 
 rd = Fparams.parbd.rd; 
@@ -1026,14 +1038,17 @@ else
         BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
     end
 end
-
-% TODO Remove: 
-save('./LCPSolvers/test/LCP_test_case_nic.mat', ...
-    'Amat', 'bvec', 'x0', ...
-    'max_iter', 'tol_rel', 'tol_abs', ...
-    'profile',...
-    'lam','err', 'iter');
-
+if saveLCPs
+   if length(A_list) >= 100
+        save(['./LCPSolvers/test/LCP_data_' num2str(sav_iter) '.mat'], ...
+            'Amat', 'bvec', 'x0')
+        A_list = {};
+        b_list = {};
+        save_iter = save_iter + 1;
+    end
+    A_list{end+1} = Amat; 
+    b_list{end+1} = bvec;
+end
 fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'],err,iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
