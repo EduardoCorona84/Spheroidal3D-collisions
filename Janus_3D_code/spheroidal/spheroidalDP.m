@@ -104,15 +104,15 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         % Calculate spectra on surface with outward normal
         [spectra_surf,~,~]=DPspectrum(p,u0,params.a,oblate);
     
-        %reshape so that each column of SP_coefs corresponds to each function 
+        %reshape so that each column of DP_coefs corresponds to each function 
         % on each spheroid
         spectra_surf = reshape(spectra_surf,sp,1,ns);
         spectra_matrix = repmat(spectra_surf,1,nf,1);
-        SP_coefs = spectra_matrix .* shc; 
-        SP_coefs = reshape(SP_coefs, sp, [], 1);
+        DP_coefs = spectra_matrix .* shc; 
+        DP_coefs = reshape(DP_coefs, sp, [], 1);
     
         %multiply coefficients with spheroidal harmonics
-        DP=Y*SP_coefs;
+        DP=Y*DP_coefs;
     
         % reshape to match original shape of sigma
         DP = reshape(DP,[],nf,ns);
@@ -182,7 +182,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
             Yr(nt_r+1:end,n^2+1:(n+1)^2) = yn1_scale.*Yn1;
         end
         %%%%%%%%%%%%%%%%%%%%%
-    
+
         for k=1:ns  %loop over each spheroid surface we want to evaluate
             [~,Xself_k]=params.get_X(k);
             S=cart2spheroidal(Xself_k,a(k),oblate(k));
@@ -199,19 +199,19 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
             end
     
             for nu_ind=1:nvarin+1
-                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_k,v_k,nu_sph_list{nu_ind},oblate(k));
+                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a(k),u_k,v_k,nu_sph_list{nu_ind},oblate(k));
                 
                 FYr = (spectra_nm_prime + spectra_nm).*Yr(1:nt_r,:) + spectra_n1m.*Yr(nt_r+1:end,:);
-                SP_k=FYr*shc(:,:,k);
+                DP_k=FYr*shc(:,:,k);
     
                 if isReal
-                    SP_k=real(SP_k);
+                    DP_k=real(DP_k);
                 end
                 
                 if nu_ind==1
-                    DP{k}=SP_k;
+                    DP{k}=DP_k;
                 else
-                    varargout{nu_ind-1}{k}=SP_k;
+                    varargout{nu_ind-1}{k}=DP_k;
                 end
             end
     
@@ -276,10 +276,10 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
             Xtk = Xt{k};
             nu_k=nu_t{k};
             [ntk,d]=size(Xtk);
-            SPk = zeros(ntk,nf);
+            DPk = zeros(ntk,nf);
             if more_nu
-                SP_extra_at_k=zeros(ntk,nf,nvarin);
-                SP_extra_at_k=mat2cell(SP_extra_at_k,ntk,nf,ones(1,nvarin));
+                DP_extra_at_k=zeros(ntk,nf,nvarin);
+                DP_extra_at_k=mat2cell(DP_extra_at_k,ntk,nf,ones(1,nvarin));
             end
     
             if ntk > 0
@@ -316,14 +316,14 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                 do_surf=~isempty(S_surf); 
                 do_ext=~isempty(S_ext);
             
-                % Split coordinates into 3 regions: We have a SP for each region
+                % Split coordinates into 3 regions: We have a DP for each region
                 regions=[do_int,do_surf,do_ext];
                 Sregions={S_int,S_surf,S_ext};
                 Nuregions={Nu_int,Nu_surf,Nu_ext};
-                SPregions=cell(3,1);
+                DPregions=cell(3,1);
                 if more_nu
                     Nuregions_extra={Nu_int_extra,Nu_surf_extra,Nu_ext_extra};
-                    SPregions_extra={cell(1,nvarin),cell(1,nvarin),cell(1,nvarin)}; %SPregions_extra{1}={SP_int from nu_1},{SP_int from nu_2},...
+                    DPregions_extra={cell(1,nvarin),cell(1,nvarin),cell(1,nvarin)}; %DPregions_extra{1}={DP_int from nu_1},{DP_int from nu_2},...
                 end
                 
                 % Loop over each region
@@ -341,7 +341,7 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                         end
                         v_x_r=v_x_r_real;
     
-                        [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_x_r,v_x_r,nu_r_sph,oblate(k));
+                        [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a(k),u_x_r,v_x_r,nu_r_sph,oblate(k));
                 
                         [Fr,Fp]=solid_harmonic_prime(p,u0(k),u_x_r,oblate(k));
                         nt_r=length(u_x_r);
@@ -362,56 +362,56 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                             +spectra_n1m.*Fr.*Yr(nt_r+1:end,:);
     
                         % Spheroidal harmonic coefficients of S'[fac*sigma]
-                        SPregions{r}=FYr*shc(:,:,k);
+                        DPregions{r}=FYr*shc(:,:,k);
     
-                        % if there are more nu vectors to calculate SP with,
+                        % if there are more nu vectors to calculate DP with,
                         % use already computed Fr,Yr at target points, and
                         % evaluate spectrum using new normal
                         if more_nu
                             nu_r_cell=Nuregions_extra{r};
-                            SP_r_cell=cell(1,nvarin);
+                            DP_r_cell=cell(1,nvarin);
                             for nu_ind=1:nvarin
                                 nu_r_cart=nu_r_cell{nu_ind};
                                 [nu_r_sph,~] = cartNu2spheroidal(nu_r_cart,Sr,a(k),oblate(k));
-                                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a,u_x_r,v_x_r,nu_r_sph,oblate(k));
+                                [spectra_nm_prime,spectra_nm,spectra_n1m] = DPspectrum_away(p,u0(k),a(k),u_x_r,v_x_r,nu_r_sph,oblate(k));
                                 FYr = (spectra_nm_prime.*Fp + spectra_nm.*Fr).*Yr(1:nt_r,:)+spectra_n1m.*Fr.*Yr(nt_r+1:end,:);
-                                SP_r_cell{nu_ind}=FYr*shc(:,:,k);
+                                DP_r_cell{nu_ind}=FYr*shc(:,:,k);
                             end
-                            SPregions_extra{r}=SP_r_cell;
+                            DPregions_extra{r}=DP_r_cell;
                         end
     
                     end
                 end
             
-                % Recombine all SPs from interior/exterior/surface
-                SPk(u_x < u0(k),:) = SPregions{1};
-                SPk(u_x == u0(k),:) = SPregions{2};
-                SPk(u_x > u0(k),:) = SPregions{3};
+                % Recombine all DPs from interior/exterior/surface
+                DPk(u_x < u0(k),:) = DPregions{1};
+                DPk(u_x == u0(k),:) = DPregions{2};
+                DPk(u_x > u0(k),:) = DPregions{3};
     
                 if more_nu
                     for nu_ind=1:nvarin
-                        SPk_temp=SP_extra_at_k{nu_ind};
-                        SPk_temp(u_x < u0(k),:) = SPregions_extra{1}{nu_ind};
-                        SPk_temp(u_x == u0(k),:) = SPregions_extra{2}{nu_ind};
-                        SPk_temp(u_x > u0(k),:) = SPregions_extra{3}{nu_ind};
-                        SP_extra_at_k{nu_ind}=SPk_temp;
+                        DPk_temp=DP_extra_at_k{nu_ind};
+                        DPk_temp(u_x < u0(k),:) = DPregions_extra{1}{nu_ind};
+                        DPk_temp(u_x == u0(k),:) = DPregions_extra{2}{nu_ind};
+                        DPk_temp(u_x > u0(k),:) = DPregions_extra{3}{nu_ind};
+                        DP_extra_at_k{nu_ind}=DPk_temp;
                         if isReal
-                            SP_extra_at_k{nu_ind}=real(SPk_temp);
+                            DP_extra_at_k{nu_ind}=real(DPk_temp);
                         end
                     end
                 end
         
                 if isReal
-                    SPk=real(SPk);
+                    DPk=real(DPk);
                 end
             end
             
             %evluation for particle k
-            DP{k} = SPk;
+            DP{k} = DPk;
     
             if more_nu
                 for nu_ind=1:nvarin
-                    varargout{nu_ind}{k}=SP_extra_at_k{nu_ind};
+                    varargout{nu_ind}{k}=DP_extra_at_k{nu_ind};
                 end
             end
                     
