@@ -289,15 +289,24 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
 
                 % Convert targets to spheroidal coords
                 S=cart2spheroidal(Xtk,a(k),oblate(k));
+
                 u_x=S(:,1);
-                
-                % split up interior/surface/exterior
-                S_int=S(u_x < u0(k),:);
-                S_surf=S(u_x == u0(k),:);
-                S_ext=S(u_x > u0(k),:);
-                Nu_int=nu_k(u_x<u0(k),:);
-                Nu_surf=nu_k(u_x==u0(k),:);
-                Nu_ext=nu_k(u_x>u0(k),:);
+                if min(u_x)-1<1e-12 && oblate(k)==0
+                    fprintf("\n warning: u_x~1. check spheroid #%d\n ",k);
+                end
+
+                %%% split up interior/surface/exterior
+                indices_interior = (u_x < u0(k) - 1e-14);
+                indices_surface = (abs(u_x-u0(k)) <= 1e-14);
+                indices_exterior = (u_x > u0(k) + 1e-14);
+
+                S_int = S(indices_interior,:);
+                S_surf = S(indices_surface,:);
+                S_ext = S(indices_exterior,:);
+
+                Nu_int = nu_k(indices_interior,:);
+                Nu_surf = nu_k(indices_surface,:);
+                Nu_ext = nu_k(indices_exterior,:);
     
                 if more_nu
                     Nu_int_extra=cell(1,nvarin);
@@ -384,16 +393,16 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                 end
             
                 % Recombine all DPs from interior/exterior/surface
-                DPk(u_x < u0(k),:) = DPregions{1};
-                DPk(u_x == u0(k),:) = DPregions{2};
-                DPk(u_x > u0(k),:) = DPregions{3};
+                DPk(indices_interior,:) = DPregions{1};
+                DPk(indices_surface,:) = DPregions{2};
+                DPk(indices_exterior,:) = DPregions{3};
     
                 if more_nu
                     for nu_ind=1:nvarin
                         DPk_temp=DP_extra_at_k{nu_ind};
-                        DPk_temp(u_x < u0(k),:) = DPregions_extra{1}{nu_ind};
-                        DPk_temp(u_x == u0(k),:) = DPregions_extra{2}{nu_ind};
-                        DPk_temp(u_x > u0(k),:) = DPregions_extra{3}{nu_ind};
+                        DPk_temp(indices_interior,:) = DPregions_extra{1}{nu_ind};
+                        DPk_temp(indices_surface,:) = DPregions_extra{2}{nu_ind};
+                        DPk_temp(indices_exterior,:) = DPregions_extra{3}{nu_ind};
                         DP_extra_at_k{nu_ind}=DPk_temp;
                         if isReal
                             DP_extra_at_k{nu_ind}=real(DPk_temp);
