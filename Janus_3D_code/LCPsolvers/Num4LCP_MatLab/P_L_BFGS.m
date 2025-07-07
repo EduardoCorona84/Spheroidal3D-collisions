@@ -18,10 +18,12 @@ end
 % set up this solvers options
 opt = pqn_solopt();
 opt.algo = 'PLB';
-opt.use_tolx = true; % rel err : |x_k - x_{k-1}| / |x_k| < tol                 
-opt.use_tolo = true; % abs err : |f_k -f_{k-1}| < tol
-opt.use_tolg = true; % abs err : norm(g_k, inf) < tol
+opt.maxmem = 20;
+opt.use_tolx = false; % rel err : |x_k - x_{k-1}| / |x_k| < tol                 
+opt.use_tolo = false; % abs err : |f_k -f_{k-1}| < tol
+opt.use_tolg = false; % abs err : norm(g_k, inf) < tol
 opt.use_kkt = true;  % abs err : dot(g_k, x_k) < tol
+opt.maxit = max_iter;
 opt.tolx = tol_rel;                   
 opt.tolo = tol_abs;
 opt.tolk = tol_abs;
@@ -35,7 +37,7 @@ iter = out.iter;
 % Make err match that of BBPGD
 phi = min(out.x, out.grad) ;
 err = 1/2*dot(phi, phi);
-
+convergence = [];
 if iter == max_iter
     flag = 8;
     msg = 'maxlimit';
@@ -45,7 +47,6 @@ end
 flag = 6;
 msg = 'local minima';
 
-convergence = [];
 if profile
     % TODO, technically, we would want this match the above err...
 end

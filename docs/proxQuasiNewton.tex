@@ -56,14 +56,15 @@
 \newcommand{\y}{\mathbf{y}}
 \renewcommand{\H}{\mathbf{H}}
 \newcommand{\B}{\mathbf{B}}
-\newcommand{\D}{\mathbf{D}}
+\newcommand{\Hnaut}{\mathbf{H}_0}
+\newcommand{\Bnaut}{\mathbf{B}_0}
 \newcommand{\U}{\mathbf{U}}
 \newcommand{\prox}{\operatorname{prox}}
 \newcommand{\argmin}{\operatorname{argmin}}
 \newcommand{\argmax}{\operatorname{argmax}}
 \begin{document}
 
-\title{zeroSR1 to solve the LCP}
+\title{Proximal QuasiNewton Methods to solve the LCP For Dense Suspensions of Particles}
 \author{Nic Rummel} 
 \date{\today}
 \maketitle
@@ -71,9 +72,13 @@
 \section{Problem specification}
 At every time iteration of the time evolution of system of interest, $n$ particle that lie in a threshold are identified as possibly colliding within the time stepping window. This motivates solving the following a linear complimentary problem
 \[\A\x = -\b \perp \x = 0\]
-where $\A \in \mathbb{R}^{N \times N}, \b \in \mathbb{R}^N$ and $N = 7(2^n)$. The values of $\x$ either satisfy a linear system or are element-wise 0. Physically $\x$ corresponds to forces and torques acting on individual particle from a collision. If the particles collide, then the forces are nonzero, but if the particles do not collide then the collisional forces are zero. 
+where $\A \in \mathbb{R}^{N \times N}, \b \in \mathbb{R}^N$ and $N = 7(2^n)$. The values of $\x$ either satisfy a linear system or are element-wise 0. Physically $\x$ corresponds to forces and torques acting on individual particle from a collision. If the particles collide, then the forces are nonzero, but if the particles do not collide then the collisional forces are zero.  
 
-For small-medium systems, it has been observed that active set methods or interior point methods are reasonable choice for solving the LCP, but when the system becomes large these methods become computationally infeasible. Instead, proximal gradient descent methods are utilized. We hypothesize that this is not due to the supremacy in this regime, but rather that they are a robust and were the simplest to implement. Instead we believe that there is still computational advantage on the table for proximal quasi newton methods. 
+\textcolor{red}{Stephen: is $\A$ symmetric? PSD? PD?}
+
+\textcolor{blue}{Nic: Mathematically is PD $\A \succ 0$, but computational errors in the evaluation of the boundary integrals could cause $\A$ to loose symmetry. Thus, even if we wanted to use a non-neg CG solver we would need to use a Krylov method that does not rely on symmetry.} 
+
+For small-medium systems, it has been observed that active set methods or interior point methods are reasonable choice for solving the LCP, but when the system becomes large these methods become computationally infeasible. Instead, proximal gradient descent methods are utilized. We hypothesize that this is not due to the supremacy in this regime, but rather that they are a robust and were the simplest to implement. Instead we believe that there is still computational advantage on the table for proximal quasi Newton methods. 
 
 Solving the LCP is equivalent to solving the following constrained quadratic program. This can be seen by deriving the KKT conditions and matching them with the above statements for the LCP.
 \begin{equation} \label{eq:qp}
@@ -86,43 +91,43 @@ This motivate finding optimization problems that solve Equation \eqref{eq:qp} wi
 \[ \x_{k+1} = \underset{\x \geq 0}{\argmin} \langle \nabla f(\x_k), \x-\x_k \rangle + \tfrac{L}{2}\langle \x-\x_k , \x-\x_k \rangle\]
 Implicitly, the Hessian is being approximated by the scaled identity $L \mathbf{I}$ where $L$ is the Lipschitz constant of the Hessian which in our case is the largest singular value of $\A$. From standard convergence theory, we know that the rate of convergence in the unconstrained case is $\mathcal{O}(\kappa(\A)N /\epsilon)$ where $\kappa(\A)$ is the condition number of the matrix $\A$ and $\epsilon$ is the desired tolerance of the approximation. 
 
-We believe this can be improved by leveraging the fact that for quadratic program the hessian is constant, thus using curvature information should bring significant improvements on the rate of convergence. Because $\A$ is not explicitly available and inverting with a Krylov method would make the cost of each iteration prohibitive. Thus approximating the pertinent curvature information with a quasi-newton method seems appropriate. Specifically, will attempt to solve the problem quadratic approximation to Equation \eqref{eq:qp} at the current iterate $\x_k$ for 
+We believe this can be improved by leveraging the fact that for quadratic program the Hessian is constant, thus using curvature information should bring significant improvements on the rate of convergence. Because $\A$ is not explicitly available and inverting with a Krylov method would make the cost of each iteration prohibitive. Thus approximating the pertinent curvature information with a quasi-Newton method seems appropriate. Specifically, will attempt to solve the problem quadratic approximation to Equation \eqref{eq:qp} at the current iterate $\x_k$ for 
 \begin{equation}
     \x_{k+1} = \underset{\x \geq 0}{\argmin} \langle \nabla f(\x_k), \x-\x_k \rangle + \tfrac{1}{2}\langle \x-\x_k , \B_k(\x-\x_k )\rangle
 \end{equation}
-Notice that this allows for a different approximation to the Cauchy (gradient descent) step, without increasing the number of mat-vec's used. In particular, in the unconstrained case this increases the cost of the each iteration by $\mathcal{O}(nr)$ where $r$ is the memory of the quasi-newton approximation. 
+Notice that this allows for a different approximation to the Cauchy (gradient descent) step, without increasing the number of mat-vec's used. In particular, in the unconstrained case this increases the cost of the each iteration by $\mathcal{O}(nr)$ where $r$ is the memory of the quasi-Newton approximation. 
 
 Some approaches such at Projected Quasi-Newton (PQN), suggest an approximating the solution to this problem by taking the step (sweeping some details under the rug)
 \[ \x_{k+1} = \max\bigl(0, x_k  - \H_k \nabla f(\x_k)\bigr)\]
 While this method makes us of some curvature information, it is not making full use of Hessian approximation with regards to finding the best next iterate in the feasible set. Explicitly, we believe that we should be taking 
 \[ \x_{k+1} = \prox_{\x \geq0}^{\B_k} \bigl( x_k  - \H_k \nabla f(\x_k)\bigr)\]
-The proximal operator needs to be applied with respect to the norm induced by $\B$. In general, this requires that we solve another constrained quadratic program of the same size but by leveraging structure of the low-rank updates of $\B_k$, we can solve a significantly smaller dual problem. In the special zero memory case with the SR1 update, this involves finding the root of monotonic piecewise linear function which can be solved in $\mathcal{O}(n\log(n))$ time. In the general case, the dual problem reduces to optimizing over an unconstrained piecewise quadratic program (equivalently rootfinding of a $r$ dimensional piecewise linear function). While this increases the cost per step of the our proximal quasi-newton method we believe that fewer iteration in general are necessary to converge for problems of interest. As the computational burden lies on the number of mat-vecs, the cost of solving the subproblem induced by the weighted-proximal operator is worth it. 
+The proximal operator needs to be applied with respect to the norm induced by $\B$. In general, this requires that we solve another constrained quadratic program of the same size but by leveraging structure of the low-rank updates of $\B_k$, we can solve a significantly smaller dual problem. In the special zero memory case with the SR1 update, this involves finding the root of monotonic piecewise linear function which can be solved in $\mathcal{O}(n\log(n))$ time. In the general case, the dual problem reduces to optimizing over an unconstrained piecewise quadratic program (equivalently rootfinding of a $r$ dimensional piecewise linear function). While this increases the cost per step of the our proximal quasi-Newton method we believe that fewer iteration in general are necessary to converge for problems of interest. As the computational burden lies on the number of mat-vecs, the cost of solving the subproblem induced by the weighted-proximal operator is worth it. 
 
 \section{Step Size}
 For the unconstrained case, once a search direction $\p_k$ is chosen an optimal step size can be computed with the cost of one extra mat-vec: 
-\[\alpha^* = \argmin_\alpha \bigl\langle \x_k - \alpha\p_k, \tfrac{1}{2}\A(\x_k - \alpha\p_k) +\b\bigr\rangle = \frac{\langle \nabla f_k, \p_k\rangle }{\langle \p_k,\A\p_k\rangle}\]
+\[\alpha^* = \argmin_\alpha \bigl\langle \x_k - \alpha\p_k, \tfrac{1}{2}\A(\x_k - \alpha\p_k) +\b\bigr\rangle = -\frac{\langle \nabla f_k, \p_k\rangle }{\langle \p_k,\A\p_k\rangle}\]
 So for the price of one extra mat-vec the optimal step size can be computed explicitly. 
 
 In the constrained case, the following iteration could be used 
 \begin{align*}
     \p_k &= \H_k \nabla f_k &\text{(Quasi-Newton Step Direction)}\\
-    \alpha^*_k &= \frac{\langle \nabla f_k, \p_k\rangle }{\langle \p_k,\A\p_k\rangle} &\text{(Unconstrained Optimal Step Size)}\\
+    \alpha^*_k &= -\frac{\langle \nabla f_k, \p_k\rangle }{\langle \p_k,\A\p_k\rangle} &\text{(Unconstrained Optimal Step Size)}\\
     \bar{\x}_k &= \prox_{\x\geq 0}^{\B_k}(\x_k +\alpha^*_k \p_k) &\text{(Apply Proximal Operator)}\\
     \q_k &= \bar{\x}_k - \x_k &\text{(Feasible Step Direction)}\\
-    \eta_k^* &= \max\left(0,  \frac{\langle \nabla f_k, \q_k\rangle }{\langle \q_k,\A\q_k\rangle}\right) &\text{(\emph{Semi}-Optimal Feasible Step Size)} \\
+    \eta_k^* &= \min\left(1,  -\frac{\langle \nabla f_k, \q_k\rangle }{\langle \q_k,\A\q_k\rangle}\right) &\text{(\emph{Semi}-Optimal Feasible Step Size)} \\
     \x_{k+1} &= \x_k + \eta_k^* \q_k &\text{(Next Iterate)} 
 \end{align*}
 More testing and analytic compution is require to demonstrate whether the additional mat-vecs per iteration are necessary. 
 
-In the literature it has been shown for quasi-newton methods (without limited memory) that $\alpha^* \rightarrow 1$. As we are in the limited memory regime it is less clear as wether this will be the case. 
+In the literature it has been shown for quasi-Newton methods (without limited memory) that $\alpha^* \rightarrow 1$. As we are in the limited memory regime it is less clear as wether this will be the case. 
 
 \section{Hessian Approximation}
 
 At each iteration the distance between the two most recent iterates and gradients are specified as 
 \[\s = \x_k - \x_{k-1} \;\mathrm{ and } \;\y = \nabla f_k - \nabla f_{k-1} \;\mathrm{respectively.}\]
-The goal is at each iteration is improve the approximation to the inverse hessian $\H \approx \nabla^2 f_k ^{-1}$ that satisfies the secant condition $\H \y = \s$.
+The goal is at each iteration is improve the approximation to the inverse Hessian $\H \approx \nabla^2 f_k ^{-1}$ that satisfies the secant condition $\H \y = \s$.
 
-In the unconstrained case, we only need to apply the matrix vector product $\H_k \cdot$. There are different approaches, but in the limited memory case it is standard to save the vectors $\{\s_j, \y_j\}_{j=k-r}^{k}$. This allows for a relatively fast matrix vector product computation of $O(N r)$, but for the proximal operator we need to represent the hessian approximation as a diagonal plus a rank $r$ update $\B = \B_0^{-1} - \V\V^T$. If we choose to use the SR1 update we have that 
+In the unconstrained case, we only need to apply the matrix vector product $\H_k \cdot$. There are different approaches, but in the limited memory case it is standard to save the vectors $\{\s_j, \y_j\}_{j=k-r}^{k}$. This allows for a relatively fast matrix vector product computation of $O(N r)$, but for the proximal operator we need to represent the Hessian approximation as a diagonal plus a rank $r$ update $\B = \B_0^{-1} - \V\V^T$. If we choose to use the SR1 update we have that 
 \begin{align*}
     \mathbf{S} &= [\s_{k-r} \; \cdots\;\s_k],\;
     \mathbf{Y} = [\y_{k-r}\;\cdots \;\y_k]\\
@@ -133,23 +138,25 @@ In the unconstrained case, we only need to apply the matrix vector product $\H_k
 
 \subsection{SR1}
 The symmetric rank 1 (SR1) update is 
-\[\tau_{BB2} = \frac{\langle\s,  \y\rangle}{\|\y\|^2} > 0, \; \D = \tau_{BB2} I,\]
-\[\u = \frac{\s - \D \y}{ \sqrt{\langle 
-    \s - \D \y, \y\rangle}},\;\H = \D + \u \u^T.\; \]
+\[\gamma \in (0,1], \; \tau_{BB_2} = \frac{\langle\s, \y\rangle}{\|\y\|^2} > 0, \; h_0 = \gamma \tau_{BB_2},\; \Hnaut = h_0 I, \]
+\[\u = \frac{\s - \Hnaut \y}{ \sqrt{\langle 
+    \s - \Hnaut \y, \y\rangle}},\;\H = \Hnaut + \u \u^T.\; \]
 
 Nocedal and Wright (page 145) specify that SR1 is compelling for the following reasons
 \begin{itemize}
     \item There are simple fast ways to check for numerical break downs of the method compared to BFGS (which requires damping in the constrained case). 
-    \item Because we are minimizing a quadratic, the hessian of the objective is constant, and the hessian approximations generated by the SR1 are often better than the BFGS approximations.
+    \item Because we are minimizing a quadratic, the Hessian of the objective is constant, and the Hessian approximations generated by the SR1 are often better than the BFGS approximations.
     \item For a constrained problem, imposing the curvature condition  $y_k^T s_k>0$ is often impossible, and thus BFGS updating is not recommended. Indefinite Hessian approximations are desirable insofar as they reflect indefiniteness in the true Hessian.
 \end{itemize}
 \subsection{BFGS}
+$\Hnaut$ is chosen in the same way as for the SR1 update, and thus $\Bnaut$ is specified as well. 
+
 This is a rank-2 update at every step: 
 \[\B_{k+1} = \B_k + \u^{(1)}_k\u^{(1)^T}_k - \u^{(2)}_k\u^{(2)^T}_k\]
-\[\u_k^{(1)} = \frac{\y_k }{ \langle \y_k,\s_k\rangle}, \;\u_k^{(2)} = \frac{\B_k \s_k }{ \langle \s_k, \B_k \s_k \rangle}\]
+\[\u_k^{(1)} = \frac{\y_k }{\sqrt{ \langle \y_k,\s_k\rangle}}, \;\u_k^{(2)} = \frac{\B_k \s_k }{\sqrt{ \langle \s_k, \B_k \s_k \rangle}}\]
 There are some 
 \begin{itemize}
-    \item BFGS guarantees that the hessian approximation stays positive definite
+    \item BFGS guarantees that the Hessian approximation stays positive definite
     \item No need for a trust region subproblem at each iteration
 \end{itemize}
 
@@ -167,10 +174,11 @@ With the inner product induced by the identity matrix, this defines the separabl
     \prox_h(\y) = \argmin_{\x\geq 0} \|\x-\y\|_2^2 = \bigl(\max(x_i,0)\bigr)_{i=1}^n.
 \end{equation}
 \subsection{Special case of a Rank 1 Update}
+\[\H = \Hnaut + \sigma u u^\top ,\sigma \in \{-1,1\}\]
 Letting $\B = \H^{-1}$, we see that via the Sherman-Morrison we have:
-\[\B = \D^{-1} - \frac{ \D^{-1}\u \u^T \D^{-1}}{1 + \u^T \D^{-1} \u} \]
-Letting $\v = \frac{\D^{-1}\u}{\sqrt{1 + \u^T \D^{-1} \u}}$, we can then simplify 
-\[\B = \D^{-1} - \v\v^T\]
+\[\Bnaut = \Hnaut^{-1} = 1 /h_0 I,\; \B = \Bnaut - \sigma \frac{ \Bnaut\u \u^T \Bnaut}{1 + \sigma \u^T \Bnaut \u} \]
+Letting $\w = \frac{\Bnaut\u}{\sqrt{1 + \sigma \u^T \Bnaut \u}}$, we can then simplify 
+\[\B = \Bnaut - \sigma \w\w^T\]
 % We want to solve 
 % \begin{align*} 
 %     \prox^{\B_k}_h(\bar{\x}_k) &= \underset{\x \geq 0}{\argmin}\left(\frac{1}{2}(\bar{\x}_k-\x)^T \bigl(\D_k^{-1} - \v_k \v_k^T \bigr)(\bar{\x}_k-\x)\right) \\
@@ -180,125 +188,276 @@ Letting $\v = \frac{\D^{-1}\u}{\sqrt{1 + \u^T \D^{-1} \u}}$, we can then simplif
 %     \x & \in (\D_k^{-1} -\partial h)^{-1} (\D_k^{-1} - \v_k \v_k^T) \bar{\x}_k + \v_k \alpha(\x)
 % \end{align*}
 % \textcolor{red}{I don't know how that helps me}
-From Theorem 3.8 of Becker and Fadili where $\B = \D^{-1} - \v\v^T$
-$$
-\prox_h^\B(\x)= \D^{1 / 2} \circ \prox_{h \circ \D^{1 / 2}} \circ \D^{-1 / 2}\left(\x + \alpha^{\star} \D \v\right)
-$$
+Specializing to our case, we can take the results of Theorem 3.8 of Becker and Fadili:
+\[\prox_h^\B(\y) = \prox_h(\y + \sigma \alpha^{\star} \Hnaut \w)\]
 where $\alpha^{\star}$ is the unique root of
-$$
-\mathcal{L}(\alpha)=\left\langle \v, \x-\D^{1 / 2} \circ \prox_{h \circ \D^{1 / 2}} \circ \D^{-1 / 2}\left(\x + \alpha \D \v\right)\right\rangle+\alpha.
-$$
-Notice in for $h$ specified in equation \eqref{eq:h}, $h$ is separable, so the following simplifications can be made $h\circ \D^{-1/2} = h$ and $\D^{1/2}\prox_h \D^{-1/2} = \prox_h$.
-So this simplifies to
-$$
-\prox_h^\B(\x)=  \prox_{h} \left(\x + \alpha^{\star} \D \v\right), \mathcal{L}(\alpha)=\left\langle \v, \x - \prox_{h} \left(\x +\alpha \D \v\right)\right\rangle+\alpha.
-$$
-
+\[\mathcal{L}(\alpha)= \left\langle \w, \y - \prox_h (\y + \sigma \alpha \Hnaut \w)\right\rangle + \alpha.\]
 The theorem guarantees that $\mathcal{L}$ is monotonically increasing, and notice that it is also piecewise linear. The root can be efficiently found by first finding the points $\boldsymbol{\alpha_n}$ where  $\mathcal{L}$ is changes slope. 
-\[\boldsymbol{\alpha_n} = \left(-\frac{x_i}{d_iv_i}\right)_{i=1}^n\]
-This list can then be sorted $\hat{\boldsymbol{\alpha}} = \operatorname{sort}(\boldsymbol{\alpha})$. Thus, computing  the values of $\bigl(\mathcal{L}(\hat{\alpha}_i)\bigr)_{i=1}^n$ facilitates an efficient algorithm to find $\alpha^*$. If all $\mathcal{L}(\hat{\alpha}_n) < 0$, then we know that the root occurs for $\alpha^* > \hat{\alpha}_n$. By a symmetric argument if $\mathcal{L}(\hat{\alpha}_1) > 0$, then $\alpha^* < \hat{\alpha}$. In the non-trivial case where $\mathcal{L}(\hat{\alpha}_i) < 0 < \mathcal{L}(\hat{\alpha}_{i+1})$ then the root will occur in the specified interval $\alpha^* \in[\hat{\alpha}_i,\hat{\alpha}_{i+1}]$. Notice that the proximal operator for $h$ will threshold the same indices of $\mathbf{\lambda} =: \x + \alpha \D \v$ for all values of $\alpha\in [\hat{\alpha}_i,\hat{\alpha}_{i+1}]$. All values that are positive values $\lambda(\hat{\alpha}_i)_j > 0$ are guaranteed to stay positive, also we can identify values of $\lambda(\hat{\alpha}_i)_j = 0$ that will increase over the interval with respect to $\alpha$ $(\D \v )_i \geq0 $. Next, using $\hat{\alpha}_i$ identify which indices of $\x + \hat{\alpha}_i \D \v $ are not thresholded to 0. This defines the indexing operator 
+\[\boldsymbol{\alpha_n} = -\sigma \left( \frac{x_i}{h_0 w_i}\right)_{i=1}^n\]
+This list can then be sorted $\hat{\boldsymbol{\alpha}} = \operatorname{sort}(\boldsymbol{\alpha})$. Thus, computing the values of $\bigl(\mathcal{L}(\hat{\alpha}_i)\bigr)_{i=1}^n$ facilitates an efficient algorithm to find $\alpha^*$. If all $\mathcal{L}(\hat{\alpha}_n) < 0$, then we know that the root occurs for $\alpha^* > \hat{\alpha}_n$. By a symmetric argument if $\mathcal{L}(\hat{\alpha}_1) > 0$, then $\alpha^* < \hat{\alpha}$. In the non-trivial case where $\mathcal{L}(\hat{\alpha}_i) < 0 < \mathcal{L}(\hat{\alpha}_{i+1})$ then the root will occur in the specified interval $\alpha^* \in (\hat{\alpha}_i,\hat{\alpha}_{i+1})$. Notice that the proximal operator for $h$ will threshold the same indices of $\boldsymbol{\lambda} =: \y + \sigma \alpha \Hnaut \w$ for all values of $\alpha\in (\hat{\alpha}_i,\hat{\alpha}_{i+1})$. All values that are positive values $\lambda(\hat{\alpha}_i)_j > 0$ are guaranteed to stay positive, also we can identify values of $\lambda(\hat{\alpha}_i)_j = 0$ that will increase over the interval with respect to $\alpha$ $(\Hnaut \w )_i \geq 0$. Next, using $\hat{\alpha}_i$ identify which indices are thresholded to 0. This defines the indexing operator 
 \[\bigl(\mathcal{P}_i(\mathbf{z})\bigr)_j = \begin{cases}
-    z_j, &(\x + \hat{\alpha}_i \D \v)_j > 0 \;\mathrm{or}\\ &(\x + \hat{\alpha}_i \D \v)_j = 0 \; \mathrm{and}\; (\D \v)_j > 0  \\
+    z_j, & (\boldsymbol{\lambda}(\alpha_i))_j > 0 \;\mathrm{or}\\ & \bigl((\boldsymbol{\lambda}(\alpha_i))_j = 0 \; \mathrm{and}\; \sigma (\Hnaut \w)_j > 0\bigr)  \\
     0, & \text{otherwise}
 \end{cases}  \]
 This allows us to investigate $\mathcal{L}$ on each interval: 
 \[ \mathcal{L}(\alpha) = \begin{cases}
-    \langle \v, \x\rangle + \alpha, & \alpha < \hat{\alpha}_1\\
-    \langle \v, \x\rangle - \langle \mathcal{P}_i(\v), \mathcal{P}_i(\x + \alpha \D \v) \rangle + \alpha, & \alpha \in [\hat{\alpha}_i,\hat{\alpha}_{i+1}]\\
-    \alpha (1 - \langle \v, D \v \rangle ), & \hat{\alpha}_n < \alpha\\
+    \langle \w, \y\rangle + \alpha, & \alpha < \hat{\alpha}_1\\
+    \langle \w, \y\rangle - \langle \mathcal{P}_i(\w), \mathcal{P}_i(\y - \sigma \alpha \Hnaut \w) \rangle + \alpha, & \alpha \in [\hat{\alpha}_i,\hat{\alpha}_{i+1}]\\
+    \alpha (1 - \langle \w, \Hnaut \w \rangle ), & \hat{\alpha}_n < \alpha\\
 \end{cases}\]
 We can obtain the optimal value $\alpha^*$ by solving for the root of the linear equation on specified interval $i$ 
-\[ \alpha(i) = \begin{cases}
-    -\langle \v, \x\rangle, & \mathcal{L}(\hat{\alpha}_n)< 0 \\
-    \frac{\langle \v, \x\rangle - \langle \mathcal{P}_i(\v), \mathcal{P}_i(\x)\rangle }{\langle \mathcal{P}_i(\v), \mathcal{P}_i( \alpha \D \v) \rangle -1}, & \mathcal{L}(\hat{\alpha}_i) < 0 < \mathcal{L}(\hat{\alpha}_{i+1})\\
+\[ \alpha^* = \begin{cases}
+    -\langle \w, \y\rangle, & \mathcal{L}(\hat{\alpha}_n)< 0 \\
+    \frac{\langle \w, \y\rangle - \langle \mathcal{P}_i(\w), \mathcal{P}_i(\y)\rangle }{\sigma\langle \mathcal{P}_i(\w), \mathcal{P}_i(  \Hnaut \w) \rangle -1}, & \mathcal{L}(\hat{\alpha}_i) < 0 < \mathcal{L}(\hat{\alpha}_{i+1})\\
     0, & 0 < \mathcal{L}(\hat{\alpha}_1) \\
 \end{cases}\]
+
+Thus 
+\[\x^* = \prox_h(\y - \sigma \alpha^* \Hnaut \w)\]
 \subsection{Rank-$r$ Proximal Quasi-Newton}
 There are two complications when implementing the rank-$r$ case. First, because the previous iterates information is no longer being thrown away, storing and using the previous iterates is important. Second, applying the proximal operator now requires solving a smaller (dimension $r$) constrained quadratic program.
 
-% In this case we are collecting vectors $\{\u_k\}_{k=1}^{r}$ such that $\H = \D + \sum_{k=1}^r \u_k \u_k^\top$. Notkce that we can use the Sherman-Morrkson formula to bukld up a symmetrkc collectkon of $\{\v_k\}_{k=1}^r$. 
+% In this case we are collecting vectors $\{\u_k\}_{k=1}^{r}$ such that $\H = \Hnaut + \sum_{k=1}^r \u_k \u_k^\top$. Notkce that we can use the Sherman-Morrkson formula to bukld up a symmetrkc collectkon of $\{\v_k\}_{k=1}^r$. 
 % \[v_k = \begin{cases}
-%     \frac{\D^{-1}\u_k}{\sqrt{1 + \u_k^T \D^{-1} \u_k}}, & k = 1 \\
-%     \frac{\left(\D^{-1} - \sum_{j=1}^{k-1}\v_j\v_j^T\right)\u_k}{\sqrt{1 + \u_k^T \left(\D^{-1} - \sum_{j=1}^{k-1}\v_j\v_j^T\right) \u_k}}, & 1< k \leq r \\
+%     \frac{\Hnaut^{-1}\u_k}{\sqrt{1 + \u_k^T \Hnaut^{-1} \u_k}}, & k = 1 \\
+%     \frac{\left(\Hnaut^{-1} - \sum_{j=1}^{k-1}\v_j\v_j^T\right)\u_k}{\sqrt{1 + \u_k^T \left(\Hnaut^{-1} - \sum_{j=1}^{k-1}\v_j\v_j^T\right) \u_k}}, & 1< k \leq r \\
 %     ,& r < k 
 % \end{cases}\]
 % We can simplifiy this slightly by defining $\w_k  = [\langle \v_1, \u_k \rangle,\cdots,  \v_{k-1}, \u_k]$ and $\V = [ \v_1 \cdots \v_k]$.
 % \[v_k = \begin{cases}
-%     \frac{\D^{-1}\u_k}{\sqrt{1 + \u_k^T \D^{-1} \u_k}}, & k = 1 \\
-%     \frac{\D^{-1}\u_k - \V(:,1:k-1) \w_k}{\sqrt{1 + \langle \u_k^T \D^{-1}\u_k\rangle - \langle \w_k,\w_k\rangle}}, & k >1 
+%     \frac{\Hnaut^{-1}\u_k}{\sqrt{1 + \u_k^T \Hnaut^{-1} \u_k}}, & k = 1 \\
+%     \frac{\Hnaut^{-1}\u_k - \V(:,1:k-1) \w_k}{\sqrt{1 + \langle \u_k^T \Hnaut^{-1}\u_k\rangle - \langle \w_k,\w_k\rangle}}, & k >1 
 % \end{cases}\]
 
-% \textbf{Unfortunatly,} from iteration to iteration, we have that all the $\v_k$'s will change from $\D$ changing every iteration as $\tau_{BB2}$ is dependent on the current iterate. Furthermore, once the the buffer has been filled the oldest $\u_1$ is thrown away and the indices are shifted: $\u_2, \cdots, \u_r \rightarrow \u_1, \cdots, \u_{r-1}$ to make space for the incoming $\u \rightarrow \u_r$.  
+% \textbf{Unfortunatly,} from iteration to iteration, we have that all the $\v_k$'s will change from $\Hnaut$ changing every iteration as $\tau_{BB2}$ is dependent on the current iterate. Furthermore, once the the buffer has been filled the oldest $\u_1$ is thrown away and the indices are shifted: $\u_2, \cdots, \u_r \rightarrow \u_1, \cdots, \u_{r-1}$ to make space for the incoming $\u \rightarrow \u_r$.  
 
 % \paragraph{Applying the Proximal Operator}
 In the rank-$r$ case we want to solve 
 \[\x_{k+1} = \argmin_{\x \geq 0 } \left\langle \x-\y, \tfrac{1}{2}\B(\x-\y)\right\rangle \]
-As it is written we have a $n$ dimensional problem, we should be able to write it as an $r$ dimensional problem via the dual leveraging that $\B = \D +\U \Sigma \U^T$ where $\D$ is a diagonal matrix, $\U \in \mathbb{R}^{n\times r}$ and $\Sigma = \operatorname{diag}{[\sigma_1, \cdots, \sigma_r]}, \sigma_i \in \{-1,1\}$. We derive this here
-\begin{align*}
-    &\underset{x\geq0}{\argmin} \tfrac{1}{2}(x-y)^T(D+U \Sigma U^T)(x-y)\\
-    &\underset{x\geq0}{\argmin} \tfrac{1}{2}(x-y)^TD(x-y)+ \tfrac{1}{2}(x-y)^TU\Sigma U^T(x-y)\\
-    &\underset{x\geq0}{\argmin} \tfrac{1}{2}(x-y)^TD(x-y)- \underbrace{x^TU}_{U^Tx =:z \in \mathbb{R}^r}\Sigma U^T y + \tfrac{1}{2}x^TU \Sigma U^Tx + \underbrace{\tfrac{1}{2}y^TU \Sigma U^Ty}_\text{Const wrt $x$}\\
-    &\underset{\substack{x\geq0 \\ z = U^Tx}}{\argmin} \tfrac{1}{2}(x-y)^TD(x-y)- x^T\Sigma U^Ty + \tfrac{1}{2}z^T \Sigma z 
-\end{align*}
-By the strong duality of this convex QP with convex constraints, we can form the Lagrangian with the dual variable $\alpha \in \mathbb{R}^R$, and interchange the order of the optimization:
+Notice that if the constraints are not active, then this problem is trivial.
+\[\mathbf{0} \stackrel{\text{set}}{=}\nabla_{\x} \left\langle \x-\y, \tfrac{1}{2}\B(\x-\y)\right\rangle\]
+\[\mathbf{0} = \B \x - \B\y\]
+% \[ \x = \B^{-1}\B\y\]
+Since $\B \succ 0 $ we have $\x= \y$.
 
-\textcolor{red}{This is a heavy abuse of notation, but I am unsure of how to be formal here. Outlining the approach: we can optimize for an $\alpha^*$ and then plug this in to get an $x^*$. Trivially,  $x^* = \argmin \mathcal{L}(x, \alpha^*)$, but there is an circular dependency because we will be obtaining $\alpha^*$ by using $x(\alpha)$ given from the separable non-negative least square problem...}
+As it is written we have a $n$ dimensional problem, we should be able to write it as an $r$ dimensional problem via the dual leveraging that $\B = \Hnaut +\U  \U^T$ where $\Hnaut$ is a diagonal matrix, $\U \in \mathbb{R}^{n\times r}$. We derive this here
 \begin{align*}
-    \alpha^* = \argmax_{\alpha\in \mathbb{R}^r} &\underset{\substack{x\geq0 \\ z\in \mathbb{R}^r} }{\min} \tfrac{1}{2}(x-y)^TD(x-y) - y^TU\Sigma z + \tfrac{1}{2}z^T \Sigma z + \alpha^T(U^Tx-z)
+    &\underset{x\geq0}{\argmin} \tfrac{1}{2}(x-y)^T(D+U U^T)(x-y)\\
+    &\underset{x\geq0}{\argmin} \tfrac{1}{2}(x-y)^TD(x-y)+ \tfrac{1}{2}(x-y)^TUU^T(x-y)\\
+    &\underset{x\geq0}{\argmin} \tfrac{1}{2}(x-y)^TD(x-y) + \tfrac{1}{2}x^TU  \underbrace{ U^Tx}_{ =:z \in \mathbb{C}^r}- y^TUU^Tx + \underbrace{\tfrac{1}{2}y^TU U^Ty}_\text{Const wrt $x$}\\
+    &\underset{\substack{x\geq0 \\ z = U^Tx}}{\argmin} \tfrac{1}{2}(x-y)^TD(x-y) + \tfrac{1}{2}z^T z - y^T U z 
 \end{align*}
-We can solve for the optimal $z$ as a function of $x$ and $\alpha$. 
-\[z^* = \argmin \tfrac{1}{2}z^T \Sigma z - z^T(\Sigma U^T y +\alpha) =  \underbrace{\Sigma^{-1}}_{=\Sigma} (\Sigma U^T y +\alpha) = U^T y + \Sigma \alpha \]
+% \textcolor{red}{Stephen: the $x$ in the middle term on that last line should be a $z$, right?} \textcolor{blue}{Nic: Good catch, yes.} 
+
+The interior of the non-negative orthant is non-empty thus Slater's condition is satisfied, and this objective function is a strongly convex QP, thus their is strong duality. This motivates forming the Lagrangian with the dual variable $\alpha \in \mathbb{C}^r$, and interchanging the order of the optimization to obtain the corresponding dual problem.
+
+% To simplify expressions, we define $W =: U\Sigma^{\nicefrac{1}{2}} \in \mathbb{C}^{n\times r}$
+
+\textcolor{blue}{Nic: This is a heavy abuse of notation, but I am unsure of how to be formal here. Outlining the approach: we can optimize for an $\alpha^*$ and then plug this in to get an $x^*$. Trivially,  $x^* = \argmin \mathcal{L}(x, \alpha^*)$, but there is an circular dependency because we will be obtaining $\alpha^*$ by using $x(\alpha)$ given from the separable non-negative least square problem...}
+\begin{align*}
+    \alpha^* = \argmax_{\alpha\in \mathbb{C}^r} &\underset{\substack{x\geq0 \\ z\in \mathbb{C}^r} }{\min} \tfrac{1}{2}(x-y)^TD(x-y) + \tfrac{1}{2}z^T  z - y^TW z + \alpha^T(U^Tx-z)
+\end{align*}
+We can solve for the optimal $z$ as a function of \textcolor{blue}{only} $\alpha$.
+\textcolor{red}{Stephen: it's not a function of $x$ (as you can see), which is the reason we did the Lagrangian in the first place. Think of it as \emph{conditioned} on knowing the dual, we've \emph{decoupled} the two primal variables $x$ and $z$.}
+% \textcolor{blue}{Nic: I did not catch that on the first, second or fifth pass through this...}
+\begin{equation}
+    z^* = \argmin \tfrac{1}{2}z^T z - z^T(U y +\alpha) = U y +\alpha 
+\end{equation}
+\textcolor{red}{Stephen: solving the above implicitly used the positive semi-definiteness of the quadratic. If it wasn't psd, then this would only be a stationary point, not necessarily the minimizer.} \textcolor{blue}{Nic: Exactly, in the case where we had the rank-1 update, this was not a concern. I think we need to absorb $\Sigma$ into the dual variable. Basically because we know that $B\succ 0$, we know we should have a well posed QP even in the subproblem for the ancillary variable $z$ and/or the dual problem. The downside of this approach is that we now have complex numbers, specifically both $z$ and $\alpha$ are now in general not real.}
+
 Substituting into the original problem 
-\begin{align*}
-    \argmax_{\alpha\in \mathbb{R}^r}&\underset{x\geq0 }{\min} \tfrac{1}{2}(x-y)^TD(x-y) - \tfrac{1}{2}\alpha \Sigma \alpha + \alpha^TU^T(x-y) - \underbrace{\tfrac{1}{2} y^TU\Sigma U^T y}_\text{Const wrt $\alpha$ and $x$}\\
-    \argmax_{\alpha\in \mathbb{R}^r}&\underset{x\geq0 }{\min} \tfrac{1}{2}x^TDx - x^TD^{\nicefrac{1}{2}}(D^{\nicefrac{1}{2}}y+ D^{-\nicefrac{1}{2}}U\alpha) \underbrace{+\tfrac{1}{2}y^TDy}_{\text{Const wrt $\alpha$ and $x$}} - \tfrac{1}{2}\alpha \Sigma \alpha - \alpha^TU^Ty \\
-    \argmax_{\alpha\in \mathbb{R}^r}&\underset{x\geq0 }{\min} \tfrac{1}{2}x^TDx - x^TD^{\nicefrac{1}{2}}(D^{\nicefrac{1}{2}}y+ D^{-\nicefrac{1}{2}}U\alpha) - \tfrac{1}{2}\alpha \Sigma \alpha - \alpha^TU^Ty 
-    \shortintertext{Completing the square}
-    \argmax_{\alpha\in \mathbb{R}^r}&\underset{x\geq0 }{\min} \tfrac{1}{2}\|D^{\nicefrac{1}{2}}x - D^{\nicefrac{1}{2}}y - D^{-\nicefrac{1}{2}}U\alpha\|_2^2  - \tfrac{1}{2}\alpha \Sigma \alpha - \alpha^TU^Ty \\
-\end{align*}
+\[\argmax_{\alpha\in \mathbb{R}^r}\underset{x\geq0 }{\min} \tfrac{1}{2}(x-y)^TD(x-y) - \tfrac{1}{2}\alpha^T\alpha + \alpha^T U^T(x-y) - \underbrace{\tfrac{1}{2} y^T U U^T y}_\text{Const wrt $\alpha$ and $x$}\]
+\[\argmax_{\alpha\in \mathbb{R}^r}\underset{x\geq0 }{\min} \tfrac{1}{2}x^TDx - x^TD^{\nicefrac{1}{2}}(D^{\nicefrac{1}{2}}y- D^{-\nicefrac{1}{2}}U \alpha) \underbrace{+\tfrac{1}{2}y^TDy}_{\text{Const wrt $\alpha$ and $x$}} - \tfrac{1}{2}\alpha^T  \alpha - \alpha^T U^Ty \]
+\[\argmax_{\alpha\in \mathbb{R}^r}\underset{x\geq0 }{\min} \tfrac{1}{2}x^TDx - x^TD^{\nicefrac{1}{2}}(D^{\nicefrac{1}{2}}y- D^{-\nicefrac{1}{2}}U \alpha) - \tfrac{1}{2}\alpha^T \alpha - \alpha^T U y \]
+Completing the square
+\[\argmax_{\alpha\in \mathbb{R}^r}\underset{x\geq0 }{\min} \tfrac{1}{2}\|D^{\nicefrac{1}{2}}x - D^{\nicefrac{1}{2}}y + D^{-\nicefrac{1}{2}} U \alpha\|_2^2 -\tfrac{1}{2} \alpha^T U^T D^{-1} U \alpha + y^T U \alpha - \tfrac{1}{2}\alpha^T \alpha - \alpha^T U y \]
+\[\argmax_{\alpha\in \mathbb{R}^r}\underset{x\geq0 }{\min} \tfrac{1}{2}\|D^{\nicefrac{1}{2}}x - D^{\nicefrac{1}{2}}y + D^{-\nicefrac{1}{2}} U \alpha\|_2^2 -\tfrac{1}{2} \alpha^T (I + U^T D^{-1} U )\alpha  \]
+% \textcolor{red}{Stephen: Feel free to make change of variables, like $\widetilde{x} \gets D^\frac{1}{2}x$, and $\widetilde{c}\gets U^T y$ or whatever, if you think they would simplify things. Often simpler notation is the way to catch bugs}
 Now, we notice that for a specific $\alpha$ we can obtain a closed form solution for $x$.
-\[x(\alpha) = \max\left(0,   D^{\nicefrac{1}{2}}y + D^{-\nicefrac{1}{2}}U\alpha\right)\]
+\[x(\alpha) = \max\left(0, y - D^{-1} U \alpha\right)\]
 
-This would allow us to use a semi-smooth optimization routine to find $\alpha^*$. Then we can plug $\alpha^*$ back into the expression above to obtain $x^*$.
+This would allow us to use a semi-smooth optimization routine to find $\alpha^*$. Then we can plug $\alpha^*$ back into the expression above to obtain $x^*$. Here we multiply the objective function by -1, to get a minimization problem.
+\begin{equation} \label{eq:dual1}
+    \min_{\alpha\in \mathbb{R}^r} \underbrace{-\tfrac{1}{2}\|D^{\nicefrac{1}{2}}x(\alpha) - D^{\nicefrac{1}{2}}y + D^{-\nicefrac{1}{2}}U\alpha\|_2^2  + \tfrac{1}{2} \alpha^T (I + U^T D^{-1} U )\alpha }_{g(\alpha)} \\
+\end{equation}
+
+\newcommand{\Dsqrt}{D^{\nicefrac{1}{2}}}  % sqrt of D
+\newcommand{\Disqrt}{D^{-\nicefrac{1}{2}}}% inverse sqrt of D
+
+\paragraph{Idiot Check}
+
+\color{red} Stephen: for the moment, let's pretend we don't have the nonnegativity constraint, so 
+$x(\alpha) =   y - D^{-1}U \alpha$,
+then let's see what Eq.~\eqref{eq:dual1} looks like:
+
+\color{blue}Nic: Updated with corrections to algebra:
+
+Reminded the answer should be trivial $x =y$.
+
+When we plug $x(\alpha)$ we now see that many things cancel
 \begin{align*}
-    \min_{\alpha\in \mathbb{R}^r} \underbrace{-\tfrac{1}{2}\|D^{\nicefrac{1}{2}}x(\alpha) - D^{\nicefrac{1}{2}}y - D^{-\nicefrac{1}{2}}U\alpha\|_2^2  + \tfrac{1}{2}\alpha \Sigma \alpha + \alpha^TU^Ty}_{g(\alpha)} \\
+g(\alpha) &= 
+-\tfrac{1}{2}\|\Dsqrt(\underbrace{ y - D^{-1} U \alpha}_{x(\alpha)}) - D^{\nicefrac{1}{2}}y + D^{-\nicefrac{1}{2}}U \alpha\|_2^2  +\tfrac{1}{2} \alpha^T (I + U^T D^{-1} U )\alpha  \\
+%
+&= 
+\underbrace{-\tfrac{1}{2}\| (\Dsqrt - \Dsqrt )y + (\Disqrt U - \Disqrt U)\alpha 
+\|_2^2}_0  +\tfrac{1}{2} \alpha^T (I + U^T D^{-1} U )\alpha 
 \end{align*}
-Notice that we can compute the gradient of this almost everywhere (and the subgradient everywhere).
-\[\nabla_{\alpha} g(\alpha) =  \Sigma \alpha + U^T y - (\nabla_{\alpha}x(\alpha) - U^T D^{-\nicefrac{1}{2}})(x(\alpha) - D^{\nicefrac{1}{2}}y - D^{-\nicefrac{1}{2}}U\alpha)\]
-\[\nabla_{\alpha}x(\alpha) = \Lambda(x(\alpha)) U^TD^{-\nicefrac{1}{2}}, \Lambda(x(\alpha))_{ii} = \begin{cases}
-    1,& x(\alpha) \neq 0\\
-    0, &\text{otherwise}
-\end{cases}\]
-The notation on the jacobian $\nabla_\alpha x(\alpha)$ may be poor... Basically, it is diagonal with a element zero if $i^\text{th}$ elemenet of $x(\alpha)$ is zero otherwise it is what you think it is...
+
+Now to obtain the optimal dual variable $\alpha^*$
+\[ 0 \stackrel{set}{=} \nabla_\alpha g = (I + U^T D^{-1} U )\alpha  \Rightarrow \alpha^* =0 \]
+% \color{purple} 
+% From Stephen's paper we should have 
+% \[\nabla_\alpha g = \alpha + U^T  (y - x(\alpha)) =  \alpha + U^T  (y - y + D^{-1} U \alpha) \Rightarrow \alpha = 0\]
+% \color{blue}
+% \[  \alpha^* = - U y\]
+Now when we look at the $\argmin$ for $x$, we obtain: 
+\[x(\alpha^*)  = y + D^{-1}U 0 = y \]
+
+\color{red}
+Stephen: 
+As for convexity, after simplifying above, we should get that $g$ is a quadratic function and the Hessian is negative definite (since we're maximizing), which should rely on our assumption that $D + U \Sigma U^T \succeq 0$
+
+\color{blue}
+Nic: I multiplied through by -1 so we should have a PD matrix in the QP for $\alpha$.
+% This looks a little odd. Maybe a good idea is to simplify this and see what you get, and compare to what you would get if you had removed the non-negativity constraints at the very beginning. If they don't match, then we probably have a bug in our derivation.
+
+\color{black}
+
+\paragraph{Gradient Computation}
+Notice that we can compute the gradient of this almost everywhere (and the subgradient everywhere). 
+\begin{align*}
+    \nabla_{\alpha} g &= (I + U^T D^{-1} U )\alpha  - (J^T + U^T D^{-\nicefrac{1}{2}})(D^{\nicefrac{1}{2}}x(\alpha) - D^{\nicefrac{1}{2}}y + D^{-\nicefrac{1}{2}}U \alpha)\\
+    &= \alpha + U^T(y-x(\alpha)) - \underbrace{J^T \Dsqrt (x(\alpha) - y + D^{-1} U \alpha )}_{(I)}\\
+    \shortintertext{where}
+    J &= \nabla_{\alpha}x(\alpha) = -D^{-1}U^T\Lambda\hspace{.6cm}\text{and} \hspace{.6cm}\Lambda_{ii} = \begin{cases}
+        1,& x(\alpha) \neq 0\\
+        0, &\text{otherwise}
+    \end{cases}.
+\end{align*}
+In reference to $(I)$, notice that at the indices corresponding to $x(\alpha)_i > 0$, then $(x(\alpha) - y + D^{-1} U \alpha )_i =0$, and at the indices where $x(\alpha)_i = 0$ then $\Lambda_{ii} = 0$ thus $(I) = 0$.
+
+% The notation on the Jacobian $\nabla_\alpha x(\alpha)$ may be poor... Basically, it is diagonal with a element zero if $i^\text{th}$ element of $x(\alpha)$ is zero otherwise it is what you think it is...
+
+% \color{purple}
+% Stephen's notes specify Prop 12.30 from Bauschke and Cambetts. If I am reading it properly then we only are looking for the partial derivative wrt to $\alpha$, and do not need to plum all this nonsense through about the Jacobian of $x(\alpha$)
+
+% Taking the result from Stephen's paper we should have 
+\[\nabla_\alpha g = \alpha +  U^T(y - x(\alpha))\]
+If we want to apply gradient only methods, it could be nice to know the hessian, because if the $\Lambda$ stays constant over the step, then we are optimizing a QP. As mentioned earlier then the exactly optimal step length is given by $\frac{\langle\nabla g, p\rangle}{\langle p, \nabla^2 g p\rangle}$.
+\[\nabla^2 g = I + U^T \Lambda D^{-1}U\]
+
+\subsection{Positive and negative contribution}
+We can handle the case where there are 2 rank-$r$ updates. One that is additive and the other subtracted. This is a direct application of Corollary 3.6 of Becker's paper.
+
+\color{blue}
+I had to fix some sign errors of that corollary to get this to converge... 
+\color{black}
+\[B = \underbrace{D + UU^\top}_{=: B_1} - VV^\top\]
+This apparently leads to the following gradients of $g$ where $\alpha_1$ are the dual variables corresponding to $U$ and $\alpha_2$ are the dual variables corresponding to $V$:
+\newcommand{\Lambdat}{\tilde{\Lambda}}
+\newcommand{\Ht}{\tilde{H}}
+\newcommand{\Dt}{\tilde{D}}
+\newcommand{\Ut}{\tilde{U}}
+\begin{align*}
+    & \alpha = \begin{bmatrix}
+        \alpha_1 \\ \alpha_2
+    \end{bmatrix}\\
+     &x(\alpha) = \operatorname{max}\left(0,y+ \begin{bmatrix} 
+        - D^{-1} U & B_1^{-1} V 
+    \end{bmatrix} \alpha\right) = \Lambda (y + \begin{bmatrix} 
+        - D^{-1} U & B_1^{-1} V 
+    \end{bmatrix} \alpha)  \\
+    &g(\alpha) = -\frac{1}{2}\left\|\begin{bmatrix}
+       D^{\nicefrac{1}{2}}& 0 \\
+       0 & B_1^{\nicefrac{1}{2}}
+    \end{bmatrix} \left(\begin{bmatrix}
+       x(\alpha) \\
+       x(\alpha)
+    \end{bmatrix} - \begin{bmatrix}
+        y\\
+        y
+    \end{bmatrix} - \begin{bmatrix}
+        0 & B_1^{-\nicefrac{1}{2}} V\\
+        0 & 0
+    \end{bmatrix} \alpha\right) + \begin{bmatrix}
+       D^{-\nicefrac{1}{2}}U& 0 \\
+       0 & B_1^{-\nicefrac{1}{2}}V
+    \end{bmatrix} \alpha \right\|_2^2\\
+    &\hspace{1.05cm} + \frac{1}{2} \alpha^\top \left(I_{r_1+r_2} + \begin{bmatrix}
+        U^TD^{-1}U & 0 \\
+        0 & V^TB_1^{-1}V
+    \end{bmatrix} \right)\alpha
+\end{align*}
+\begin{align*}
+    & \nabla g\left(\alpha\right) = \begin{bmatrix} 
+        U^T&0\\ 0&V^T 
+    \end{bmatrix} \begin{bmatrix} 
+       y+B_1^{-1} V \alpha_2-x(\alpha)\\
+       y - x(\alpha) 
+    \end{bmatrix} + \alpha\\
+    &\hspace{1.1cm} = \underbrace{\begin{bmatrix} 
+        U^T&0\\ 0&V^T 
+    \end{bmatrix}}_{r \times 2n} \left(\underbrace{\begin{bmatrix} 0& B_1^{-1}V \\
+        0 & 0 \\
+    \end{bmatrix}}_{2n\times r}\alpha + \underbrace{\begin{bmatrix} I_{n} \\
+        I_{n} \\
+    \end{bmatrix}}_{2n\times n} \left(y - \Lambda (y + \underbrace{\begin{bmatrix} 
+        - D^{-1} U & B_1^{-1} V 
+    \end{bmatrix}}_{n \times r} \alpha) \right)\right)+ \alpha\\
+\end{align*}
+\begin{align*}
+    &\nabla^2 g(\alpha)= \begin{bmatrix} 
+        U^T&0\\ 0&V^T 
+    \end{bmatrix} \left(\begin{bmatrix} 0& B_1^{-1}V \\
+        0 & 0 \\
+    \end{bmatrix} + \begin{bmatrix} I_{n} \\
+        I_{n} \\
+    \end{bmatrix} \left( \Lambda \begin{bmatrix} 
+         D^{-1} U & -B_1^{-1} V 
+    \end{bmatrix}  \right)\right)+ I_{r} \\
+    &\hspace{1.15cm} = \begin{bmatrix} 
+        U^T\Lambda  D^{-1} U & U^T (I - \Lambda) B_1^{-1} V\\
+        V^T \Lambda  D^{-1} U & -V^T\Lambda B_1^{-1} V
+    \end{bmatrix} + I_r
+\end{align*}
+
+Now optimize:
+\begin{align*}
+     \alpha^* = \argmin g(\alpha)
+\end{align*}
+
+\color{blue}
+
+Concerned about the hessian being PD: $0 \succeq -V^T\Lambda B_1^{-1}V $ 
+
+symmetric part
+$\frac{1}{2}(J +J^T) \succ 0 \iff J \succ 0 $
 
 
-% Let $y = D^{\nicefrac{1}{2}}, W = D^{-\nicefrac{1}{2}} U$
-% \begin{align*}
-%     &\min_{\substack{y\geq0\\\alpha = U^Ty}} (x-y)^TD(x-y)- 2x^TU\alpha + \alpha^T\alpha 
-% \end{align*}
-% Form the Lagrangian with only respect to $\alpha$
-% $$\mathcal{L}(y, \alpha, \nu) = (x-y)^TD(x-y) + \chi_{\{\cdot\geq0\}}(y) - 2x^TU\alpha + \alpha^T\alpha + \nu^T(U^Ty - \alpha)$$
-% The primal problem is $\min_{y\geq0,\alpha} \max_\nu \mathcal{L}(y, \alpha, \nu)$, so the dual problem is $\max_\nu \min_{y\geq0,\alpha} \mathcal{L}(y, \alpha, \nu)$.
-% \begin{align*}
-%     \min_{y\geq0} (x-y)^TD(x-y) &+ \max_\nu \Bigl(\nu^TU^Ty + \min_{\alpha} \bigl(\underbrace{\alpha^T\alpha -\alpha^T(\nu+ 2U^Tx)}_{g(\alpha)}\bigr) \Bigr)\\
-%     \nabla_\alpha g \stackrel{\text{set}}{=} 0 &= 2\alpha - (\nu + 2U^Tx)\\
-%     \alpha^* &= \frac{1}{2} \nu + U^Tx
-% \end{align*}
-% Plugging $\alpha^*$ back into the dual problem yields: 
-% \begin{align*}
-%     &\min_{y\geq0} (x-y)^TD(x-y) +\max_\nu 2\nu^TU^Ty + g(\alpha^*) \\
-%     &\min_{y\geq0} (x-y)^TD(x-y) +\max_\nu 2\nu^TU^Ty +\Bigl[ (\tfrac{1}{2}\nu +U^Tx)^T (\tfrac{1}{2}\nu +U^Tx) -(\tfrac{1}{2}\nu +U^Tx)^T(\nu +2U^Tx)\Bigr] \\
-%     &\min_{y\geq0} (x-y)^TD(x-y) +\max_\nu 2\nu^T U^Ty - \nu^TU^Tx - \tfrac{1}{4}\nu^T\nu \\
-%     &\max_\nu \min_{y\geq0} x^TDx -2x^TDy +y^TDy + 2\nu^T U^Ty - \nu^TU^Tx -\tfrac{1}{4}\nu^T\nu  \\
-%     &\max_\nu \min_{y\geq0} 2(D^{-1}U\nu-x)^TDy +y^TDy + (D^{-\nicefrac{1}{2}}U\nu-x)^TD(D^{-\nicefrac{1}{2}}U\nu-x) \\
-%     &\hspace{1.5cm} +x^TDx - (D^{-\nicefrac{1}{2}}U\nu-x)^TD(D^{-\nicefrac{1}{2}}U\nu-x)- \nu^TU^Tx -\tfrac{1}{4}\nu^T\nu  \\
-%     &\max_\nu \min_{y\geq0} (x-y+D^{-\nicefrac{1}{2}} U\nu )^TD(x-y+D^{-\nicefrac{1}{2}} U\nu ) \\
-%     &\hspace{1.5cm} +x^TDx -(x^TDx -2x^TDD^{-\nicefrac{1}{2}}U\nu + \nu^T U^T D^{-\nicefrac{1}{2}} D D^{-\nicefrac{1}{2}} U \nu)  - \nu^TU^Tx -\tfrac{1}{4}\nu^T\nu \\
-%     &\max_\nu \;(\prox^{D}_{y\geq0} x+D^{-\nicefrac{1}{2}} U\nu ) +\nu^T \underbrace{U^T U}_{I ?} \nu - 2x^T U D^{\nicefrac{1}{2}}\nu - xU\nu - \tfrac{1}{4}\nu^T\nu 
-% \end{align*}
-% Are the columns of $U$ assumed to be orthonormal?
-%     \[\max_\nu \;(\prox^{D}_{y\geq0} x+D^{-\nicefrac{1}{2}} U\nu )+ - (2x^T U D^{\nicefrac{1}{2}} + x^T)\nu + \frac{3}{4}\nu^T\nu \]
+\color{black}
 
+
+\subsection*{Preliminary Results}
+The initial experiment was to save out the 499 LCP's created from running `RBS\_Janus\_test.m' with a 2x2x2 latice. All solvers were given the tolerance of 1E-7 for absolute error on the KKT condition and 1E-4 of relative error of the KKT condition. See figure \ref{fig:easy-comp}
+
+\begin{figure}[ht]
+    \includegraphics[width=0.8\textwidth]{bimetallic_2x2x2.pdf}
+    \caption{}
+    \label{fig:easy-comp}
+\end{figure}
+\begin{figure}[ht]
+    \includegraphics[width=0.8\textwidth]{bimetallic_3x3x3.pdf}
+    \caption{}
+    \label{fig:med-comp}
+\end{figure}
+\begin{figure}[ht]
+    \includegraphics[width=0.8\textwidth]{amphi_4x4x4.pdf}
+    \caption{}
+    \label{fig:hard-comp}
+\end{figure}
+
+The most competitive on iteration count are the 
 \subsection*{Outstanding Questions}
 \begin{itemize}
     \item Stephen's code has several breaking conditions with a stagnation clause. Where the other solvers for the LCP are only looking at if the KKT/LCP conditions are satisfied to a tolerance of 1e-4. Surprisingly, this is more strict than stephens procedure, what should we do? 
@@ -311,11 +470,16 @@ The notation on the jacobian $\nabla_\alpha x(\alpha)$ may be poor... Basically,
 
     \item How best to solve the rank-$r$ prox problem: 
     
-    \textbf{Ideas}: 
-    \begin{itemize}
-        \item Nest CVX calls to start
-        \item Projected gradient descent
-    \end{itemize}
+    \textbf{Answer}: Custom semi-smooth newton with optional projected gradient descent initial iterations has been implemented. This is no longer a computational bottleneck.
+    
+    \item Do we need to damp our implementation of L-BFGS when curvature condtion is failing
+    
+    \textbf{Answer}: Perhaps not, currently just skipping these iterations is sufficient 
+    \item Can we use an SR1 update and check for the smallest eigen value via a power iteration. Mat vec with $H_k = \mathcal{O}(nr)$ where $r$ is the rank of the limited memory. 
+
+    \item Above we have a simple derivation of $B = D + UU^T$ but other case $B = D - VV^T$ does not follow trivially. Apparently this is covered by some `dark magic' of the Toland duality... but this is not obvious. 
+    
+    \item Concern over the PD of the hessian for the coupled prox problem .
 \end{itemize}
 
 \end{document}

@@ -140,8 +140,13 @@ end
 MRot = @(wh,t) RotationMat(wh,t);
 
 Xt{1}=Xrp; Ct{1}=Fparams.parbd.C;
-
+Fparams.saveLCPs = true; % TODO: change this to false
 for i=1:Nt
+    if i == Nt 
+        Fparams.endFlag = true; 
+    else 
+        Fparams.endFlag = false; 
+    end
 dt=dt0; 
 
 if strcmp(timedisc,'euler')
@@ -853,12 +858,19 @@ den = 10000*(den==0)+den;
 
 end
 
-function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt, saveLCPs)
+function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
 persistent A_list b_list save_iter
 
-if ~exist('saveLCPs', 'var') || isempty(saveLCPs)
-    saveLCPs = true; % TODO: change this to false
+if ~isfield(Fparams, 'saveLCPs') 
+    saveLCPs = false;
+else 
+    saveLCPs = Fparams.saveLCPs;
+end
+if ~isfield(Fparams, 'endFlag') 
+    endFlag = false; 
+else 
+    endFlag = Fparams.endFlag;
 end
 if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter))
     A_list = {};
@@ -1039,12 +1051,20 @@ else
     end
 end
 if saveLCPs
-   if length(A_list) >= 100
-        save(['./LCPSolvers/test/LCP_data_' num2str(sav_iter) '.mat'], ...
-            'Amat', 'bvec', 'x0')
+    if length(A_list) >= 100 || endFlag
+        mfilePath = mfilename('fullpath');
+        if contains(mfilePath,'LiveEditorEvaluationHelper')
+            mfilePath = matlab.desktop.editor.getActiveFilename;
+        end
+        [mfilePath,~,~] = fileparts(mfilePath);
+        save([mfilePath '/LCPSolvers/test/5x5x5_amphi_data_' num2str(save_iter) '.mat'], ...
+            'A_list', 'b_list')
         A_list = {};
         b_list = {};
         save_iter = save_iter + 1;
+        if endFlag 
+            save_iter = 1;
+        end
     end
     A_list{end+1} = Amat; 
     b_list{end+1} = bvec;

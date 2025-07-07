@@ -29,7 +29,7 @@ fctr = max(tol_rel, tol_abs) / eps();
 opts    = struct(...
     'x0', x0, ...
     'printEvery', Inf, ...
-    'm', 5, ...
+    'm', 20, ...
     'pgtol', tol_abs, ...
     'factr', fctr, ...
     'maxIts', max_iter, ...
@@ -44,12 +44,16 @@ ub = Inf(N,1);
 % info.err is a Kx2 where K is the number of iterations, and the first column
 % is are the objective values (f_1, ..., f_K) and the second column is the 
 % norm(g, inf). Thus the error esimate is:
-fK = info.err(end,1);
-fKm1 = info.err(end-1,1);
-gNorm =  info.err(end,2);
-err = min(abs(fK  - fKm1) / max([fK, fKm1, 1]), gNorm);
+try 
+    fK = info.err(end,1);
+    fKm1 = info.err(end-1,1);
+    gNorm =  info.err(end,2);
+    err = min(abs(fK  - fKm1) / max([fK, fKm1, 1]), gNorm);
+catch 
+    err = info.err(end,2);
+end
 iter = info.totalIterations;
-
+convergence = [];
 if iter == max_iter
     flag = 8;
     msg = 'maxlimit';
@@ -58,8 +62,6 @@ end
 
 flag = 6;
 msg = 'local minima';
-
-convergence = [];
 if profile
     % TODO, technically, we would want this match the above err...
     convergence = min( ...

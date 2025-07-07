@@ -24,7 +24,6 @@ function out = plb_general(fgFcn, x0, options)
 %  INITIALIZATION
 %  ------------------------------------------------------
 out = getout();
-out.iter = 0;
 out.time = 0;
 out.algo = 'PLB_quad';
 out.start_time = clock;
@@ -59,7 +58,7 @@ out.srch = -out.grad;
 
 [out.x, ~] = line_search(out, fgFcn, options);
 [out.obj, out.grad]  = fgFcn(out.x);
-
+out.iter = 1;
 % Stephen adding:
 out.objHist = out.obj;
 

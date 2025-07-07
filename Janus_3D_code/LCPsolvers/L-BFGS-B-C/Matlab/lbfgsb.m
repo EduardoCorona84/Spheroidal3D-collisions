@@ -148,7 +148,7 @@ maxIts  = setOpts( 'maxIts', 100, 1 );
 maxTotalIts     = setOpts( 'maxTotalIts', 5e3 );
 
 % Print out information this often (and set to Inf to suppress)
-printEvery  = setOpts( 'printEvery', 1 );
+printEvery  = setOpts( 'printEvery', Inf );
 
 errFcn      = setOpts( 'errFcn', [] );
 
@@ -180,7 +180,7 @@ if isempty(k), k = 1; end
 if nargin==4
     % reset persistent variables and return information
     if ~isempty(history) && ~isempty(k) 
-        if printEvery > 0
+        if ~isinf(printEvery)
             printFcn(k,history);
         end
         f = history(1:k,:);

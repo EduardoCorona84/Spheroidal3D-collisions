@@ -113,6 +113,8 @@ fid     = setOpts('fid', 1 );      % print output to the screen or a file
 myDisp  = @(str)  fprintf(fid,'%s\n', str );
 tol     = setOpts( 'tol', 1e-6 );  
 grad_tol= setOpts( 'grad_tol', tol );
+tol_rel = setOpts( 'tol_rel', [] );
+tol_abs = setOpts( 'tol_abs', [] );
 nmax    = setOpts( 'nmax', 1000 );  
 errFcn  = setOpts( 'errFcn', [] );
 VERBOSE = setOpts( 'verbose', false );
@@ -127,6 +129,7 @@ damped  = setOpts('damped',false); % 1=no damping, .01 = very tiny step
 % -- Options that concern the stepsize --
 SR1             = setOpts( 'SR1', true );
 BFGS            = setOpts( 'BFGS', false );
+Q               = setOpts('Q', []);
 if SR1 && BFGS
     error('zeroSR1:conflictingArgs','Cannot set SR1 and BFGS to both be true');
 end
@@ -328,8 +331,13 @@ for nit = 1:nmax
         else
             xk      = prox( xk_old + p, diagH, vk ); % proximal step
         end
-        
     end
+
+    % if ~isempty(Q) && norm(xk_old + p -xk ) / norm(xk) > 100*eps()
+    % q = xk - xk_old;
+    % eta = min(-dot(q, gradient)/ dot(q, Q*q),1);
+    % xk = xk_old + eta*q;
+    % end
     % test my proximal operator
     % xk = prox_tmp(xk_old + p, diagH, vk);
     % try
@@ -373,15 +381,17 @@ for nit = 1:nmax
     errStruct.gnorm(nit+1)   = norm_grad;
     errStruct.step(nit)    = t;
     errStruct.xk(:,nit+1)  = xk;
-    if ~isempty(errFcn)
+    % NIC: Adding breaking condition for our kkt conditions
+    if ~isempty(tol_rel) || ~isempty(tol_abs)
         phi = min(xk, gradient);
         errStruct.err(nit) = 0.5 * dot(phi, phi);%errFcn( xk );
         if VERBOSE && (~rem(nit,VERBOSE) || stag>maxStag )
             fprintf(fid,'\b, err %.2e\n', errStruct.err(nit) );
         end
         if nit > 1
-            if (abs(errStruct.err(nit) - errStruct.err(nit-1)) / errStruct.err(nit-1)  < 1e-4...
-                || errStruct.err(nit) < 1e-11  ) 
+            if ~isempty(tol_rel) && abs(errStruct.err(nit) - errStruct.err(nit-1)) / errStruct.err(nit-1)  < tol_rel
+               stag = Inf;
+            elseif ~isempty(tol_abs) && errStruct.err(nit) < tol_abs  
                stag = Inf;
             end
         end

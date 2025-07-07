@@ -2,3 +2,6 @@
 *.mat
 *.asv
 data/*
+Janus_3D_code/LCPsolvers/data/*
+docs/*
+docs_old/*

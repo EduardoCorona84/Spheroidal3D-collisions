@@ -1,10 +1,10 @@
 clear;clc;
-p=4;
+p=2;
 lambda=0.1;
 fname='for_the_love_of_god_local';
 rd=[1];
-n=2;
-Cdst=4;
+n=5;
+Cdst=2.5;
 ep=.3;
 Nt=500;
 dt=.1;

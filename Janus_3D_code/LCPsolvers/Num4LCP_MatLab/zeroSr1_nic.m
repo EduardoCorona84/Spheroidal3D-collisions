@@ -24,30 +24,38 @@ for k = 1:opts.max_iter
         grad_k, errStruct, opts);
     if converged
         x = x_k;
-        iter = k-1;
+        iter = k;
         return
     end
 
-    s_k = x_k - x_km1;
-    y_k = grad_k - grad_km1;
-    [d_k, u_k, opts] = updateHk(k, s_k, y_k, opts);
+    s = x_k - x_km1;
+    y = grad_k - grad_km1;
+    [h0, u, sigma, opts] = updateHk(s, y, opts);
 
     x_km1 = x_k;
     grad_km1 = grad_k;
 
     % quasi-newton step -k * H_k * g_k
-    p = - (d_k .* grad_km1 + u_k * dot(u_k, grad_k));
-    if isfield(opts, 'Q')
-        % For QP, this is the optimal step length (see page 56 of N&W)
-        kappa = -dot(p, grad_k)/ dot(p, opts.Q*p);
-        % c1 = 1e-4;
-        % c2 = 0.9;
-        % [f_test, grad_test] = fcnGrad(x_k + kappa * p);
-        % assert( f_test <= f_k + c1*kappa*dot(grad_k, p), 'Sufficient decrease condition not satisfied');
-        % assert( dot(grad_test, p) >= c2 *dot(grad_k, p), 'Curvature condition not satisfied');
+    p = - h0 * grad_km1;
+    if ~isempty(u)
+        p = p - u * dot(u, grad_k);
     end
-    xbar = x_km1 + kappa*p;
-    x_k = prox_rank1(xbar, d_k, u_k);
+    % if isfield(opts, 'Q')
+    %     % For QP, this is the optimal step length (see page 56 of N&W)
+    %     kappa = -dot(p, grad_k)/ dot(p, opts.Q*p);
+    %     % c1 = 1e-4;
+    %     % c2 = 0.9;
+    %     % [f_test, grad_test] = fcnGrad(x_k + kappa * p);
+    %     % assert( f_test <= f_k + c1*kappa*dot(grad_k, p), 'Sufficient decrease condition not satisfied');
+    %     % assert( dot(grad_test, p) >= c2 *dot(grad_k, p), 'Curvature condition not satisfied');
+    % end
+    y = x_km1 + opts.kappa*p;
+    x_k = prox(y, h0, u, sigma, opts);
+    % if isfield(opts, 'Q') && norm(x_k - y) / norm(y) > 100*eps()
+    % q = x_k - x_km1;
+    % eta = min(-dot(q, grad_k)/ dot(q, opts.Q*q),1);
+    % x_k = x_km1 + eta*q;
+    % end
     [f_k, grad_k] = fcnGrad(x_k);
 end
 
@@ -95,99 +103,59 @@ end
 
 end % defaultOpts
 
-function [d, u, opts] = updateHk(k, s_k, y_k, opts)
+function [h0, u, sigma, opts] = updateHk(s, y, opts)
 
 assert(0 < opts.tau_min, "tau_min must be positive");
 assert(opts.tau_min < opts.tau_max, "tau_max must be larger than tau_min");
 assert(0 < opts.gamma && opts.gamma < 1, "gamma must be in (0,1)");
 
-N = length(s_k);
-
-tau_bb2 = dot(s_k,y_k) / norm(y_k,2)^2;
-tau_bb2 = clip(tau_bb2, opts.tau_min, opts.tau_max);
-if tau_bb2 == opts.tau_min
-    warning('Convexity of cost function is stagnating')
-end
-d = opts.gamma* tau_bb2 * ones(N,1);
-
-% TODO: this is a curvature check
-if dot(s_k - d .* y_k, y_k) <= 1e-8 * norm(y_k,2)^2 * norm(s_k - d .* y_k,2)^2
-    u = zeros(N,1);
+N = length(s);
+denom = norm(y,2)^2;
+if denom < 100*eps()
+    h0 = opts.tau;
 else
-    u = (s_k - d .* y_k) / sqrt(dot(s_k - d .* y_k, y_k));
+    tau_bb2 = dot(s,y) / denom;
+    tau_bb2 = clip(tau_bb2, opts.tau_min, opts.tau_max);
+    if tau_bb2 == opts.tau_min
+        warning('Convexity of cost function is stagnating')
+    end
+    
+    h0 = opts.gamma * tau_bb2;
 end
+% H_k = h0 * I + sigma * u * u'
+delta = s - h0 .* y;
+denom = dot(delta, y);
+sigma = sign(denom);
+if denom <= 1e-8 * norm(y,2)^2 * norm(s - h0 .* y,2)^2 
+    u = [];
+    return 
+end
+
+u = delta / sqrt(sigma*denom);
 
 end % updateHk
 
-function x = prox_rank1(xbar, d, u)
-if isempty(u)
-     x = max(xbar, 0);
-     return 
+function xstar = prox(y, h0, u, sigma, opts)
+% Sherman-Morrison update: H = h0 * I  + sigma * uu^T 
+% -> b0 = 1 / h0 ; B = 1/h0 * I - sigma * (u ./ h0)u ./h0)' / (1 + sigma * u' ./ h0 *u) 
+denom = sqrt(1 + sigma * dot(u / h0, u));
+w = u / h0 / denom; 
+ 
+xstar = prox_rank1(y, h0, w, sigma, opts);
+if ~isempty(u)
+    n = length(y);
+    H = eye(n)*h0 + sigma*u*u';
+    B = eye(n)/h0 - sigma*w*w';
+    assert(norm(H*B - eye(n)) < 1e-6)
 end
-if all(xbar >= 0)
-    x = xbar;
-    return 
-end
-% Sherman-Morrison update: B = 1./d - vv^T
-b = 1 ./ d;
-denom = sqrt(1 + dot(u .* b, u));
-v = b .* u / denom;
-% Double checked this with the thm
-alphas = - xbar ./ (d .* v);
-alphas = sort(alphas);
-N = length(xbar);
-Ls = zeros(N,1);
-for n = 1:N
-    alpha = alphas(n);
-    lambda = xbar + alpha * d .* v;
-    mask = lambda > 0;
-    Ls(n) = alpha + dot(v, xbar) - dot(v(mask), lambda(mask));
-end
-[ix, ~] = find(Ls < 0, 1, 'last');
-if isempty(ix) % This means that all the constraints are active.
-    alphastar = dot(v,xbar);
-else
-    alpha = alphas(ix);
-    lambda = xbar + alpha * d .* v;
-    mask = lambda > 0 | (lambda == 0 & d .* v > 0);
-    alphastar = (dot(v,xbar) - dot(v(mask), xbar(mask))) / (dot(v(mask), d(mask).*v(mask)) - 1 );
-end
-
-% B = diag(1./d)-v*v';
-% cvx_begin
-%     variable z(N)
-%     minimize( dot(xbar-z,B*(xbar-z)) )
-%     subject to 
-%         z >= 0
-% cvx_end
-% 
-% 
-% cvx_begin
-%     variable a(1)
-%     minimize( 1/2*sum_square(a) +  dot(a, v'*xbar))
-%     subject to 
-%         0 <= xbar ./ d + v *a
-% cvx_end 
-% 
-% 
-% % idiot checks
-% lambdastar = xbar + alphastar * d .* v;
-% assert(abs(alphastar + dot(v, xbar) - dot(v(mask), lambdastar(mask))) < 1e-12 )
-% assert(alphas(ix) < alphastar && (ix == length(d) || alphastar < alphas(ix+1)) ) 
-
-x = max(xbar + alphastar*d.*v, 0);
-% x2 = max(xbar + a*d.*v, 0);
-% 
-% f = @(w) dot(xbar-w, (xbar-w)./d) - dot(v,xbar-w)^2;
-% disp(f(x))
-% disp(f(z))
-% disp(f(x2))
-
-end % prox_rank1
-
+end % prox
 
 function [converged, errStruct] = checkConvergence(k, f_k, x_k, ...
     grad_k, errStruct, opts)
+if k >= opts.max_iter 
+    converged = true; 
+    return
+end
 % kkt conditions / LCP being satisified is equivalen to
 % the grad_k(i) = 0 perp  x_k(i) = 0
 phi = min(grad_k,x_k);

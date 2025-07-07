@@ -5,9 +5,9 @@ e_north=2;
 e_south=1;
 
 rd=[1];
-n=2;
-Cdst=2; % TODO nic  change back to 4
-fname='2x2x2_new_charge_distribution_auf_PC';
+n=3; % maybe go up to 3x3x3 then 4x4x4 
+Cdst=3; % TODO nic  change back to 4
+fname='3x3x3_new_charge_distribution_auf_PC';
 ep=.3;
 Nt=500;
 dt=.1;

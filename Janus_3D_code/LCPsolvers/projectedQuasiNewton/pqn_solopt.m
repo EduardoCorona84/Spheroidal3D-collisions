@@ -97,7 +97,7 @@ function options = pqn_solopt(varargin)
 
 options.maxit = 3000;
 options.maxtime = 1000;
-options.maxmem = 7;
+options.maxmem = 7; 
 options.time_limit = 1;
 options.use_tolx = 0;                   
 options.use_tolo = 0;

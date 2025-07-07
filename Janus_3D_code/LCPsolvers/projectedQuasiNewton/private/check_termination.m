@@ -37,7 +37,8 @@ end
 
 % KKT violation
 if (options.use_kkt)
-  if abs(out.x' * out.grad) <= options.tolk
+   phi = min(out.x, out.grad);
+  if 1/2*dot(phi, phi) <= options.tolk
     v = 7;
     return;
   end

@@ -41,15 +41,24 @@ C = [xx(:) yy(:) zz(:)];
 display(C);
 
 % randomize centers and/or radii
-rng('default'); 
+try %#ok<TRYNC>
+    rng('default'); 
+end
 C = C + 0.1*rand(size(C));
 display(C); 
 n3 = size(C,1); 
 rd=rd*ones(n3,1);
 
 % initial particle orientations
-nrt = [zeros(n3/2,2) ones(n3/2,1)];
-init_dir=[nrt;-nrt];
+%% NIC: set the initial direction to be towards the center 
+init_dir= -C;
+for i = 1:n3
+    init_dir(i,:) = init_dir(i,:)/ norm(init_dir(i,:));
+end
+%% This is the old setting
+% nrt = [zeros(n3/2,2) ones(n3/2,1)];
+% init_dir=[nrt;-nrt];
+%% Dont know who did this
 %init_dir=rand(n3,3);
 %init_dir=init_dir./repmat(sqrt(init_dir(:,1).^2+init_dir(:,2).^2+init_dir(:,3).^2),1,3);
 
