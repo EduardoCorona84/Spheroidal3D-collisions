@@ -182,18 +182,12 @@ elseif nargin > 1
             S=cart2spheroidal(Xtk,a(k),oblate(k));
             
             u_x=S(:,1);
-            % %%%%%%%%%%%%%%%%%%%
-            % u_x=u0(k).*ones(size(S,1),1);
-            % %%%%%%%%%%%%%%%%%%%%%
 
             if min(u_x)-1<1e-12 && oblate(k)==0
                 fprintf("\n warning: u_x~1. check spheroid #%d\n ",k);
             end
             
             % % split up interior/surface/exterior
-            % S_int=S(u_x < u0(k),:);
-            % S_surf=S(u_x == u0(k),:);
-            % S_ext=S(u_x > u0(k),:);
             S_int=S(u_x < u0(k)-1e-14,:);
             S_surf=S(abs(u_x-u0(k))<=1e-14,:);
             S_ext=S(u_x > u0(k)+1e-14,:);
@@ -302,19 +296,9 @@ end
 function F=solid_harmonic(p,u0,u_x,oblate)
     F=1;
     if oblate
-        % fprintf("oblate\n");
         u_x = 1j.*u_x;
-    else
-        % fprintf("prolate\n");
     end
     if abs(u_x)-u0 < -1e-14
-        % try
-        %     PQ=legendre_otc(p,u_x);
-        % catch ME
-        %     display(u_x);
-        %     display(min(abs(u_x)));
-        %     rethrow(ME);
-        % end
         PQ=legendre_otc(p,u_x);
         P=PQ{1};
         F=P.';

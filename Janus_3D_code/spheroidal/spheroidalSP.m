@@ -16,7 +16,7 @@ function [SP,varargout]=spheroidalSP(params,X,nu,varargin)
 %    (o) X = (x,y,z) coordinates of target points. Is a cell of length
 %        ns or an nt x 3 x ns matrix.
 %    (o) nu = (nu_x,nu_y,nu_z) coordinates of normals at target points. Is
-%    a cell fo length ns or an nt x 3 x ns matrix.
+%    a cell of length ns or an nt x 3 x ns matrix.
 %    (o) nu_2,... = each input same format as nu, and prompts an additional
 %    entry to the output. If nargin==3, then nargout==1.
 %    
@@ -344,26 +344,22 @@ elseif nargin > 1
             if d~=3
                 error("Dimensions of target point array should be N x 3.")
             end
-        
-            % spectra_regions={spectra_int(:,k),spectra_surf(:,k),spectra_ext(:,k)};
             
             % Convert targets to spheroidal coords
             S=cart2spheroidal(Xtk,a(k),oblate(k));
-
-            % %% test %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % figure;
-            % plot3(Xtk(:,1),Xtk(:,2),Xtk(:,3)); hold on;
-            % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    
             u_x=S(:,1);
+
+            indices_interior = (u_x < u0(k) - 1e-14);
+            indices_surface = (abs(u_x-u0(k)) <= 1e-14);
+            indices_exterior = (u_x > u0(k) + 1e-14);
             
             % split up interior/surface/exterior
-            S_int=S(u_x < u0(k),:);
-            S_surf=S(u_x == u0(k),:);
-            S_ext=S(u_x > u0(k),:);
-            Nu_int=nu_k(u_x<u0(k),:);
-            Nu_surf=nu_k(u_x==u0(k),:);
-            Nu_ext=nu_k(u_x>u0(k),:);
+            S_int=S(indices_interior,:);
+            S_surf=S(indices_surface,:);
+            S_ext=S(indices_exterior,:);
+            Nu_int=nu_k(indices_interior,:);
+            Nu_surf=nu_k(indices_surface,:);
+            Nu_ext=nu_k(indices_exterior,:);
 
             if more_nu
                 Nu_int_extra=cell(1,nvarin);
@@ -467,16 +463,16 @@ elseif nargin > 1
             end
         
             % Recombine all SPs from interior/exterior/surface
-            SPk(u_x < u0(k),:) = SPregions{1};
-            SPk(u_x == u0(k),:) = SPregions{2};
-            SPk(u_x > u0(k),:) = SPregions{3};
+            SPk(indices_interior,:) = SPregions{1};
+            SPk(indices_surface,:) = SPregions{2};
+            SPk(indices_exterior,:) = SPregions{3};
 
             if more_nu
                 for nu_ind=1:nvarin
                     SPk_temp=SP_extra_at_k{nu_ind};
-                    SPk_temp(u_x < u0(k),:) = SPregions_extra{1}{nu_ind};
-                    SPk_temp(u_x == u0(k),:) = SPregions_extra{2}{nu_ind};
-                    SPk_temp(u_x > u0(k),:) = SPregions_extra{3}{nu_ind};
+                    SPk_temp(indices_interior,:) = SPregions_extra{1}{nu_ind};
+                    SPk_temp(indices_surface,:) = SPregions_extra{2}{nu_ind};
+                    SPk_temp(indices_exterior,:) = SPregions_extra{3}{nu_ind};
                     SP_extra_at_k{nu_ind}=SPk_temp;
                     if isReal
                         SP_extra_at_k{nu_ind}=real(SPk_temp);
@@ -537,18 +533,6 @@ function [lambda_nm_prime,lambda_nm,lambda_n1m]=SPspectrum(p,u0,oblate)
     % lambda_ext=anm.*(Po*diag(oblate)+Pp*diag(~oblate)); 
     lambda_nm=anm.*(Po.*Qo*diag(oblate)+Pp.*Qp*diag(~oblate));
     lambda_n1m=anm.*(Po.*Qo*diag(oblate)+Pp.*Qp*diag(~oblate));
-
-    % if oblate
-    %     anm=factorial(nn-mm)./factorial(nn+mm).*(-1).^(mm+1).*(u0.^2+1);
-    %     L=legendre_otc(p,1j.*u0,1,1,1);
-    % else
-    %     anm=factorial(nn-mm)./factorial(nn+mm).*(-1).^mm.*(u0.^2-1);
-    %     L=legendre_otc(p,u0,1,1,1);
-    % end
-    % P=L{1}; Q=L{2}; dP=L{3}; dQ=L{4};
-    % lambda_int=anm.*Q;
-    % lambda_surf=anm./2.*(P.*dQ+dP.*Q);
-    % lambda_ext=anm.*P;   
 end
  
 function [lambda_nm_prime, lambda_nm,lambda_n1m] = SPspectrum_away(p,u0,u_x,v_x,nu,oblate)

@@ -1,4 +1,4 @@
-function LP=spheroidalMatVec(params,potential,X,nu)
+function LP=spheroidalMatVec(params,potential,X,nu_vec)
 %--------------------------------------------------------------------%
 % spheroidalMatVec computes the Laplace Double Layer potential of spheroids with 
 % density 'sigma' evaluated either on the surfaces of all spheroids or at targets X. "far"
@@ -20,6 +20,8 @@ function LP=spheroidalMatVec(params,potential,X,nu)
 %    (o) X = target points at which to evaluate the potential. If not
 %        provided, this function evaluates the potential at points on each
 %        spheroid surface.
+%    (o) nu_vec = the normal vectors associated with EACH target point (note
+%        that this is only used for spheroidalSP and spheroidalDP).
 %    
 % Returns LP of size(sigma) for particle-to-particle evaluation or size [nrows(X),nf].
 % 
@@ -60,7 +62,7 @@ if nargin < 2
     error('Not enough input arguments. Must provide at least a SpheroidalParamters object and a potential.')
 
 %particle-to-particle evaluation.
-elseif nargin == 2
+elseif nargin == 2 % Cannot be used for derivative terms (i.e. SP/DP)
 
     separation = params.separate_spheroids();
     
@@ -143,35 +145,46 @@ elseif nargin == 2
     end
 
 elseif nargin > 2
+    if (strcmp(potential, 'SP') || strcmp(potential, 'DP')) && nargin < 4
+        error("No normal vector inputted.");
+    end
+
     nt=size(X,1);
 
     [sep,Xt]=params.separate_targets(X);
     X_spectral = cell(1,ns);
-    if strcmp(potential,'SP')
-        nu_spectral= cell(1,ns);
+    if strcmp(potential,'SP') || strcmp(potential, 'DP')
+        nu_spectral = cell(1,ns);
+        Nu_t = params.get_nu_targets(nu_vec);
     end
     
+    % Separate target points and normal vectors into nearby and far
     for i=1:ns
-        X_spectral{i} = Xt(sep(:,i)==0,:,i);
-        if strcmp(potential,'SP')
-            nu_spectral{i} = nu(sep(:,i)==0,:,i);
+        is_near = (sep(:,i) == 0);
+        X_spectral{i} = Xt(is_near,:,i);
+        if strcmp(potential, 'SP') || strcmp(potential, 'DP')
+            nu_spectral{i} = Nu_t(is_near,:,i);
         end
     end
 
-    % Do "nearby" evaluation with spheroidal harmonics
+    %%%
+    %%% Do "nearby" evaluation with spheroidal harmonics
+    %%%
     if strcmp(potential,'DL')
         LP_spectral_cell = spheroidalDL(params,X_spectral);
     elseif strcmp(potential,'SL')
         LP_spectral_cell = spheroidalSL(params,X_spectral);
     elseif strcmp(potential,'SP')
-        if nargin<4
-            error("No normal vector inputted");
-        end
-        LP_spectral_cell = spheroidalSP(params,X_spectral,nu_spectral);
+        LP_spectral_cell = spheroidalSP(params, X_spectral, nu_spectral);
+    elseif strcmp(potential, 'DP')
+        LP_spectral_cell = spheroidalDP(params, X_spectral, nu_spectral);
+    else
+        error("Invalid potential given");
     end
     
-    % Do "far" evaluation with smooth quadrature
-    
+    %%%
+    %%% Do "far" evaluation with smooth quadrature
+    %%%
     LP=zeros(nt,nf);
     
     % Calculate effect from each particle on each target point
@@ -197,6 +210,8 @@ elseif nargin > 2
             
             if strcmp(potential,'SP')
                 pot='dSL_L_3D';
+            elseif strcmp(potential, 'DP')
+                pot='dDL_L_3D';
             else
                 pot=strcat(potential,'_L_3D');
             end
@@ -207,7 +222,10 @@ elseif nargin > 2
             wt = wt(:);
             Wns = Sns.geoProp.W; Wns= Wns.*wt;
             if strcmp(potential,'SP')
-                Nrns=nu(sep(:,i)==1,:,i);
+                Nrns = Nu_t(sep(:,i)==1,:,i);
+            elseif strcmp(potential, 'DP')
+                target_norm_vecs = Nu_t(sep(:,i)==1,:);
+                KEparams.targnor = target_norm_vecs;
             else
                 Nrns = reshape(Sns.geoProp.nor.to_array,[],3);
             end
