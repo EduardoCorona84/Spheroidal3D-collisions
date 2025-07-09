@@ -9,9 +9,10 @@ MEX_GATEWAY = $(PROJECT)
 
 
 ###TARGET=octave-linux
-TARGET=octave-linux-openmp
+# TARGET=octave-linux-openmp
 ###TARGET=matlab-linux-a64
 ###TARGET=matlab-linux-a64-openmp
+TARGET=matlab-maca64
 ###TARGET=matlab-maci
 ###TARGET=matlab-maci-openmp
 ###TARGET=matlab-windows-w32
@@ -20,7 +21,6 @@ TARGET=octave-linux-openmp
 ###TARGET=matlab-windows-w64-openmp
 
 include mwrap.inc
-
 
 .f.$(OBJSUF):
 	$(MEX_FC) $(MEX_FLAGS) -c $(FFLAGS) $<
@@ -34,7 +34,6 @@ include mwrap.inc
 # SOURCE FILE LIST
 #
 vpath %.f .:../src
-
 
 FSRCS = \
      stfmm3dpart.f sthfmm3dpart.f \
@@ -56,18 +55,18 @@ OBJS    = $(FSRCS:.f=.$(OBJSUF))
 all: $(OBJS) 
 	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -mb $(PROJECT).mw
 	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -c $(MEX_GATEWAY).c $(PROJECT).mw
-	$(MEX) -v $(MEX_FLAGS) $(MEX_LINK) $(MEX_GATEWAY).c $(OBJS) $(MEX_LIBS)
+	$(MEX) -v -L/opt/homebrew/lib $(MEX_FLAGS) $(MEX_LINK) $(MEX_GATEWAY).c $(OBJS) $(MEX_LIBS)
 
-doc:
-	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -mb $(PROJECT).mw
+# doc:
+# 	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -mb $(PROJECT).mw
 
 #
 clean: 
 	rm -f $(OBJS)
 # 
-list: $(FSRCS)
-	echo $^
-#
-distclean: 
-	rm -f $(OBJS) int2 fort.* *.o
+# list: $(FSRCS)
+# 	echo $^
+# #
+# distclean: 
+# 	rm -f $(OBJS) int2 fort.* *.o
 

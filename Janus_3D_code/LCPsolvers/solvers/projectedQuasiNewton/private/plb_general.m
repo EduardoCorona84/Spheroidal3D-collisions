@@ -59,9 +59,23 @@ out.srch = -out.grad;
 [out.x, ~] = line_search(out, fgFcn, options);
 [out.obj, out.grad]  = fgFcn(out.x);
 out.iter = 1;
-% Stephen adding:
-out.objHist = out.obj;
-
+%
+if isfield(options, 'errFcn')
+    if ishandle(options.errFcn)
+        out.errHist = zeros(options.maxit+1,1);
+        out.errHist(1) = options.errFcn(x0);
+        out.errHist(2) = options.errFcn(x0);
+    elseif iscell(options.errFcn)
+        out.errHist = zeros(options.maxit+1,numel(options.errFcn));
+        for i = 1:numel(options.errFcn)
+            fcn = options.errFcn{i};
+            out.errHist(1,i) = fcn(x0);
+            out.errHist(2,i) = fcn(out.x);
+        end
+    else 
+        assert(false, 'errFcn must be empty, a function handle or a cell array full of function handles');
+    end
+end
 %% -----------------------------------------------------
 %  The main iterative loop
 %  -----------------------------------------------------
@@ -107,13 +121,16 @@ while true
     % SRB's linesearch version can make use of the mat vec
     [out.x ,~] = line_search(out, fgFcn, options);
     [out.obj, out.grad] = fgFcn(out.x);
-    % SRB adding:
-    out.objHist = [out.objHist; out.obj];
+    % Nic adding:
     if isfield(options, 'errFcn')
-        if ~isfield(out, 'err')
-            out.err = [];
+        if ishandle(options.errFcn)
+            out.errHist(out.iter+1) = options.errFcn(out.x);
+        elseif iscell(options.errFcn)
+            for i = 1:numel(options.errFcn)
+                fcn = options.errFcn{i};
+                out.errHist(out.iter+1,i) = fcn(out.x);
+            end
         end
-        out.err(end+1) = options.errFcn(out.x);
     end
     % termination
     if flag < 0
@@ -137,6 +154,10 @@ out.term_reason = set_term_reason(term_reason);
 
 if (options.verbose)
     if (options.asgui) delete(h); else fprintf('Done\n'); end
+end
+
+if isfield(options, 'errFcn')
+    out.errHist= out.errHist(1:out.iter+1,:);
 end
 
 

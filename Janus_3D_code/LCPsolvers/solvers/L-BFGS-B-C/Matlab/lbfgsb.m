@@ -208,8 +208,9 @@ if nargin > 5
     if isa( errFcn, 'function_handle' )
         history(outerIter,3) = errFcn(x);
     elseif iscell( errFcn )
-        for j = 1:length(errFcn)
-            history(outer_count,j+2) = errFcn{j}(x);
+        for j = 1:numel(errFcn)
+            hndl = errFcn{j};
+            history(outerIter,j+2) = hndl(x);
         end
     end
     

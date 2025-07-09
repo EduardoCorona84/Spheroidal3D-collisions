@@ -53,7 +53,7 @@ rd=rd*ones(n3,1);
 %% NIC: set the initial direction to be towards the center 
 init_dir= -C;
 for i = 1:n3
-    init_dir(i,:) = init_dir(i,:)/ norm(init_dir(i,:));
+    init_dir(i,:) = init_dir(i,:) / norm(init_dir(i,:));
 end
 %% This is the old setting
 % nrt = [zeros(n3/2,2) ones(n3/2,1)];
@@ -65,7 +65,7 @@ end
 % misc extra parameters
 tol=1e-4; 
 mdist=3; 
-denseMV=1; 
+denseMV=true; 
 denseforce=1;
 gamma=1; 
 
