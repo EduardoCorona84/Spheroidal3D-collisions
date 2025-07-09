@@ -50,8 +50,6 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
             
         end
 
-        
-
         %Calculate spherical/spheroidal harmonic coefficients
         function obj = get_shc(obj)
             if isempty(obj.sigma)
@@ -362,9 +360,13 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
 
         %Use cutoff distance matvec_eta to split near and far target points.
         function [separation,Xt]=separate_targets(obj,X)
-            % Given a cutoff distance matvec_eta, determine which targets are
-            % near. Store in separation matrix: -1 = self (diagonal), 0 = close,
-            % 1 = far.
+            %{
+                Given a cutoff distance matvec_eta, determine which targets are
+                near. Store in separation matrix: -1 = self (diagonal), 0 = close,
+                1 = far.
+
+                The output should be
+            %}
 
             if isempty(obj.matvec_eta)
                 error("matvec_eta is empty. must assign a cutoff distance to categorize near and far targets.")
@@ -412,7 +414,6 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
             cd = Xt./repmat(d,1,3);    %normalized directions of displacements
 
             for i=1:ns
-                
                 ai=a_arr(i); %self a
                 u0i=u0_arr(i); %self a
                 
@@ -432,9 +433,8 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
                 %separate which targets are near (0) and which are far (1)
                 sep = closest_est > obj.matvec_eta;
                 separation(:,i) = sep;
-                
             end 
-        end %end function separation = ...
+        end
 
         %plot spheroids
         function plot(obj,Xt)
@@ -482,9 +482,13 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
         end
 
         function [nor_rot,nor_self]=get_Norm_rot(obj,ext_p,center_particle)
+            %{
+
+            %}
             ns=size(obj.centers,1);
             np=2*ext_p*(ext_p+1);
-            nor_rot=zeros(np*(ns-1),3);
+            nor_rot=zeros(np*ns,3);
+            % nor_rot = zeros(np, 3, ns);
             nor_self=[];
             if nargin<3
                 % no center particle given, do self rotation only.
@@ -500,8 +504,16 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
                     end
     
                     nor_rot((i-1)*np+1:i*np,:) = (Ri * (obj.get_Norm(ext_p,i))')';
+                    % nor_rot(:,:,i) = (Ri * (obj.get_Norm(ext_p,i))')';
                 end
             else
+                %{
+                    Calculates the normal vectors of the other spheroids from the perspective
+                    of the center_particle.
+
+                    To do this, calculate the normal vectors in some global coordinate system,
+                    and then apply the inverse rotation to convert into the local coordinate frame.
+                %}
                 for i=1:ns
                     nor_self=obj.get_Norm(ext_p,i);
                     if i==center_particle
@@ -525,9 +537,35 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
 
                         ind = i-(i>center_particle);
                         nor_rot((ind-1)*np+1:ind*np,:) = (R' * (Ri * nor_self'))';
-        
+                        % nor_rot(:,:,ind) = (R' * (Ri * nor_self'))';
                     end
                 end
+            end
+        end
+
+        function nu_t = get_nu_targets(obj, nu)
+            %{
+                Given some input normal vectors nu, find the cartesian coordinates of
+                those vectors relative to each spheroid's local frame.
+            %}
+            ns=size(obj.centers,1); %number of particles
+            nt=size(nu,1);
+            nu_t=zeros(nt,3,ns);
+            
+            for i=1:ns
+                if isempty(obj.Rmat)
+                    thetai=obj.thetas(i);
+                    phii=obj.phis(i);
+    
+                    Riy=[cos(thetai) 0 sin(thetai); 0 1 0; -sin(thetai) 0 cos(thetai)];
+                    Riz=[cos(phii) -sin(phii) 0; sin(phii) cos(phii) 0; 0 0 1];
+                    Ri=Riz*Riy;
+                else
+                    Ri=obj.Rmat(:,:,i);
+                end
+        
+                % Apply inverse rotation to transform from global to local frame
+                nu_t(:,:,i) = (Ri' * nu')';
             end
         end
 
