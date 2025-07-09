@@ -49,10 +49,8 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params_ref.get_shc();
 
             % Off-surface target points
-            target_u0 = params_ref.u0 * 1.2;
-            X_trg = prolate_spheroid_shape(testCase.p_max, target_u0, params_ref.a);
-            % Radial normal vectors out of spheroid
-            nu_trg = get_norm_vecs(testCase.p_max, target_u0, params_ref.oblate);
+            nu_trg = get_norm_vecs(testCase.p_max, params_ref.u0, params_ref.oblate);
+            X_trg = prolate_spheroid_shape(testCase.p_max, params_ref.u0, params_ref.a) + nu_trg;
 
             DP_ref = spheroidalDP(params_ref, X_trg, nu_trg);
 
@@ -94,10 +92,8 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params_ref.get_shc();
 
             % Off-surface target points
-            target_u0 = params_ref.u0 * 1.2;
-            X_trg = oblate_spheroid_shape(testCase.p_max, target_u0, params_ref.a);
-            % Radial normal vectors out of spheroid
-            nu_trg = get_norm_vecs(testCase.p_max, target_u0, params_ref.oblate);
+            nu_trg = get_norm_vecs(testCase.p_max, params_ref.u0, params_ref.oblate);
+            X_trg = prolate_spheroid_shape(testCase.p_max, params_ref.u0, params_ref.a) + nu_trg;
 
             DP_ref = spheroidalDP(params_ref, X_trg, nu_trg);
 
@@ -234,11 +230,11 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         function testCompareOblateOnSurfaceImplementations(testCase)
             % Compares all method to calculate on the surface: they should all
             % match each other.
-            p = 1;
+            p = 16;
 
             params = SpheroidalParameters;
-            params.u0 = testCase.u0_prolate;
-            params.a = testCase.a_prolate;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
             params.oblate = true;
             [u_p, v_p] = gl_grid(p);
             params.sigma = testCase.density_func(u_p, v_p);
@@ -278,10 +274,8 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            target_u0 = params.u0 * 3;
-            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
-            % Radial normal vectors out of spheroid
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + nu_trg;
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
@@ -298,7 +292,7 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         function testGradientCheckOblateOffSurface(testCase)
-            p = 1;
+            p = 16;
             eps = testCase.fd_eps;
 
             params = SpheroidalParameters;
@@ -309,10 +303,8 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            target_u0 = params.u0 * 3;
-            X_trg = oblate_spheroid_shape(p, target_u0, params.a);
-            % Radial normal vectors out of spheroid
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + nu_trg;
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
@@ -323,6 +315,15 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             rel_err = norm(DP_spectral - DP_fd, inf) / norm(DP_spectral, inf);
             testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
                 'Gradient check failed for oblate case: should be below tolerance.');
+        end
+
+        %%% Spectral coefficient tests
+        function testProlateSpectralCoefficients(testCase)
+            %{
+                Use that the spheroidal harmonics Y_n^m form an orthogonal
+                family to test the spectral coefficients.
+            %}
+
         end
 
         %%% Kernel_Eval check
@@ -342,9 +343,8 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            target_u0 = params.u0 * 3;
-            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = prolate_spheroid_shape(p, params.u0, params.a) + nu_trg;
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
@@ -380,23 +380,22 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
                 Verify that off-surface evaluations coincide with the
                 implementation in Kernel_Eval for the oblate case.
 
-                Note that this requires higher order (i.e. 'p') for the 
-                desired convergence.
+                Note that the oblate case requires higher order (i.e. 'p') 
+                for the desired convergence.
             %}
             p = 16;
             
             params = SpheroidalParameters;
             params.isReal = true;
-            params.u0 = testCase.u0_prolate;
-            params.a = testCase.a_prolate;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
             params.oblate = true;
             [u_p, v_p] = gl_grid(p);
             params.sigma = testCase.density_func(u_p, v_p);
             params.get_shc();
 
-            target_u0 = params.u0 * 3;
-            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
 
             DP_spectral = spheroidalDP(params, X_trg, nu_trg);
 
@@ -427,8 +426,266 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
                 'spheroidalDP vs Kernel_Eval for prolate off-surface failed.');
         end
 
+        function testRandomNormalVectors(testCase)
+            %{
+                Verifies that spheroidalDP still functions with random
+                normal vectors (i.e. the choice of normal vectors should
+                not matter). Compares with Kernel_Eval and handles both the
+                prolate and oblate cases.
+            %}
+            p = 16;
+            
+            %%% Prolate
+            params = SpheroidalParameters;
+            params.isReal = true;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
+            nu_trg = nu_trg + 2*rand(size(nu_trg)); % Random perturbation
+
+            DP_spectral = spheroidalDP(params, X_trg, nu_trg);
+
+            % Get source geometry and weights
+            [X_src_orig, ~] = params.get_X(); % Cartesian coordinates of source points
+            N_src_orig = params.get_Norm(p, 1);
+            
+            % Quadrature weights for Kernel_Eval
+            Sns = SurfaceSph(X_src_orig);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src_orig = Sns.geoProp.W .* wt_gl;
+
+            pot = 'dDL_L_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            KEparams.X = X_src_orig;
+            KEparams.W2 = W_src_orig.';
+            KEparams.nor = N_src_orig;
+            KEparams.targnor = nu_trg;
+
+            dDL_mat = Kernel_Eval(X_trg, X_src_orig, KEparams);
+            DP_kernel_eval = dDL_mat * params.sigma;
+
+            rel_err = norm(DP_spectral - DP_kernel_eval, inf) / norm(DP_spectral, inf);
+            testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
+                'Randomized spheroidalDP vs Kernel_Eval for prolate off-surface failed.');
+
+            %%% Oblate
+            params = SpheroidalParameters;
+            params.isReal = true;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
+            nu_trg = nu_trg + 2*rand(size(nu_trg)); % Random perturbation
+
+            DP_spectral = spheroidalDP(params, X_trg, nu_trg);
+
+            % Get source geometry and weights
+            [X_src_orig, ~] = params.get_X(); % Cartesian coordinates of source points
+            N_src_orig = params.get_Norm(p, 1);
+            
+            % Quadrature weights for Kernel_Eval
+            Sns = SurfaceSph(X_src_orig);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src_orig = Sns.geoProp.W .* wt_gl;
+
+            pot = 'dDL_L_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            KEparams.X = X_src_orig;
+            KEparams.W2 = W_src_orig.';
+            KEparams.nor = N_src_orig;
+            KEparams.targnor = nu_trg;
+
+            dDL_mat = Kernel_Eval(X_trg, X_src_orig, KEparams);
+            DP_kernel_eval = dDL_mat * params.sigma;
+
+            rel_err = norm(DP_spectral - DP_kernel_eval, inf) / norm(DP_spectral, inf);
+            testCase.verifyLessThan(rel_err, testCase.gradient_check_tol, ...
+                'Randomized spheroidalDP vs Kernel_Eval for oblate off-surface failed.');
+        end
+
         %%% On-surface checks
-        function testProlateOnSurface(testCase)
+        function testNullspaceIsConstant(testCase)
+            %{
+                Verifies that the nullspace of the Laplace double-layer
+                potential is indeed the space generated by the constant
+                function.
+            %}
+            p = 16;
+            np = 2*p*(p+1);
+            
+            %%% Prolate
+            params = SpheroidalParameters;
+            params.isReal = true;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            params.sigma = ones(np, 1, 1);
+            params.get_shc();
+
+            % On-surface
+            nu_arbitrary = repmat(rand(1,3), np, 1, 1);
+            DP_onsurface = spheroidalDP(params, [], nu_arbitrary);
+            testCase.verifyLessThan(norm(DP_onsurface, inf), 1e-10, ...
+                'Prolate: On-surface DP for constant density with arbitrary normal should be near zero.');
+
+            % Off-surface
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = prolate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
+            DP_offsurface = spheroidalDP(params, X_trg, nu_trg);
+            testCase.verifyLessThan(norm(DP_offsurface, inf), testCase.consistency_tol, ...
+                'Prolate: Off-surface DP for constant density should be near zero.');
+
+            %%% Oblate
+            params = SpheroidalParameters;
+            params.isReal = true;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true;
+            params.sigma = ones(np, 1, 1);
+            params.get_shc();
+
+            % On-surface
+            nu_arbitrary = repmat(rand(1,3), np, 1, 1);
+            DP_onsurface = spheroidalDP(params, [], nu_arbitrary);
+            testCase.verifyLessThan(norm(DP_onsurface, inf), 1e-10, ...
+                'Oblate: On-surface DP for constant density with arbitrary normal should be near zero.');
+
+            % Off-surface
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
+            DP_offsurface = spheroidalDP(params, X_trg, nu_trg);
+            testCase.verifyLessThan(norm(DP_offsurface, inf), testCase.consistency_tol, ...
+                'Oblate: Off-surface DP for constant density should be near zero.');
+        end
+        
+        %%% Near-surface tests
+        function testJumpRelationProlateConvergenceTest(testCase)
+            %{
+                As we approach the surface of the spheroid, we should
+                satisfy the jump relation. However, since the normal
+                derivative of the Laplace DLP is continuous across the
+                surface, we should just converge to the on-surface
+                evaluation.
+
+                For reference for this jump relation fact, see Hsiao and
+                Wedland.
+            %}
+            p = 16;
+            
+            %%% Prolate
+            params = SpheroidalParameters;
+            params.isReal = true;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            X_self = params.get_X();
+            nu_self = get_norm_vecs(p, params.u0, params.oblate);
+            DP_onsurface = spheroidalDP(params, [], nu_self);
+
+            distances_from_surface = 10.^(-4:-1:-10);
+            errors = zeros(size(distances_from_surface));
+            for i = 1:length(distances_from_surface)
+                DP_offsurface = spheroidalDP(params, X_self + nu_self .* distances_from_surface(i), nu_self);
+                errors(i) = norm(DP_onsurface - DP_offsurface) / norm(DP_offsurface);
+            end
+
+            testCase.verifyLessThan(errors(2:end), errors(1:end-1) / 10, ...
+                'Spectral convergence should be observed for the prolate case as the order p is increased.');
+        end
+
+        function testJumpRelationOblateConvergenceTest(testCase)
+            p = 16;
+
+            params = SpheroidalParameters;
+            params.isReal = true;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true;
+            [u_p, v_p] = gl_grid(p);
+            params.sigma = testCase.density_func(u_p, v_p);
+            params.get_shc();
+
+            X_self = params.get_X();
+            nu_self = get_norm_vecs(p, params.u0, params.oblate);
+            DP_onsurface = spheroidalDP(params, [], nu_self);
+
+            distances_from_surface = 10.^(-4:-1:-10);
+            errors = zeros(size(distances_from_surface));
+            for i = 1:length(distances_from_surface)
+                DP_offsurface = spheroidalDP(params, X_self + nu_self .* distances_from_surface(i), nu_self);
+                errors(i) = norm(DP_onsurface - DP_offsurface) / norm(DP_offsurface);
+            end
+
+            testCase.verifyLessThan(errors(2:end), errors(1:end-1) / 10, ...
+                'Spectral convergence should be observed for the oblate case as the order p is increased.');
+        end
+
+        %%% Dirichlet problems
+        function testExteriorDirichletProblemOneSpheroid(testCase)
+            p = 16;
+            eta = 10;
+            ns = 1; % Number of spheroids
+            u0 = 1.8; % 1/eccentricity of a prolate spheroidal surface
+            target_distances = 1e-6; % Distance from the surface to evaluate the potential
+            plt = false;
+            neumann = false;
+            interior = false;
+            
+            [soln, fluxsoln, truesoln, truefluxSurf, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            testCase.verifyLessThan(norm(fluxsoln - truefluxSurf)/norm(truefluxSurf), 1e-7, ...
+                'spheroidalDP should match true flux.');
+        end
+
+        function testExteriorDirichletProblemMultipleSpheroids(testCase)
+            p = 16;
+            eta = 10;
+            ns = 3; % Number of spheroids
+            u0 = [1.8 1.8 1.8]; % 1/eccentricity of a prolate spheroidal surface
+            target_distances = 1e-4*ones(1, ns); % Distance from the surface to evaluate the potential
+            plt = false;
+            neumann = false;
+            interior = false;
+            
+            [soln, fluxsoln, truesoln, truefluxSurf, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            testCase.verifyLessThan(norm(fluxsoln - truefluxSurf)/norm(truefluxSurf), 1e-7, ...
+                'spheroidalDP should match true flux.');
+        end
+
+        function testInteriorDirichletProblem(testCase)
+            %%% One spheroid
+            p = 16;
+            eta = 10;
+            ns = 1; % Number of spheroids
+            u0 = 1.8; % 1/eccentricity of a prolate spheroidal surface
+            target_distances = 1e-6; % Distance from the surface to evaluate the potential
+            plt = false;
+            neumann = false;
+            interior = true;
+            
+            [soln, truesoln, truefluxSurf, sigma_vec, condK] =  spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+
+            %%% Multiple spheroids
         end
     end
 end

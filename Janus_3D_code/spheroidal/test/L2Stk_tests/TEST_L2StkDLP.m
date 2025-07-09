@@ -6,7 +6,7 @@
 classdef TEST_L2StkDLP < matlab.unittest.TestCase
     properties
         params=SpheroidalParameters;
-        p = 8;
+        p = 16;
 
         u0_prolate = 2/sqrt(3);
         u0_oblate = 2/sqrt(3);
@@ -14,6 +14,7 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
         a_oblate;
 
         tol = 1e-6;
+        on_surface_tol = 9*1e-4;
     end
 
     methods (TestClassSetup)
@@ -22,20 +23,22 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
 
             testCase.a_prolate = 1/testCase.u0_prolate;
             testCase.a_oblate = 1/sqrt(1 + testCase.u0_oblate^2);
-
-            testCase.params.matvec_eta=10; 
-            testCase.params.u0=1.1;
-            testCase.params.a=1/1.1;
-            testCase.params.oblate=0; 
-            testCase.params.centers=[0 0 0];
         end
     end
 
     methods (Test)
         function testLaplaceCheck(testCase)
+            %{
+                Verifies the spheroidalDL and spheroidalDP works.
+            %}
             p = testCase.p;
             np = 2*p*(p+1);
             params = testCase.params;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
 
             % Get Cartesian coordinates from the two spheroids
             Xtrg = prolate_spheroid_shape(p,1.2,1/1.2)+[3,3,1];
@@ -126,12 +129,15 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             p = testCase.p;
             np = 2*p*(p+1);
             params = testCase.params;
-            params.p = p;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
 
-            % Get Cartesian coordinates from the two spheroids
-            target_u0 = params.u0 * 3;
-            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            X_trg = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = X_trg + 1e-5*nu_trg;
             nt = size(X_trg, 1);
 
             sigma_x = rand(np,1)+0.5;
@@ -263,6 +269,11 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             p = testCase.p;
             np = 2*p*(p+1);
             params = testCase.params;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
 
             sigma_x = rand(np,1)+0.5;
             sigma_y = rand(np,1)-0.5;
@@ -279,9 +290,8 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             ny_src = norm_vecs(:,2);
             nz_src = norm_vecs(:,3);
 
-            target_u0 = params.u0 * 3;
-            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = prolate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
 
             Rvec_x = X_trg(:, 1)' - X_self(:, 1);
             Rvec_y = X_trg(:, 2)' - X_self(:, 2);
@@ -323,42 +333,6 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
                 'Formula for Stokes DLP (z-component) does not match integration formula.');
         end
 
-        function testKernelDMatrixCheck(testCase)
-            %{
-                Compares with kernelD.m, which produces the matvec for
-                the Stokes DLP.
-            %}
-
-            %%% SETUP
-            rng(42);
-            p = testCase.p;
-            np = 2*p*(p+1);
-            params = testCase.params;
-
-            X_self = prolate_spheroid_shape(p, params.u0, params.a);
-
-            sigma_x = rand(np,1)+0.5;
-            sigma_y = rand(np,1)-0.5;
-            sigma_z = rand(np,1);
-
-            Sc = SurfaceSph(X_self);
-            DMat = kernelD([], Sc);
-            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, sigma_x, sigma_y, sigma_z, 1);
-
-            sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
-            DP_res_vec = DMat * sig;
-            DP_res_vec = reshape(DP_res_vec,3,[]).';
-
-            testCase.verifyLessThan(norm((L2Stkx - DP_res_vec(:,1)))./norm(DP_res_vec(:,1)), testCase.tol, ...
-                'Formula for Stokes DLP (x-component) fails for on-surface evaluation.');
-
-            testCase.verifyLessThan(norm((L2Stky - DP_res_vec(:,2)))./norm(DP_res_vec(:,2)), testCase.tol, ...
-                'Formula for Stokes DLP (y-component) fails for on-surface evaluation.');
-
-            testCase.verifyLessThan(norm((L2Stkz - DP_res_vec(:,3)))./norm(DP_res_vec(:,3)), testCase.tol, ...
-                'Formula for Stokes DLP (z-component) fails for on-surface evaluation.');
-        end
-
         function testKernelEvalOffSurface(testCase)
             %{
                 Compares off-surface evaluation with Kernel_Eval's
@@ -366,7 +340,7 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             %}
             %%% SETUP
             rng(42);
-            p = testCase.p;
+            p = 16;
             np = 2*p*(p+1);
             params = testCase.params;
 
@@ -384,11 +358,9 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             [L2Stkx, L2Stky, L2Stkz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
 
             %%% Kernel_Eval
-            % Get source geometry and weights
-            [X_src_orig, ~] = params.get_X(); % Cartesian coordinates of source points
+            [X_src_orig, ~] = params.get_X();
             N_src_orig = params.get_Norm(p, 1);
 
-            % Quadrature weights for Kernel_Eval
             Sns = SurfaceSph(X_src_orig);
             [~, gwt_gl] = g_grid(p + 1);
             wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
@@ -412,17 +384,225 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             % Evaluate on density
             sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
             DP_kernel_eval = dDL_mat * sig;
-            DP_kernel_eval = reshape(DP_kernel_eval,3,[]).'
+            DP_kernel_eval = reshape(DP_kernel_eval,3,[]).';
 
             %%% Compare results
-            testCase.verifyLessThan(norm(L2Stkx{1} -DP_kernel_eval(:,1)) ./ norm(DP_kernel_eval(:,1)), testCase.tol, ...
+            testCase.verifyLessThan(norm(L2Stkx{1} - DP_kernel_eval(:,1)) ./ norm(DP_kernel_eval(:,1)), testCase.tol, ...
                 'Formula for Stokes DLP (x-component) does not match Kernel_Eval.');
 
-            testCase.verifyLessThan(norm(L2Stky{1} -DP_kernel_eval(:,2)) ./ norm(DP_kernel_eval(:,2)), testCase.tol, ...
+            testCase.verifyLessThan(norm(L2Stky{1} - DP_kernel_eval(:,2)) ./ norm(DP_kernel_eval(:,2)), testCase.tol, ...
                 'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
 
-            testCase.verifyLessThan(norm(L2Stkz{1} -DP_kernel_eval(:,3)) ./ norm(DP_kernel_eval(:,3)), testCase.tol, ...
+            testCase.verifyLessThan(norm(L2Stkz{1} - DP_kernel_eval(:,3)) ./ norm(DP_kernel_eval(:,3)), testCase.tol, ...
                 'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
+        end
+
+        %%% On-surface checks
+        function testKernelDMatrixCheck(testCase)
+            %{
+                Compares with kernelD.m, which produces the matvec for
+                the Stokes DLP.
+            %}
+
+            %%% SETUP
+            rng(42);
+            p = testCase.p;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 1; 
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
+
+            sigma_x = rand(np,1)+0.5;
+            sigma_y = rand(np,1)-0.5;
+            sigma_z = rand(np,1);
+
+            %%% kernelD
+            Sc = SurfaceSph(prolate_spheroid_shape(p, params.u0, params.a));
+            DMat = kernelD([], Sc);
+
+            %%% Evaluation on target points (i.e. self-evaluation)
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, sigma_x, sigma_y, sigma_z, 1);
+
+            sig = reshape([sigma_x,sigma_y,sigma_z].', [], 1);
+            DP_res_vec = DMat * sig;
+            DP_res_vec = reshape(DP_res_vec,3,[]).';
+
+            %%% Compare results
+            testCase.verifyLessThan(norm((L2Stkx - DP_res_vec(:,1)))./norm(DP_res_vec(:,1)), testCase.tol, ...
+                'Formula for Stokes DLP (x-component) fails for on-surface evaluation.');
+
+            testCase.verifyLessThan(norm((L2Stky - DP_res_vec(:,2)))./norm(DP_res_vec(:,2)), testCase.tol, ...
+                'Formula for Stokes DLP (y-component) fails for on-surface evaluation.');
+
+            testCase.verifyLessThan(norm((L2Stkz - DP_res_vec(:,3)))./norm(DP_res_vec(:,3)), testCase.tol, ...
+                'Formula for Stokes DLP (z-component) fails for on-surface evaluation.');
+        end
+
+        function testProlateRigidBodyMotion(testCase)
+            %{
+                For rigid body motion (translational + rotational), the 
+                following jump relation
+                    (-1/2 I + D)[sigma] = sigma
+                should hold.
+            %}
+            p = testCase.p;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
+
+            [X_src, ~] = params.get_X();
+            
+            %%% Translational motion
+            sigma_x_trans = 4 * ones(np, 1);
+            sigma_y_trans = 2 * ones(np, 1);
+            sigma_z_trans = 3 * ones(np, 1);
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, ...
+                sigma_x_trans, sigma_y_trans, sigma_z_trans, 1);
+
+            Sc = SurfaceSph(prolate_spheroid_shape(p, params.u0, params.a));
+            DMat = kernelD([], Sc);
+            sig = reshape([sigma_x_trans,sigma_y_trans,sigma_z_trans].', [], 1);
+            DP_res_vec = DMat * sig;
+            DP_res_vec = reshape(DP_res_vec,3,[]).';
+
+            testCase.verifyLessThan(norm(L2Stkx + 0.5*sigma_x_trans) / norm(L2Stkx), testCase.on_surface_tol, ...
+                'Translational RBM identity failed for x-component.');
+            testCase.verifyLessThan(norm(L2Stky + 0.5*sigma_y_trans) / norm(L2Stky), testCase.on_surface_tol, ...
+                'Translational RBM identity failed for y-component.');
+            testCase.verifyLessThan(norm(L2Stkz + 0.5*sigma_z_trans) / norm(L2Stkz), testCase.on_surface_tol, ...
+                'Translational RBM identity failed for z-component.');
+
+            %%% Rotational motion
+            omega = rand(1, 3) - 0.5;
+            sigma_rot = cross(repmat(omega, np, 1), X_src);
+            sigma_x_rot = sigma_rot(:, 1);
+            sigma_y_rot = sigma_rot(:, 2);
+            sigma_z_rot = sigma_rot(:, 3);
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, ...
+                sigma_x_rot, sigma_y_rot, sigma_z_rot, 1);
+            
+            testCase.verifyLessThan(norm(L2Stkx + 0.5*sigma_x_rot) / norm(L2Stkx), testCase.on_surface_tol, ...
+                'Rotational RBM identity failed for x-component.');
+            testCase.verifyLessThan(norm(L2Stky + 0.5*sigma_y_rot) / norm(L2Stky), testCase.on_surface_tol, ...
+                'Rotational RBM identity failed for y-component.');
+            testCase.verifyLessThan(norm(L2Stkz + 0.5*sigma_z_rot) / norm(L2Stkz), testCase.on_surface_tol, ...
+                'Rotational RBM identity failed for z-component.');
+        end
+
+        function testOblateRigidBodyMotion(testCase)
+            %{
+                For rigid body motion (translational + rotational), the 
+                following jump relation
+                    (-1/2 I + D)[sigma] = sigma
+                should hold.
+            %}
+            p = testCase.p;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = 1; 
+            params.centers = [0 0 0];
+
+            [X_src, ~] = params.get_X();
+            
+            %%% Translational motion
+            sigma_x_trans = 4 * ones(np, 1);
+            sigma_y_trans = 2 * ones(np, 1);
+            sigma_z_trans = 3 * ones(np, 1);
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, ...
+                sigma_x_trans, sigma_y_trans, sigma_z_trans, 1);
+
+            Sc = SurfaceSph(oblate_spheroid_shape(p, params.u0, params.a));
+            DMat = kernelD([], Sc);
+            sig = reshape([sigma_x_trans,sigma_y_trans,sigma_z_trans].', [], 1);
+            DP_res_vec = DMat * sig;
+            DP_res_vec = reshape(DP_res_vec,3,[]).';
+
+            testCase.verifyLessThan(norm(L2Stkx + 0.5*sigma_x_trans) / norm(L2Stkx), testCase.on_surface_tol, ...
+                'Translational RBM identity failed for x-component.');
+            testCase.verifyLessThan(norm(L2Stky + 0.5*sigma_y_trans) / norm(L2Stky), testCase.on_surface_tol, ...
+                'Translational RBM identity failed for y-component.');
+            testCase.verifyLessThan(norm(L2Stkz + 0.5*sigma_z_trans) / norm(L2Stkz), testCase.on_surface_tol, ...
+                'Translational RBM identity failed for z-component.');
+
+            %%% Rotational motion
+            omega = rand(1, 3) - 0.5;
+            sigma_rot = cross(repmat(omega, np, 1), X_src);
+            sigma_x_rot = sigma_rot(:, 1);
+            sigma_y_rot = sigma_rot(:, 2);
+            sigma_z_rot = sigma_rot(:, 3);
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, ...
+                sigma_x_rot, sigma_y_rot, sigma_z_rot, 1);
+            
+            testCase.verifyLessThan(norm(L2Stkx + 0.5*sigma_x_rot) / norm(L2Stkx), testCase.on_surface_tol, ...
+                'Rotational RBM identity failed for x-component.');
+            testCase.verifyLessThan(norm(L2Stky + 0.5*sigma_y_rot) / norm(L2Stky), testCase.on_surface_tol, ...
+                'Rotational RBM identity failed for y-component.');
+            testCase.verifyLessThan(norm(L2Stkz + 0.5*sigma_z_rot) / norm(L2Stkz), testCase.on_surface_tol, ...
+                'Rotational RBM identity failed for z-component.');
+        end
+        
+        %%% Near-surface convergence test
+        function testNearSurfaceConvergenceTest(testCase)
+            %{
+                Analytically testing for near-surface evaluation is hard.
+                Instead, we test for convergence. We test that the Stokes
+                double layer potential converges to the exterior jump
+                relation.
+            %}
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.p = p;
+
+            [X_src, ~] = params.get_X();
+            N_src = params.get_Norm(p, 1);
+
+            % Use a random density
+            rng(42); % for reproducibility
+            sigma_x = rand(np, 1) - 0.5;
+            sigma_y = rand(np, 1) - 0.5;
+            sigma_z = rand(np, 1) - 0.5;
+
+            % Calculate the on-surface of the DLP
+            [D_pv_x, D_pv_y, D_pv_z] = L2StkDLP([], params, ...
+                sigma_x, sigma_y, sigma_z, 1);
+
+            % The limit from the exterior is D[sigma] - 0.5*sigma
+            expected_limit_x = D_pv_x - 0.5 * sigma_x;
+            expected_limit_y = D_pv_y - 0.5 * sigma_y;
+            expected_limit_z = D_pv_z - 0.5 * sigma_z;
+
+            distances = 10.^(-2:-1:-3);
+            errors = zeros(length(distances), 1);
+
+            for i = 1:length(distances)
+                d = distances(i);
+                X_trg = X_src + d * N_src;
+
+                target_pts = cell(1, 1);
+                target_pts{1} = X_trg;
+
+                [L2Stkx, L2Stky, L2Stkz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
+                
+                total_err = norm([L2Stkx{1} - expected_limit_x; L2Stky{1} - expected_limit_y; L2Stkz{1} - expected_limit_z]);
+                total_norm = norm([expected_limit_x; expected_limit_y; expected_limit_z]);
+                
+                errors(i) = total_err / total_norm;
+            end
         end
     end
 end

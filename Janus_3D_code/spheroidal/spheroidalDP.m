@@ -118,7 +118,9 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
         DP = reshape(DP,[],nf,ns);
     
         %%%%%%%%%%%%
-        % assuming nf=1
+        % Note that this is not the basis transformation that was done in
+        % spheroidalSP. Instead, this just accounts for the missing scale
+        % factor in the spectrum.
         coef_mat=zeros(np,1,ns);
         for i=1:ns
             coef_mat(:,:,i)=oblate(i).*1./sqrt(u0(i)^2+v_x.^2)+~oblate(i).*1./sqrt(u0(i)^2-v_x.^2);
@@ -482,10 +484,10 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
     anm_base = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm));
     nu_u = nu(:,1); nu_v = nu(:,2); nu_phi = nu(:,3);
 
-    if ~oblate
+    if ~oblate % PROLATE CASE
         anm = anm_base .* (u0.^2-1); % bnm
         L = legendre_otc(p,u0,1,1,1);
-        if abs(u_x)-u0 < 1e-14 % interior
+        if abs(u_x)-u0 < -1e-14 % interior
             gnm = L{4}; % Q'(u_0)
         elseif abs(u_x)-u0 > 1e-14 % exterior
             gnm = L{3}; % P'(u_0)
@@ -509,13 +511,13 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
             
             lambda_n1m = -anm.' .* gnm.' .* (nn'-mm'+1)./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2)) .*nu_v ./ a;
         end
-    else
+    else % OBLATE CASE
         anm = -1 .* anm_base .* (u0.^2+1); % cnm
         L = legendre_otc(p,1j.*u0,1,1,1);
-        if abs(u_x)-u0<1e-14 % interior
-            gnm=L{4};
+        if abs(u_x)-u0 <- 1e-14 % interior
+            gnm=L{4}; % Q'(iu_0)
         elseif abs(u_x)-u0>1e-14 % exterior
-            gnm=L{3};
+            gnm=L{3}; % P'(iu_0)
         end
         if norm(abs(u_x)-u0)<1e-14
             [lambda_nm_prime,lambda_nm,lambda_n1m]=DPspectrum(p,u0,a,oblate);
