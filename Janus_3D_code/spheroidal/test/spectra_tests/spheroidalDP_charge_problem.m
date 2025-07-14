@@ -6,10 +6,11 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
     %{
         Inputs:
             - p -> order
-            - eta -> 
+            - eta -> matvec eta (used to distinguish points that are close/far)
             - ns -> number of spheroids
             - u0 -> eccentricities of spheroids
-            - target_distances ->
+            - target_distances -> how far away from the surface to evaluate
+            target points
             - plt (true/false) -> whether to plot the points; a holdover 
             from old code.
             - neumann (true/false) -> whether to do a neumann problem or 
@@ -19,17 +20,21 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
             an interior problem
 
         Outputs:
-            soln ->
-            truesoln -> analytical solution
-            truefluxSurf -> 
-            sigma_vec -> 
-            condK -> condition number of BIE matrix
+            - soln -> computed SL/DL result based on Dirichlet/Neumann
+            problem selection
+            - fluxsoln -> computed SP/DP result based on Dirichlet/Neumann
+            problem selection
+            - truesoln -> analytical solution (potential induced by a 
+            number of point charges)
+            - trueflux -> analytical flux
+            - sigma_vec -> computed sigma vector
+            - condK -> condition number of BIE matrix
         
         The idea is:
-        (1) set up system of 3 spheroids, 2 close and 1 far
-        (2) put a few point charges around the center of each spheroid.
+        (1) set up system of spheroids
+        (2) put a few point charges in appropriate locations
               - Calculate the potential explicitly.
-              - Determine potential on the boundary of each spheroid for BCs, f
+              - Determine potential on the boundary of each spheroid for BCs
         (3) Use MatVec self-evaluation (no X) to construct matrix operator D.
         (4) Solve (1/2*I + D + Completion)*sigma = f
               * Completion term will need some care, since it's multiple particles.
@@ -73,10 +78,11 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
         % pars.centers = [0 0 0; 2.5 0 0; 1.6 1.6 1.6];
         thetas = [0 pi/10 5*pi/3];
         phis = [0 0 pi/5];
+        % thetas = [0 0 0];
+        % phis = [0 0 0];
     else
         if ns~=1
-            fprintf("\n Number of spheroids given not implemented here. Setting ns=1.")
-            ns=1;
+            error("Number of spheroids given not implemented here.");
         end
 
         if mix_obl
@@ -112,21 +118,44 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
     Xptch = reshape(repmat(reshape(c',3,1,[]),1,nc),3,[],1)';
 
     %%% Placement of point charges
-    if ns==3
-        % 1/2 of the minor radius of the prolate spheroids
-        scale = repmat(.5.*pars.a .*sqrt(pars.u0.^2-1),nc,1);
-        scale = scale(:);
-        d = repmat(scale,1,3) .* (rand(size(Xptch))-.5);
-    else
-        d_z=0.5.*(rand(nc,1)-.5);
-        d_xy=0.01.*(rand(nc,2)-0.5);
-        d = [d_xy d_z];
+    switch (interior)
+        case true % Interior problem
+            if ns==3
+                % Some scaling factor times the major radius of the prolate 
+                % spheroids guarantees that we shall be outside the
+                % spheroids.
+                placement_scale = 2;
+                major_radii = repelem(sqrt(pars.u0.^2 + 1), nc)' .* repelem(pars.a, nc)';
+                d = placement_scale * major_radii .* generate_random_unit_vec(6, 3);
+            else
+                placement_scale = 2;
+                v1 = placement_scale.*pars.a.*sqrt(pars.u0.^2 + 1).*generate_random_unit_vec(1, 3);
+                v2 = placement_scale.*pars.a.*sqrt(pars.u0.^2 + 1).*generate_random_unit_vec(1, 3);
+                d = [v1 ; v2];
+            end
+
+            Xptch = Xptch + d; % Point charge locations, near centers of spheroids
+        case false % Exterior problem
+            if ns==3
+                % 1/2 of the minor radius of the prolate spheroids
+                scale = repmat(0.3.*pars.a .*sqrt(pars.u0.^2-1),nc,1);
+                scale = scale(:);
+                d = repmat(scale,1,3) .* (rand(size(Xptch))-.5);
+            else
+                d_z=0.5.*(rand(nc,1)-.5);
+                d_xy=0.01.*(rand(nc,2)-0.5);
+                d = [d_xy d_z];
+            end
+
+            Xptch = Xptch + d; % Point charge locations, near centers of spheroids
     end
 
-    Xptch = Xptch + d; % Point charge locations, near centers of spheroids
     ptch = (2.*rand(ns*nc,1)-1); % Charge value, between -1 and 1
 
-    ptch = ptch - sum(ptch)/(ns*nc); % Ensures that the BC is 0 for compatibility condition
+    if neumann || (~neumann & ~interior)
+        % For the compatibility condition associated for Neumann problems
+        ptch = ptch - sum(ptch)/(ns*nc);
+    end
     
     if plt
         pars.plot(Xptch);
@@ -136,40 +165,21 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
     Y = pars.get_X;
     [NrY,~]=pars.get_Norm_rot(p); % Necessary to account of the spheroid's rotation
     
-    [~, gwt]=g_grid(p+1);
-    wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
-    wt = wt(:)';
-    
     if ~neumann
-        if useS
-            CM = S_scale.*spheroidalMatVecKernel(pars,'SL',p);
-        else
-            CM=[];
-            for i=1:ns
-                if ~pars.oblate(i)
-                    Yi = prolate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
-                else
-                    Yi = oblate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
-                end
-                ci=c(i,:);
-                
-                % Completion matrix operator: sum of 1/||x-c_i|| * integral of each sigma over
-                % respective spheroid surface
-                Sns = SurfaceSph(Yi(:));
-                W = Sns.geoProp.W;
-            
-                RY = vecnorm(Y-repmat(ci,np*ns,1),2,2);
-                CM = [CM (1./RY)*(W'.*wt)];
-            end
-        end
-        % We will use this for surface boundary conditions
+        % Find boundary condition (potential induced by point charges)
         truesolnSurf=PtChargePotential(ptch,Xptch,Y);
 
         % Construct DL on-surface matrices
         DM = spheroidalMatVecKernel(pars,'DL',p);
-        
-        % Final operator: 1/2 I + DM + CM
-        K = .5*eye(ns*np) + DM +CM;
+
+        if interior % Interior problem
+            % -1/2 I + D (should be well-conditioned!)
+            K = -0.5*eye(ns*np) + DM;
+        else % Exterior problem
+            % 1/2 I + D + C
+            CM = calculate_completion_term(pars, Y, ns, useS);
+            K = .5*eye(ns*np) + DM + CM;
+        end
     else % Neumann problem
         error("not implemented.");
         if FIRST_KIND_FLAG
@@ -193,19 +203,21 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
     pars.sigma = sigma;
     
     %%% Target points to test at
-    [theta,phi]=gl_grid(Xeval_p);
-    v=cos(theta);
     Xcell=cell(1,ns);
+
+    if interior
+        interior_factor = -1;
+    else
+        interior_factor = 1;
+    end
+
     for i=1:ns
-        u0=pars.u0(i);
         if ~pars.oblate(i)
-            normal=1./sqrt((u0^2-1).*(u0^2-v.^2)).*[u0.*sqrt(u0.^2-1).*sqrt(1-v.^2).*cos(phi) u0.*sqrt(u0.^2-1).*sqrt(1-v.^2).*sin(phi) (u0.^2-1).*v];
-            Yi = prolate_spheroid_shape(Xeval_p,pars.u0(i),pars.a(i),'cart');
+            Yi = prolate_spheroid_shape(Xeval_p, pars.u0(i), pars.a(i), 'cart');
         else
-            normal=1./sqrt((u0^2+1).*(u0^2+v.^2)).*[u0.*sqrt(u0.^2+1).*sqrt(1-v.^2).*cos(phi) u0.*sqrt(u0.^2+1).*sqrt(1-v.^2).*sin(phi) (u0.^2+1).*v];
-            Yi = oblate_spheroid_shape(Xeval_p,pars.u0(i),pars.a(i),'cart');
+            Yi = oblate_spheroid_shape(Xeval_p, pars.u0(i), pars.a(i), 'cart');
         end
-        Xcell{i} = Yi + target_distances(i).*normal;
+        Xcell{i} = Yi + interior_factor * target_distances(i).*get_norm_vecs(Xeval_p, pars.u0(i), pars.oblate(i));
     end
     Xeval = pars.set_X_targets(Xcell);
 
@@ -214,32 +226,36 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
         title('spheroids and target points')
     end
     
-    if ~neumann
-        if useS
-            C = S_scale.*spheroidalMatVec(pars,'SL',Xeval);
-        else
-            C=zeros(size(Xeval,1),1);
-            for i=1:ns
-            
-                if ~pars.oblate(i)
-                    Yi = prolate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
-                else
-                    Yi = oblate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
+    %%% Now, compute the solution.
+    if ~neumann % Dirichlet problem
+        if interior % Interior problem
+            soln = spheroidalMatVec(pars,'DL',Xeval);
+        else % Exterior problem
+            if useS
+                C = S_scale.*spheroidalMatVec(pars,'SL',Xeval);
+            else
+                C=zeros(size(Xeval,1),1);
+                for i=1:ns
+                
+                    if ~pars.oblate(i)
+                        Yi = prolate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
+                    else
+                        Yi = oblate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
+                    end
+                    ci=c(i,:);
+                    
+                    % Completion matrix operator: sum of 1/||x-c_i|| * integral of each sigma over
+                    % respective spheroid surface
+                    Sns = SurfaceSph(Yi(:));
+                    sigmaSurfInt = integrateOverS(Sns,sigma(:,:,i));
+                
+                    RXeval = vecnorm(Xeval-repmat(ci,size(Xeval,1),1),2,2);
+                    
+                    C = C + sigmaSurfInt./RXeval;
                 end
-                ci=c(i,:);
-                
-                % Completion matrix operator: sum of 1/||x-c_i|| * integral of each sigma over
-                % respective spheroid surface
-                Sns = SurfaceSph(Yi(:));
-                sigmaSurfInt = integrateOverS(Sns,sigma(:,:,i));
-            
-                RXeval = vecnorm(Xeval-repmat(ci,size(Xeval,1),1),2,2);
-                
-                C = C+ sigmaSurfInt./RXeval;
             end
+            soln = spheroidalMatVec(pars,'DL',Xeval) + C;
         end
-
-        soln=spheroidalMatVec(pars,'DL',Xeval) + C;
     else
         if FIRST_KIND_FLAG
             soln = spheroidalMatVec(pars,'DL',Xeval);
@@ -248,14 +264,50 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
         end
     end
 
-    truesoln=PtChargePotential(ptch,Xptch,Xeval);
+    %%% Finally, we compare our computed solutions to the true solutions.
+    truesoln = PtChargePotential(ptch,Xptch,Xeval);
     fprintf('p=%d: DL comparison = %.6e\n',p, norm(truesoln - soln) ./ norm(soln)); 
 
     %%% Compare flux solution evaluated away from the surface
     trueflux=PtChargeFlux(ptch, Xptch, Xeval, NrY);
     fluxsoln = spheroidalMatVec(pars, 'DP', Xeval, NrY);
 
-    fprintf('p=%d: matvec comparison -- relative error = %.6e\n',p, norm(trueflux-fluxsoln) / norm(trueflux));
+    % For exterior Dirichlet problems, we must account for the completion 
+    % term.
+    if ~interior && ~neumann % Exterior Dirichlet
+        completion_flux = zeros(size(Xeval,1), 1);
+        c = pars.centers; % Get spheroid centers
+    
+        for i=1:ns
+            % 1. Get the geometry for the i-th spheroid to integrate sigma
+            if ~pars.oblate(i)
+                Yi = prolate_spheroid_shape(p, pars.u0(i), pars.a(i), 'cart');
+            else
+                Yi = oblate_spheroid_shape(p, pars.u0(i), pars.a(i), 'cart');
+            end
+            Sns = SurfaceSph(Yi(:));
+    
+            % 2. Calculate the total charge Qi on the i-th spheroid
+            Qi = integrateOverS(Sns, sigma(:,:,i));
+            
+            % 3. Calculate the flux contribution from this charge at all target points
+            ci = c(i,:);
+            r_vec = Xeval - ci; % Vectors from center to each target point
+            r_norm = vecnorm(r_vec, 2, 2); % Distances ||x - c_i||
+            
+            % E-field dot normal: (  (x-ci)/||x-ci||^3 ) . n_x
+            E_dot_n = dot(r_vec, NrY, 2) ./ (r_norm.^3);
+            
+            % Add the contribution from this spheroid's completion charge
+            completion_flux = completion_flux + Qi * E_dot_n;
+        end
+        
+        % Add the completion flux to the total computed flux (accounting 
+        % for the sign change due to the gradient).
+        fluxsoln = fluxsoln - completion_flux;
+    end
+
+    fprintf('p=%d: DP comparison -- relative error = %.6e\n',p, norm(trueflux-fluxsoln) / norm(trueflux));
 end
 
 function pcp = PtChargePotential(ptch,Xptch,Y)
@@ -275,8 +327,6 @@ function pcp = PtChargePotential(ptch,Xptch,Y)
     pcp=1./(4*pi*Rptch)*ptch; 
 end
 
-
-
 function flux=PtChargeFlux(ptch,Xptch,Y,NrY)
     M=length(ptch);
     np=length(Y);
@@ -290,4 +340,40 @@ function flux=PtChargeFlux(ptch,Xptch,Y,NrY)
         EdotN(:,i)=dot(NrY,r./Rptch(:,i),2);
     end
     flux=EdotN./(4*pi*Rptch.^2)*ptch;
+end
+
+function unit_vectors = generate_random_unit_vec(num_vectors, vector_length)
+    unit_vectors = zeros(num_vectors, vector_length);
+    for i=1:num_vectors
+        random_vector = randn(1, vector_length);
+        unit_vectors(i,:) = random_vector / norm(random_vector);
+    end
+end
+
+function CM = calculate_completion_term(pars, Y, ns, useS)
+    p = pars.p; np = 2*p*(p + 1);
+    if useS
+        CM = S_scale.*spheroidalMatVecKernel(pars,'SL',p);
+    else
+        CM = [];
+        [~, gwt]=g_grid(p+1);
+        wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
+        wt = wt(:)';
+        for i=1:ns
+            if ~pars.oblate(i)
+                Yi = prolate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
+            else
+                Yi = oblate_spheroid_shape(p,pars.u0(i),pars.a(i),'cart');
+            end
+            ci = pars.centers(i,:);
+            
+            % Completion matrix operator: sum of 1/||x-c_i|| * integral of each sigma over
+            % respective spheroid surface
+            Sns = SurfaceSph(Yi(:));
+            W = Sns.geoProp.W;
+        
+            RY = vecnorm(Y-repmat(ci,np*ns,1),2,2);
+            CM = [CM (1./RY)*(W'.*wt)];
+        end
+    end
 end

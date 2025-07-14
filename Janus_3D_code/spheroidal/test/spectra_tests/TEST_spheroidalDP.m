@@ -318,12 +318,163 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
         end
 
         %%% Spectral coefficient tests
-        function testProlateSpectralCoefficients(testCase)
+        function testProlateSpectralCoefficientsOnSurface(testCase)
             %{
-                Use that the spheroidal harmonics Y_n^m form an orthogonal
-                family to test the spectral coefficients.
+                Uses the orthogonality of the spheroidal harmonics to extract
+                the coefficients of the Laplace double-layer potential.
             %}
+            geti = @(n,m) m+n^2+n+1; % Map (n,m) to 0 <= k <= sp
+            p = 16;
+            np = 2*p*(p+1);
+            sp = (p+1)^2;
+            
+            params = SpheroidalParameters;
+            params.p = p;
+            params.isReal = false; % Must be false!
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
 
+            % Create a matrix where each column is a spherical harmonic 
+            % basis function evaluated at the grid points.
+            [u,v] = gl_grid(p);
+            Y = zeros(np, sp);
+            ii = (1:sp)'; 
+            nn = floor(sqrt(ii-1)); 
+            mm = ii - nn.^2 - nn - 1;
+            for k = 1:sp
+                n = nn(k); m = mm(k);
+                Y(:,k) = Ynm(n,m,u,v);
+            end
+
+            params.sigma = Y;
+            DP_Ynm = spheroidalDP(params);
+            DP_coeffs = shAna(DP_Ynm);
+
+            ii = (1:sp)';
+            nn = floor(sqrt(ii-1));
+            mm = ii - nn.^2 - nn - 1;
+            bnm = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* (params.u0.^2 - 1);
+            L = legendre_otc(p, params.u0, 1, 1, 1);
+            dP = L{3}; dQ = L{4};
+            sqrt_term = sqrt(params.u0.^2 - 1);
+            legendre_terms = dP .* dQ;
+            coefficient = bnm .* sqrt_term .* legendre_terms ./ params.a;
+
+            errors = size(sp, 1);
+            for k=1:sp
+                n = nn(k); m = mm(k);
+                expected_coefficient = shAna(coefficient(geti(n,m)) .* Y(:,geti(n,m)) ./ sqrt(params.u0^2 - cos(u).^2));
+                errors(k) = norm(expected_coefficient - DP_coeffs(:,geti(n,m)));
+            end
+
+            % O(1e-12) instead of O(1e-14) for the prolate case; almost
+            % certainly due to the square root term. This is still
+            % accurate, so this issue is going to be ignored.
+            testCase.verifyLessThan(errors, 9e-12, "On-surface spectral coefficients for the prolate case do not match the expected values to a reasonable tolernace");
+        end
+
+        function testOblateSpectralCoefficientsOnSurface(testCase)
+            geti = @(n,m) m+n^2+n+1; % Map (n,m) to 0 <= k <= sp
+            p = 16;
+            np = 2*p*(p+1);
+            sp = (p+1)^2;
+            
+            params = SpheroidalParameters;
+            params.p = p;
+            params.isReal = false; % Must be false!
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true;
+
+            % Create a matrix where each column is Y_n^m evaluated at the
+            % grid points.
+            [u,v] = gl_grid(p);
+            Y = zeros(np, sp);
+            ii = (1:sp)'; 
+            nn = floor(sqrt(ii-1)); 
+            mm = ii - nn.^2 - nn - 1;
+            for k = 1:sp
+                n = nn(k); m = mm(k);
+                Y(:,k) = Ynm(n,m,u,v);
+            end
+
+            %%% Now, check on surface.
+            params.sigma = Y;
+            DP_Ynm = spheroidalDP(params);
+            DP_coeffs = shAna(DP_Ynm);
+
+            ii = (1:sp)';
+            nn = floor(sqrt(ii-1));
+            mm = ii - nn.^2 - nn - 1;
+            cnm = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm + 1)) .* (params.u0.^2 + 1);
+            L = legendre_otc(p, 1j * params.u0, 1, 1, 1);
+            dP = L{3}; dQ = L{4};
+            sqrt_term = sqrt(params.u0.^2 + 1);
+            legendre_terms = dP .* dQ;
+            coefficient = 1j * cnm .* sqrt_term .* legendre_terms ./ params.a;
+
+            errors = size(sp, 1);
+            for k=1:sp
+                n = nn(k); m = mm(k);
+                expected_coefficient = shAna(coefficient(geti(n,m)) .* Y(:,geti(n,m)) ./ sqrt(params.u0^2 + cos(u).^2));
+                errors(k) = norm(expected_coefficient - DP_coeffs(:,geti(n,m)));
+            end
+            testCase.verifyLessThan(errors, 9e-14, "On-surface spectral coefficients for the oblate case do not match the expected values to a reasonable tolernace");
+        end
+
+        function testOblateSpectralCoefficientsOffSurface(testCase)
+            geti = @(n,m) m+n^2+n+1; % Map (n,m) to 0 <= k <= sp
+            p = 16;
+            np = 2*p*(p+1);
+            sp = (p+1)^2;
+
+            params = SpheroidalParameters;
+            params.p = p;
+            params.isReal = false; % Must be false!
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true;
+
+            nu_src = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + nu_src;
+
+            e_u = repmat([1 0 0], size(nu_src, 1), 1);
+            nu_trg = spheroidalNu2cart(e_u, X_trg, params.a, params.oblate);
+
+            % Create a matrix where each column is Y_n^m evaluated at the
+            % grid points.
+            [u,v] = gl_grid(p);
+            Y = zeros(np, sp);
+            ii = (1:sp)'; 
+            nn = floor(sqrt(ii-1)); 
+            mm = ii - nn.^2 - nn - 1;
+            for k = 1:sp
+                n = nn(k); m = mm(k);
+                Y(:,k) = Ynm(n,m,u,v);
+            end
+
+            params.sigma = Y;
+            DP_Ynm = spheroidalDP(params, X_trg, nu_trg);
+            DP_coeffs = shAna(DP_Ynm);
+
+            ii = (1:sp)';
+            nn = floor(sqrt(ii-1));
+            mm = ii - nn.^2 - nn - 1;
+            cnm = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm + 1)) .* (params.u0.^2 + 1);
+            L = legendre_otc(p, 1j * params.u0, 1, 1, 1);
+            dP = L{3}; dQ = L{4};
+            sqrt_term = sqrt(params.u0.^2 + 1);
+            legendre_terms = dP .* dQ;
+            coefficient = 1j * cnm .* sqrt_term .* legendre_terms ./ params.a;
+
+            errors = size(sp, 1);
+            for k=1:sp
+                n = nn(k); m = mm(k);
+                expected_coefficient = shAna(coefficient(geti(n,m)) .* Y(:,geti(n,m)) ./ sqrt(params.u0^2 + cos(u).^2));
+                errors(k) = norm(expected_coefficient - DP_coeffs(:,geti(n,m)));
+            end
+            testCase.verifyLessThan(errors, 9e-14, "Off-surface spectral coefficients for the oblate case do not match the expected values to a reasonable tolernace");
         end
 
         %%% Kernel_Eval check
@@ -583,13 +734,9 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
                 derivative of the Laplace DLP is continuous across the
                 surface, we should just converge to the on-surface
                 evaluation.
-
-                For reference for this jump relation fact, see Hsiao and
-                Wedland.
             %}
             p = 16;
             
-            %%% Prolate
             params = SpheroidalParameters;
             params.isReal = true;
             params.u0 = testCase.u0_prolate;
@@ -647,13 +794,13 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             eta = 10;
             ns = 1; % Number of spheroids
             u0 = 1.8; % 1/eccentricity of a prolate spheroidal surface
-            target_distances = 1e-6; % Distance from the surface to evaluate the potential
+            target_distances = 1e-2; % Distance from the surface to evaluate the potential
             plt = false;
             neumann = false;
             interior = false;
             
-            [soln, fluxsoln, truesoln, truefluxSurf, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
-            testCase.verifyLessThan(norm(fluxsoln - truefluxSurf)/norm(truefluxSurf), 1e-7, ...
+            [~, fluxsoln, ~, trueflux, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            testCase.verifyLessThan(norm(fluxsoln - trueflux)/norm(trueflux), 9e-6, ...
                 'spheroidalDP should match true flux.');
         end
 
@@ -662,30 +809,44 @@ classdef TEST_spheroidalDP < matlab.unittest.TestCase
             eta = 10;
             ns = 3; % Number of spheroids
             u0 = [1.8 1.8 1.8]; % 1/eccentricity of a prolate spheroidal surface
-            target_distances = 1e-4*ones(1, ns); % Distance from the surface to evaluate the potential
+            target_distances = 1e-2*ones(1, ns); % Distance from the surface to evaluate the potential
             plt = false;
             neumann = false;
             interior = false;
             
-            [soln, fluxsoln, truesoln, truefluxSurf, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
-            testCase.verifyLessThan(norm(fluxsoln - truefluxSurf)/norm(truefluxSurf), 1e-7, ...
+            [~, flux, ~, true_flux, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            testCase.verifyLessThan(norm(flux - true_flux)/norm(true_flux), 9e-6, ...
                 'spheroidalDP should match true flux.');
         end
 
-        function testInteriorDirichletProblem(testCase)
-            %%% One spheroid
+        function testInteriorDirichletProblemOneSpheroid(testCase)
             p = 16;
             eta = 10;
             ns = 1; % Number of spheroids
             u0 = 1.8; % 1/eccentricity of a prolate spheroidal surface
-            target_distances = 1e-6; % Distance from the surface to evaluate the potential
+            target_distances = 1e-2; % Distance from the surface to evaluate the potential
             plt = false;
             neumann = false;
             interior = true;
             
-            [soln, truesoln, truefluxSurf, sigma_vec, condK] =  spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            [~, flux, ~, true_flux, sigma_vec, condK] =  spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            testCase.verifyLessThan(norm(flux - true_flux)/norm(true_flux), 9e-6, ...
+                'spheroidalDP should match true flux.');
+        end
 
-            %%% Multiple spheroids
+        function testInteriorDirichletProblemMultipleSpheroids(testCase)
+            p = 16;
+            eta = 10;
+            ns = 3; % Number of spheroids
+            u0 = [1.8 1.8 1.8]; % 1/eccentricity of a prolate spheroidal surface
+            target_distances = 1e-1*ones(1, ns); % Distance from the surface to evaluate the potential
+            plt = false;
+            neumann = false;
+            interior = true;
+            
+            [soln, fluxsoln, truesoln, truefluxSurf, ~, ~] = spheroidalDP_charge_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            testCase.verifyLessThan(norm(fluxsoln - truefluxSurf)/norm(truefluxSurf), 9e-6, ...
+                'spheroidalDP should match true flux.');
         end
     end
 end

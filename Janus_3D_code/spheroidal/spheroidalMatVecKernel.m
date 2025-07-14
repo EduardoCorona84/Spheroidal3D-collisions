@@ -1,4 +1,4 @@
-function M = spheroidalMatVecKernel(params,potential,p,gradSP)
+function M = spheroidalMatVecKernel(params,potential,p)
 
     if isempty(params.u0)
         error("No surface parameter u_0 given")
@@ -54,6 +54,8 @@ function M = spheroidalMatVecKernel(params,potential,p,gradSP)
         LP = spheroidalSL(IDparams);
     elseif strcmp(potential, 'SP')
         LP = spheroidalSP(IDparams);
+    elseif strcmp(potential, 'DP')
+        LP = spheroidalDP(IDparams);
     else
         error("invalid potential given. Use 'DL'/'SL' for double/single layer")
     end
@@ -70,21 +72,8 @@ function M = spheroidalMatVecKernel(params,potential,p,gradSP)
         for i=1:ns
             % Get target coordinates relative to self (particle i)
             [X,~]=IDparams.get_X(i);
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % get Nu from each target X.
-            % Nu=zeros(size(X));
-            % figure;
+
             [Nu,~]=IDparams.get_Norm_rot(p,i);
-            % quiver3(X(:,1),X(:,2),X(:,3),Nu(:,1),Nu(:,2),Nu(:,3)); hold on;
-            % for j=1:ns-1
-            %     xind=(j-1)*np+1;
-            %     quiver3(X(xind:xind+np-1,1),X(xind:xind+np-1,2),X(xind:xind+np-1,3),Nu(xind:xind+np-1,1),Nu(xind:xind+np-1,2),Nu(xind:xind+np-1,3)); hold on;
-            %     surfsph=SurfaceSph(X(xind:xind+np-1,:));
-            %     Nu(xind:xind+np-1,:) = reshape(surfsph.geoProp.nor.to_array,[],3);
-            %     quiver3(X(xind:xind+np-1,1),X(xind:xind+np-1,2),X(xind:xind+np-1,3),Nu(xind:xind+np-1,1),Nu(xind:xind+np-1,2),Nu(xind:xind+np-1,3)); hold on;
-            % end
-            % hold off;
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
             ind=[1:i-1 i+1:ns];
             sep = separation(i,ind);
@@ -105,7 +94,9 @@ function M = spheroidalMatVecKernel(params,potential,p,gradSP)
             elseif strcmp(potential, 'SL')
                 LP_spectral_cell = spheroidalSL(IDparams, X_spectral);
             elseif strcmp(potential, 'SP')
-                LP_spectral_cell = spheroidalSP(IDparams, X_spectral,Nu_spectral);
+                LP_spectral_cell = spheroidalSP(IDparams, X_spectral, Nu_spectral);
+            elseif strcmp(potential, 'DP')
+                LP_spectral_cell = spheroidalDP(IDparams, X_spectral, Nu_spectral);
             end
     
             LP_smooth=[];
@@ -125,6 +116,8 @@ function M = spheroidalMatVecKernel(params,potential,p,gradSP)
                 
                 if strcmp(potential, 'SP')
                     pot='dSL_L_3D';
+                elseif strcmp(potential, 'DP')
+                    pot='dDL_L_3D';
                 else
                     pot=strcat(potential,'_L_3D');
                 end
@@ -137,11 +130,8 @@ function M = spheroidalMatVecKernel(params,potential,p,gradSP)
                 if strcmp(potential,'DL')
                     Nrns = reshape(Sns.geoProp.nor.to_array,[],3);
                     KEparams.nor = Nrns; 
-                elseif strcmp(potential,'SP')
-                    % Strg1=SurfaceSph(X_smooth);
-                    % Nrns = reshape(Strg1.geoProp.nor.to_array,[],3);
-                    Nrns = Nu_smooth;
-                    KEparams.nor = Nrns; 
+                elseif strcmp(potential,'SP') || strcmp(potential, 'DP')
+                    KEparams.nor = Nu_smooth; 
                 end
                 KEparams.X = Xself;
                 KEparams.W2 = Wns.';

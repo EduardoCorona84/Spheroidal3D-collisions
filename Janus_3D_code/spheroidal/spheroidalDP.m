@@ -457,15 +457,17 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum(p, u0, a, oblate)
     if oblate
         anm = anm_base .* -1 .* (u0.^2 + 1); % cnm
         L = legendre_otc(p,1j.*u0,1,1,1);
+        sqrt_term = 1j * sqrt(u0^2 + 1);
     else
         anm = anm_base .* (u0.^2 - 1); % bnm
         L = legendre_otc(p,u0,1,1,1);
+        sqrt_term = sqrt(u0^2 - 1);
     end
 
     P = L{1}; Q = L{2}; dP = L{3}; dQ = L{4};
 
     % Coefficient of D' of surface
-    lambda_nm_prime = anm.' .* sqrt(u0.^2 - 1) .* dP.' .* dQ.' ./ a;
+    lambda_nm_prime = anm.' .* sqrt_term .* dP.' .* dQ.' ./ a;
     lambda_nm = anm .* ((dQ .* P + dP .* Q) ./ 2) ./ a;
     lambda_n1m = lambda_nm;
 end

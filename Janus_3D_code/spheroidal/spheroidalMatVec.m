@@ -221,16 +221,21 @@ elseif nargin > 2
             wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
             wt = wt(:);
             Wns = Sns.geoProp.W; Wns= Wns.*wt;
+
+            %%% Normal vector handling
             if strcmp(potential,'SP')
-                Nrns = Nu_t(sep(:,i)==1,:,i);
+                target_norm_vecs = Nu_t(sep(:,i)==1,:,i);
+                KEparams.nor = target_norm_vecs; 
             elseif strcmp(potential, 'DP')
+                source_norm_vecs = reshape(Sns.geoProp.nor.to_array,[],3);
                 target_norm_vecs = Nu_t(sep(:,i)==1,:);
+                KEparams.nor = source_norm_vecs;
                 KEparams.targnor = target_norm_vecs;
             else
                 Nrns = reshape(Sns.geoProp.nor.to_array,[],3);
+                KEparams.nor = Nrns;
             end
             KEparams.X = Xself;
-            KEparams.nor = Nrns; 
             KEparams.W2 = Wns.';
             
             LP_smooth = Kernel_Eval(X_smooth,Xself,KEparams)*sigma(:,:,i);
