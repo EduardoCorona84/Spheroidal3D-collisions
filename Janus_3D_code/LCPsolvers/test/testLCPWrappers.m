@@ -1,4 +1,4 @@
-function testLCPWrappers()
+function results = testLCPWrappers()
 try %#ok<TRYNC>
     rng('default')
 end
@@ -9,25 +9,28 @@ if contains(mfilePath,'LiveEditorEvaluationHelper')
 end
 [dirname, ~,~] = fileparts(mfilePath);
 addpath(genpath(fileparts(dirname)))
-fname = 'amphi_5x5x5';
+fname = 'amphi_4x4x4';
 load([fname '.mat'], ...
     'A_list', 'b_list');
 opts = struct( ...
     'max_iter',100, ...
     'tol_rel',1e-12, ...
     'tol_abs',1e-12, ... 
-    'stepSizeRule', 'bb', ...
+    'kappa', struct('init','uniform',...
+        'fwd','uniform',...
+        'bwd','uniform'),... 
     'r', 20, ...
-    'qnUpdate', 'bfgs' ...
+    'qnUpdate', 'bfgs', ...
+    'storeIts', true...
 );
 MC = length(A_list);
 
 algoNames = {'CVX', 'PGD', 'L-BFGS-B', 'Projected QuasiNewton (BFGS)', ...
-    'Proximal QuasiNewton (BFGS)',...
+    'zeroSR1', 'Proximal QuasiNewton (BFGS)', 'Projected QuasiNewton Nic'...
     % 'Proximal zeroSR1', 'Proximal QuasiNewton (SR1)'...
     };
 algoHndls = {@callCVX, @projectedGradientDescent, @L_BFGS_B, @projectedQuasiNewton, ...
-    @proxQuasiNewton};
+    @zeroSr1_nic, @proxQuasiNewton, @projectQuasiNewton_nic};
 numAlgo = numel(algoNames);
 assert(numel(algoNames) == numel(algoHndls));
 results = repmat(...
@@ -37,12 +40,13 @@ results = repmat(...
         'iters', zeros(MC,1), ...
         'kkt', zeros(MC,1), ...
         'matVecs', zeros(MC,1), ...
-        'errHist', {cell(MC,1)} ...
+        'errHist', {cell(MC,1)}, ...
+        'iterHist', {cell(MC,1)} ...
     ), [1,numAlgo] ...
 );
 mcGood = [];
-for mc = 50:MC
-    disp(['mc = ' num2str(mc)])
+for mc = 50:100
+    % disp(['mc = ' num2str(mc)])
     A = A_list{mc};
     Acnt = @(x) Acounter(x,A);
     b = b_list{mc};
@@ -50,16 +54,22 @@ for mc = 50:MC
     x0 = zeros(n,1);
     fg = @(x) objGrad(x, Acnt, b);
     opts.errFcn = {
-        @(x) abs_kkt(x, A, b), 
-        @(x) rel_kkt(x, A, b)
+        @(x) abs_kkt(x, A, b); 
+        @(x) rel_kkt(x, A, b);
+        @(x) Acnt('cnt')
     };
+    opts.A = Acnt;
     mcGoodFlag = true;
     for ixAlgo = 1:numAlgo
         name = algoNames{ixAlgo};
+        this_opts = opts;
+        if strcmpi(name, 'pgd')
+            this_opts.kappa.fwd = 'bb1';
+        end
         algo = algoHndls{ixAlgo};
         tic
         % try 
-            [x, info] = algo(fg, x0, opts);
+            [x, info] = algo(fg, x0, this_opts);
         % catch
         %     if strcmpi(name, 'cvx')
         %         mcGoodFlag = false;
@@ -72,6 +82,7 @@ for mc = 50:MC
         results(ixAlgo).kkt(mc) = info.kkt;
         results(ixAlgo).matVecs(mc) = Acnt('reset');
         results(ixAlgo).errHist{mc} = info.errHist;
+        results(ixAlgo).iterHist{mc} = info.iterHist;
         if strcmpi(name, 'cvx')
             results(ixAlgo).matVecs(mc) = NaN;
             opts.errFcn{end+1} = @(xprime) rel_iter(xprime,x); 
@@ -85,22 +96,22 @@ for mc = 50:MC
         end
     end
     if mcGoodFlag
-        mcGood = [mcGood mc];%#ok<AGROW>
-        if results(2).iters(mc) < results(end).iters(mc)
-            figure() 
-            for ixAlgo = 2:numAlgo
-                name = algoNames{ixAlgo};
-                
-                absKKT = results(ixAlgo).errHist{mc}(:,1);
-                iter = numel(absKKT)-1;
-                semilogy(0:iter, absKKT + 1e-13, 'LineWidth', 5)
-                  hold on
-            end
-            legend(algoNames{2:end})
-            xlabel('iterations')
-            ylabel('kkt')
-            title(['Iterations for MC ' num2str(mc)])
-        end
+        mcGood = [mcGood mc]; %#ok<AGROW>
+        % if results(2).iters(mc) < results(end).iters(mc)
+        %     figure() 
+        %     for ixAlgo = 2:numAlgo
+        %         name = algoNames{ixAlgo};
+        % 
+        %         absKKT = results(ixAlgo).errHist{mc}(:,1);
+        %         iter = numel(absKKT)-1;
+        %         semilogy(0:iter, absKKT + 1e-13, 'LineWidth', 5)
+        %           hold on
+        %     end
+        %     legend(algoNames{2:end})
+        %     xlabel('iterations')
+        %     ylabel('kkt')
+        %     title(['Iterations for MC ' num2str(mc)])
+        % end
     end
 end
 %%
@@ -114,9 +125,11 @@ for ixAlgo = 1:numAlgo
     iters = results(ixAlgo).iters(mcGood);
     matVec = results(ixAlgo).matVecs(mcGood);
     kkt = results(ixAlgo).kkt(mcGood);
-    fprintf('%s | %.1e s | %.2g\t| %.2g | %.2g\n', ...
+    fprintf('%s | %.1e s | %.3g\t| %.3g | %.2g\n', ...
         name, mean(time), mean(matVec), mean(iters), mean(kkt));
 end
+iterationBarChart
+save(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/' fname '.mat'], 'results')
 %% 
 % f = figure();
 % hold on
@@ -146,7 +159,7 @@ if isempty(matVecCnt)
 end
 
 if ischar(x) 
-    if strcmpi(x, 'matVecCnt')
+    if strcmpi(x, 'cnt')
         Ax = matVecCnt; 
         return 
     elseif strcmpi(x, 'reset')
@@ -187,7 +200,7 @@ cvx_end
 info.iter = NaN;
 info.kkt = NaN;
 info.errHist = NaN;
-
+info.iterHist = NaN;
 end
 
 % function [f,g] = objGradWithHist(fg, x, errFcn)

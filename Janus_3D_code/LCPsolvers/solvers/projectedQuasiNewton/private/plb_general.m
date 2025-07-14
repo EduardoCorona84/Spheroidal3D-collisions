@@ -61,7 +61,7 @@ out.srch = -out.grad;
 out.iter = 1;
 %
 if isfield(options, 'errFcn')
-    if ishandle(options.errFcn)
+    if isa(options.errFcn,'function_handle')
         out.errHist = zeros(options.maxit+1,1);
         out.errHist(1) = options.errFcn(x0);
         out.errHist(2) = options.errFcn(x0);
@@ -123,7 +123,7 @@ while true
     [out.obj, out.grad] = fgFcn(out.x);
     % Nic adding:
     if isfield(options, 'errFcn')
-        if ishandle(options.errFcn)
+        if isa(options.errFcn,'function_handle')
             out.errHist(out.iter+1) = options.errFcn(out.x);
         elseif iscell(options.errFcn)
             for i = 1:numel(options.errFcn)

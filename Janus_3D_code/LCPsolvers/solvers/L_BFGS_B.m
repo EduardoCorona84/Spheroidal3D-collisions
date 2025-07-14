@@ -54,6 +54,6 @@ end
 
 info.flag = 6;
 info.msg = 'local minima';
-
+info.iterHist = NaN;
 
 end
