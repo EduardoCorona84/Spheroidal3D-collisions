@@ -49,7 +49,7 @@ else
 end
 sp=(pmax+1)^2; %number of legendre fxns for order-p expansion
 ii = (1:sp)'; nn = floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
-geti= @(n,m) m+n^2+n+1;
+geti= @(n,m) m+n^2+n+1; % Map (n,m) to 0 <= k <= sp
 
 
 % Calculate P_0^0 from simple formulas
@@ -206,7 +206,7 @@ if Qoption
 end
 %---------------------------------------------------------------------%
 
-% Compute derivatives
+% Compute first derivatives
 %---------------------------------------------------------------------%
 if dPoption | dQoption
     if dPoption
@@ -240,99 +240,138 @@ if dPoption | dQoption
         PQcell{3}=dP;
     end
     if dQoption
-        PQcell{3+dPoption}=dQ; %if calculated dP in index 3, put dQ in index 4
+        PQcell{4}=dQ; %if calculated dP in index 3, put dQ in index 4
     end
 end
 %---------------------------------------------------------------------%
 
 
+% Compute second derivatives.
+% Basically the same code as above, but below is written with the purpose of
+% backwards compatibility with the rest of the codebase.
+% Note that we shall need access to first derivatives for the calculation
+% of the second derivatives.
+if dPoption == 2 | dQoption == 2
+    if dPoption == 2
+        d2P=zeros((p+1)^2,length(u));
+    end
+    if dQoption == 2
+        d2Q=zeros((p+1)^2,length(u));
+    end
 
+    for k=1:(p+1)^2
+        n = nn(k); m = mm(k);
 
+        if dPoption == 2
+            one_minus_x2 = 1 - u.^2;
+            ddPnm_term = 2.*u.*dP(geti(n,m),:) - (n*(n + 1) - m^2./one_minus_x2).*P(geti(n,m),:);
+            ddPnm = ddPnm_term ./ one_minus_x2;
+            d2P(geti(n,m),:) = ddPnm;
+        end
 
+        if dPoption == 2
+            % Alternate evaluation
+        end
+
+        if dQoption == 2
+            one_minus_x2 = 1 - u.^2;
+            ddQnm_term = 2.*u.*dQ(geti(n,m),:) - (n*(n + 1) - m^2./one_minus_x2).*Q(geti(n,m),:);
+            ddQnm = ddQnm_term ./ one_minus_x2;
+            d2Q(geti(n,m),:) = ddQnm;
+        end
+    end
+
+    % Add them to the resulting cell (indices 5 and 6)
+    if dPoption == 2
+        PQcell{5} = d2P;
+    end
+
+    if dQoption == 2
+        PQcell{6} = d2Q;
+    end
 end
-
-
 
 %---------------------------------------------------------------------%
 %---------------------------------------------------------------------%
 % Continued fraction functions
 
 function [H,iters]=cf(n,m,x)
-%Compute the continued fraction that relates Q_n^m with Q_{n-1}^m, to
-%desired tolerance, using Modified Lentz's Method.
+    %Compute the continued fraction that relates Q_n^m with Q_{n-1}^m, to
+    %desired tolerance, using Modified Lentz's Method.
 
-tol=1e-15;
-% max_iters=100000;
-max_iters=1e5;
+    tol=1e-15;
+    % max_iters=100000;
+    max_iters=1e5;
 
 
-tiny=1e-300;
-f0=tiny;
-c0=f0;
-d0=0;
+    tiny=1e-300;
+    f0=tiny;
+    c0=f0;
+    d0=0;
 
-%sprintf('Initial values:')
-%sprintf("f_0=%.6e",f0)
-%sprintf("c_0=%.6e",c0)
-%sprintf("d_0=%.6e",d0)
+    %sprintf('Initial values:')
+    %sprintf("f_0=%.6e",f0)
+    %sprintf("c_0=%.6e",c0)
+    %sprintf("d_0=%.6e",d0)
 
-for k=1:max_iters
-    %sprintf("iteration %d",k-n+1)
+    for k=1:max_iters
+        %sprintf("iteration %d",k-n+1)
 
-    d1=b(n,k,m,x)+a(n,k,m).*d0;
-    if d1==0
-        d1=tiny;
+        d1=b(n,k,m,x)+a(n,k,m).*d0;
+        if d1==0
+            d1=tiny;
+        end
+
+        c1=b(n,k,m,x)+a(n,k,m)./c0;
+        if c1==0
+            c1=tiny;
+        end
+
+    %   sprintf("c_%d=%.6e",k-n+1,c1)
+    %   sprintf("d_%d=%.6e",k-n+1,d1)
+
+        d1=1./d1;
+        delta=c1.*d1;
+        f1=delta.*f0;
+
+    %   sprintf("f_%d=%.6e",k-n+1,f1)
+    %   sprintf("abs(1-delta)=%.6e",abs(1-delta))
+
+        iters=k;
+
+        if abs(delta-1)<tol
+            break
+        end
+
+        if k==max_iters
+            error("Continued fraction algorithm did not converge.")
+        end
+
+        %update values for recursion
+        c0=c1;
+        d0=d1;
+        f0=f1;
+    
     end
-
-    c1=b(n,k,m,x)+a(n,k,m)./c0;
-    if c1==0
-        c1=tiny;
-    end
-
-%   sprintf("c_%d=%.6e",k-n+1,c1)
-%   sprintf("d_%d=%.6e",k-n+1,d1)
-
-    d1=1./d1;
-    delta=c1.*d1;
-    f1=delta.*f0;
-
-%   sprintf("f_%d=%.6e",k-n+1,f1)
-%   sprintf("abs(1-delta)=%.6e",abs(1-delta))
-
-    iters=k;
-
-    if abs(delta-1)<tol
-        break
-    end
-
-    if k==max_iters
-        error("Continued fraction algorithm did not converge.")
-    end
-
-    %update values for recursion
-    c0=c1;
-    d0=d1;
-    f0=f1;
-   
-end
-H=f1;
+    H=f1;
 end
 
 function bj=b(n,j,m,x)
-%b_j(n,m,x) coefficient in recursion relation
-% bj= (2*(n+j-1)+1).*x ./(n+j-1+m);
+    %b_j(n,m,x) coefficient in recursion relation
+    % bj= (2*(n+j-1)+1).*x ./(n+j-1+m);
 
-bj=-(2*(n+j-1)+1).*x ./(n+j-m);
+    bj=-(2*(n+j-1)+1).*x ./(n+j-m);
 end
 
 function aj=a(n,j,m)
-%a_j coefficient in recursion relation
-% if j==1
-%     aj=1;
-% else
-%     aj=-(n+j-1-m)./(n+j-2+m);
-% end
+    %a_j coefficient in recursion relation
+    % if j==1
+    %     aj=1;
+    % else
+    %     aj=-(n+j-1-m)./(n+j-2+m);
+    % end
 
-aj=-(n+j-1+m)./(n+j-m);
+    aj=-(n+j-1+m)./(n+j-m);
 end
 
+end
