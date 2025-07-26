@@ -1,10 +1,10 @@
 clear;clc;
-p=2;
+p=2; % Nic: Change back to 4
 lambda=0.1;
 fname='for_the_love_of_god_local';
 rd=[1];
-n=5;
-Cdst=2.5;
+n=3;
+Cdst=2.5; % NIC: change back to 4
 ep=.3;
 Nt=500;
 dt=.1;

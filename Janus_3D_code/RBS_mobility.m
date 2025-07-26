@@ -14,7 +14,7 @@ denseMV  - (bool) dense vs FMM for far-field
 Nt       - (int)    number of timesteps
 dt       - (double) timestep length
 timedisc - (string) time discretization (euler, trapz,rk4)
-comp     - (bool) compute intermediate quantities FT and VW
+comp     - (bool) compute intermediate quantities FT aznd VW
 lambda   - (double) parameter for modified laplace case
 e_north/e_south - (double) Janus particle relative permittivity 
 parbd - (struct) struct with rigid body parameters:
@@ -858,6 +858,17 @@ den = 10000*(den==0)+den;
 
 end
 
+function [f,g] = objGrad(x,A,b)
+
+Ax = A(x);
+f = 1/2 * dot(x, Ax) + dot(x, b);
+if nargout == 1
+    g = [];
+    return 
+end
+g = Ax + b;
+end
+
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
 persistent A_list b_list save_iter
@@ -934,10 +945,11 @@ end
 
 % Different criteria can be added as needed
 % TODO nic change this back 
-matfree = ~Fparams.denseMV;% || numF+numFS > 1; 
+denseMV = Fparams.denseMV; % || numF+numFS > 1; 
 bkdiag=false; 
 
-if ~matfree
+if denseMV
+    parslv.tol = tol; 
     Bf = (Bk.')*F; 
     %(3) (-0.5I-K)*rho_c
     MNS = -Lapp(TD,Bf)+Lk*Bf;
@@ -946,18 +958,17 @@ if ~matfree
 
     % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
     Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
-else
+    A = @(x) Amat*x;
+else % matfree
     parslv.tol = parslv.coltol; 
     Bf = @(x) (Bk.')*(F*x);
     if bkdiag % this is just preconditioner on the solve 
         S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2));
         IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-        Amat = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+        A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
     else 
-        Amat = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
+        A = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
     end
-    
-    parslv.tol = tol; 
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -981,9 +992,7 @@ bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%LCP solve: (TODO: add different options
-% for APGD / BBPGD / Newton / etc)
-
+%LCP solve
 %LCP params
 max_iter=parslv.colmaxit; 
 tol_rel=parslv.col_tolrel; %1e-6; 
@@ -992,64 +1001,25 @@ profile=1;
 
 x0 = zeros(size(bvec));
 
-
-if matfree
-    switch parslv.colsolver
-        case 'Newton'
-        % solve LCP using minmap Newton (matfree)
-        [lam ,err ,iter, ~, ~, ~] = ...
-        minmap_newton_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );
-        case 'APGD'
-        % solve LCP using Accelerated PGD
-        [lam ,err ,iter, ~, ~, ~] = ...
-        APGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'BBPGD'
-        % solve LCP using Barzilai Borwein PGD
-        [lam ,err ,iter, ~, ~, ~] = ...
-        BBPGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'L-BFGS-B'
-            [lam ,err ,iter, ~, ~, ~] = ...
-        L_BFGS_B_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'P-L-BFGS'
-            [lam ,err ,iter, ~, ~, ~] = ...
-        P_L_BFGS_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'zeroSR1'
-        [lam ,err ,iter, ~, ~, ~] = ...
-        ZERO_SR1_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );   
-        otherwise
-        % solve LCP using Barzilai Borwein PGD
-        [lam ,err ,iter, ~, ~, ~] = ...
-        BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );     
-    end
-else
-    switch parslv.colsolver
-        case 'Newton'
-        % solve LCP using minmap Newton  
-        [lam ,err ,iter, ~, ~, ~] = ...
-        minmap_newton(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );
-        case 'APGD'
-        % solve LCP using Accelerated PGD
-        [lam ,err ,iter, ~, ~, ~] = ...
-        APGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'BBPGD'
-        % solve LCP using Barzilai Borwein PGD
-        [lam ,err ,iter, ~, ~, ~] = ...
-        BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'L-BFGS-B'
-            [lam ,err ,iter, ~, ~, ~] = ...
-        L_BFGS_B(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'P-L-BFGS'
-            [lam ,err ,iter, ~, ~, ~] = ...
-        P_L_BFGS(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-        case 'zeroSR1'
-        [lam ,err ,iter, ~, ~, ~] = ...
-        ZERO_SR1(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );   
-        otherwise
-        % solve LCP using Barzilai Borwein PGD
-        [lam ,err ,iter, ~, ~, ~] = ...
-        BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
-    end
+opts = struct( ...
+    'max_iter', max_iter, ...
+    'tol_rel', tol_rel, ...
+    'tol_abs', tol_abs ...
+);
+fg = @(x) objGrad(x, A, bvec);
+switch parslv.colsolver  
+    case 'BBPGD'
+        [lam, info] = projectedGradientDescent(fg, x0, opts);    
+    case 'L-BFGS-B'
+        [lam, info] = L_BFGS_B(fg, x0, opts); 
+    case 'P-L-BFGS'
+        [lam, info] = projectedQuasiNewton(fg, x0, opts);    
+    case 'proxQuasiNewton'
+        [lam, info] = proxQuasiNewton(fg, x0, opts);
+    otherwise
+        [lam, info] = projectedGradientDescent(fg, x0, opts); 
 end
+
 if saveLCPs
     if length(A_list) >= 100 || endFlag
         mfilePath = mfilename('fullpath');
@@ -1057,7 +1027,7 @@ if saveLCPs
             mfilePath = matlab.desktop.editor.getActiveFilename;
         end
         [mfilePath,~,~] = fileparts(mfilePath);
-        save([mfilePath '/LCPSolvers/test/5x5x5_amphi_data_' num2str(save_iter) '.mat'], ...
+        save([mfilePath '/LCPSolvers/test/3x3x3_amphi_data_' num2str(save_iter) '.mat'], ...
             'A_list', 'b_list')
         A_list = {};
         b_list = {};
@@ -1066,10 +1036,11 @@ if saveLCPs
             save_iter = 1;
         end
     end
+    
     A_list{end+1} = Amat; 
     b_list{end+1} = bvec;
 end
-fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'],err,iter);
+fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
 

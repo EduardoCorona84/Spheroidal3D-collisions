@@ -38,7 +38,11 @@ end
 % KKT violation
 if (options.use_kkt)
    phi = min(out.x, out.grad);
-  if 1/2*dot(phi, phi) <= options.tolk
+   oldphi = min(out.oldx, out.oldgrad);
+   kkt = 1/2*dot(phi,phi) ;
+   oldkkt = 1/2*dot(oldphi,oldphi) ;
+  if ( kkt <= options.tol_absk || ...
+          abs(kkt - oldkkt) / abs(kkt) < options.tol_relk)
     v = 7;
     return;
   end

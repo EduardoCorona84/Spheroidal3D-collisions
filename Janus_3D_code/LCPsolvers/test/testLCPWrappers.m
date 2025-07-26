@@ -1,4 +1,4 @@
-%%
+function results = testLCPWrappers()
 try %#ok<TRYNC>
     rng('default')
 end
@@ -9,133 +9,269 @@ if contains(mfilePath,'LiveEditorEvaluationHelper')
 end
 [dirname, ~,~] = fileparts(mfilePath);
 addpath(genpath(fileparts(dirname)))
-fname = 'bimetallic_3x3x3';
+fname = 'amphi_4x4x4';
 load([fname '.mat'], ...
     'A_list', 'b_list');
-max_iter = 100;
-tol_rel = 1e-6;
-tol_abs = 1e-6;
-profile = false;
+opts = struct( ...
+    'max_iter',100, ...
+    'tol_rel',1e-12, ...
+    'tol_abs',1e-12, ... 
+    'kappa', struct('init','uniform',...
+        'fwd','uniform',...
+        'bwd','uniform'),... 
+    'r', 20, ...
+    'qnUpdate', 'bfgs', ...
+    'storeIts', true...
+);
 MC = length(A_list);
-cvxTime      = zeros(MC,1);
-err_bbpgd    = zeros(MC,1);
-t_bbpgd      = zeros(MC,1);
-iter_bbpgd   = zeros(MC,1);
-err_lbfgsb   = zeros(MC,1);
-t_lbfgsb     = zeros(MC,1);
-iter_lbfgsb  = zeros(MC,1);
-err_plbfgs   = zeros(MC,1);
-t_plbfgs     = zeros(MC,1);
-iter_plbfgs  = zeros(MC,1);
-err_zerosr1  = zeros(MC,1);
-t_zerosr1    = zeros(MC,1);
-iter_zerosr1 = zeros(MC,1);
-err_nic      = zeros(MC,1);
-t_nic        = zeros(MC,1);
-iter_nic     = zeros(MC,1);
-err_pq       = zeros(MC,1);
-t_pq         = zeros(MC,1);
-iter_pq      = zeros(MC,1);
+
+algoNames = {'CVX', 'PGD', 'L-BFGS-B', 'Projected QuasiNewton (BFGS)', ...
+    'zeroSR1', 'Proximal QuasiNewton (BFGS)', 'Projected QuasiNewton Nic'...
+    % 'Proximal zeroSR1', 'Proximal QuasiNewton (SR1)'...
+    };
+algoHndls = {@callCVX, @projectedGradientDescent, @L_BFGS_B, @projectedQuasiNewton, ...
+    @zeroSr1_nic, @proxQuasiNewton, @projectQuasiNewton_nic};
+numAlgo = numel(algoNames);
+assert(numel(algoNames) == numel(algoHndls));
+results = repmat(...
+    struct( ...
+        'algo', '',...
+        'time',   zeros(MC,1), ...
+        'iters', zeros(MC,1), ...
+        'kkt', zeros(MC,1), ...
+        'matVecs', zeros(MC,1), ...
+        'errHist', {cell(MC,1)}, ...
+        'iterHist', {cell(MC,1)} ...
+    ), [1,numAlgo] ...
+);
 mcGood = [];
-for mc = 1:MC
-    disp(['mc = ' num2str(mc)])
-    Amat = A_list{mc};
-    bvec = b_list{mc};
-    %% CVX
-    N = size(Amat,2);
-    x0 = zeros(N,1);
-    tic()
-    try
-        cvx_begin quiet
-                variable xRef(N)
-                minimize 1/2*dot(xRef, Amat*xRef) + dot(xRef,bvec) 
-                subject to 
-                0 <= xRef
-        cvx_end 
-        cvxTime(mc) = toc();
-    catch 
-        warning('cvx failed probably for negative definiteness of Amat')
-        continue
+for mc = 50:100
+    % disp(['mc = ' num2str(mc)])
+    A = A_list{mc};
+    Acnt = @(x) Acounter(x,A);
+    b = b_list{mc};
+    n = size(A,2);
+    x0 = zeros(n,1);
+    fg = @(x) objGrad(x, Acnt, b);
+    opts.errFcn = {
+        @(x) abs_kkt(x, A, b); 
+        @(x) rel_kkt(x, A, b);
+        @(x) Acnt('cnt')
+    };
+    opts.A = Acnt;
+    mcGoodFlag = true;
+    for ixAlgo = 1:numAlgo
+        name = algoNames{ixAlgo};
+        this_opts = opts;
+        if strcmpi(name, 'pgd')
+            this_opts.kappa.fwd = 'bb1';
+        end
+        algo = algoHndls{ixAlgo};
+        tic
+        % try 
+            [x, info] = algo(fg, x0, this_opts);
+        % catch
+        %     if strcmpi(name, 'cvx')
+        %         mcGoodFlag = false;
+        %         break
+        %     end
+        % end
+        results(ixAlgo).name = name;
+        results(ixAlgo).time(mc) = toc();
+        results(ixAlgo).iters(mc) = info.iter;
+        results(ixAlgo).kkt(mc) = info.kkt;
+        results(ixAlgo).matVecs(mc) = Acnt('reset');
+        results(ixAlgo).errHist{mc} = info.errHist;
+        results(ixAlgo).iterHist{mc} = info.iterHist;
+        if strcmpi(name, 'cvx')
+            results(ixAlgo).matVecs(mc) = NaN;
+            opts.errFcn{end+1} = @(xprime) rel_iter(xprime,x); 
+            opts.errFcn{end+1} = @(xprime) abs_iter(xprime,x); 
+        end
+        for ixMetric = 1:numel(opts.errFcn)
+            hndl = opts.errFcn{ixMetric};
+            try %#ok<TRYNC>
+                hndl('reset');
+            end
+        end
     end
-    
-    mcGood = [mcGood mc]; %#ok<AGROW>
-    nrmXref = norm(xRef);
-    errFcn  = @(x) norm( x - xRef )/nrmXref;
-    
-    %% 'BBPGD'
-    tic
-    [x_bbpgd, ~ ,iter_bbpgd(mc), ~, ~, ~] = ...
-    BBPGD(Amat, bvec, x0, max_iter, tol_rel, tol_abs, profile );    
-    t_bbpgd(mc) = toc;
-    err_bbpgd(mc) = norm(x_bbpgd - xRef) / norm(xRef);
-    %% 'L-BFGS-B'
-    tic
-    [x_lbfgsb, ~ ,iter_lbfgsb(mc), ~, ~, ~] = ...
-    L_BFGS_B(Amat, bvec, x0, max_iter, tol_rel, tol_abs, profile );    
-    t_lbfgsb(mc) = toc;
-    err_lbfgsb(mc) = norm(x_lbfgsb - xRef) / norm(xRef);
-    %% 'P-L-BFGS'
-    tic
-    [x_plbfgs, ~ ,iter_plbfgs(mc), ~, ~, ~] = ...
-    P_L_BFGS(Amat, bvec, x0, max_iter, tol_rel, tol_abs, profile );    
-    t_plbfgs(mc) = toc;
-    err_plbfgs(mc) = norm(x_plbfgs - xRef) / norm(xRef);
-    %% 'zeroSR1'
-    tic
-    [x_zerosr1, ~, iter_zerosr1(mc), ~, errStruct_stephen, ~] = ...
-    ZERO_SR1(Amat, bvec, x0, max_iter, tol_rel, tol_abs, true );   
-    t_zerosr1(mc) = toc;
-    err_zerosr1(mc) = norm(x_zerosr1 - xRef) / norm(xRef);
-    %% 'my zerosr1' 
-    fcnGrad = @(x) quadprog(x,Amat,-bvec);
-    tic
-    opts = struct( ...
-        'max_iter',max_iter, ...
-        'tol_rel',tol_rel, ...
-        'tol_abs',tol_abs, ... 
-        'Q', Amat);
-    [x_nic, iter_nic(mc), errStruct_nic] = zeroSr1_nic(fcnGrad, x0, opts);
-    t_nic(mc) = toc;
-    err_nic(mc) = norm(x_nic - xRef) / norm(xRef);
-    %% proxQuasiNewton 
-    tic
-    opts.r = 20;
-    [x_pq, iter_pq(mc), errStruct_pq] = proxQuasiNewton(fcnGrad, x0, opts);
-    t_pq(mc) = toc;
-    err_pq(mc) = norm(x_pq - xRef) / norm(xRef);
-    assert(iter_pq(mc) < max_iter);
+    if mcGoodFlag
+        mcGood = [mcGood mc]; %#ok<AGROW>
+        % if results(2).iters(mc) < results(end).iters(mc)
+        %     figure() 
+        %     for ixAlgo = 2:numAlgo
+        %         name = algoNames{ixAlgo};
+        % 
+        %         absKKT = results(ixAlgo).errHist{mc}(:,1);
+        %         iter = numel(absKKT)-1;
+        %         semilogy(0:iter, absKKT + 1e-13, 'LineWidth', 5)
+        %           hold on
+        %     end
+        %     legend(algoNames{2:end})
+        %     xlabel('iterations')
+        %     ylabel('kkt')
+        %     title(['Iterations for MC ' num2str(mc)])
+        % end
+    end
 end
 %%
-fprintf('Algo     | Rel Err | Time      | Iter\n')
-fprintf('CVX      |  N/A    | %.1e s | N/A\n', mean(cvxTime));
-fprintf('BB-PGD   |  %.2g  | %.1e s | %.2g\n', ...
-    mean(err_bbpgd), mean(t_bbpgd), mean(iter_bbpgd));
-fprintf('L-BFGS-B |  %.2g  | %.1e s | %.2g\n', ...
-    mean(err_lbfgsb), mean(t_lbfgsb), mean(iter_lbfgsb));
-fprintf('P-L-BFGS |  %.2g  | %.1e s | %.2g\n', ...
-    mean(err_plbfgs), mean(t_plbfgs), mean(iter_plbfgs));
-fprintf('ZEROSR1  |  %.2g  | %.1e s | %.2g\n', ... 
-    mean(err_zerosr1), mean(t_zerosr1), mean(iter_zerosr1));
-fprintf('nic      |  %.2g  | %.1e s | %.2g\n', ...
-    mean(err_nic), mean(t_nic), mean(iter_nic));
-fprintf('proxQN   |  %.2g  | %.1e s | %.2g\n', ...
-    mean(err_pq), mean(t_pq), mean(iter_pq));
+fprintf('Algo                         | Time      | matVec | Iter | kkt\n')
+for ixAlgo = 1:numAlgo
+    name = algoNames{ixAlgo};
+    while length(name) < length('Projected QuasiNewton (BFGS)')
+        name = [name ' ']; %#ok<AGROW>
+    end
+    time = results(ixAlgo).time(mcGood);
+    iters = results(ixAlgo).iters(mcGood);
+    matVec = results(ixAlgo).matVecs(mcGood);
+    kkt = results(ixAlgo).kkt(mcGood);
+    fprintf('%s | %.1e s | %.3g\t| %.3g | %.2g\n', ...
+        name, mean(time), mean(matVec), mean(iters), mean(kkt));
+end
+iterationBarChart
+save(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/' fname '.mat'], 'results')
 %% 
-f = figure();
-hold on
-edges = [1:1:9 10:5:50, 100];
-[N,edges] = histcounts(iter_bbpgd(mcGood),edges);
-[N1,edges] = histcounts(iter_lbfgsb(mcGood),edges);
-[N2,edges] = histcounts(iter_plbfgs(mcGood),edges);
-[N3,edges] = histcounts(iter_zerosr1(mcGood),edges);
-[N4,edges] = histcounts(iter_pq(mcGood),edges);
-bar([N;N1;N2;N3;N4]');
-xlabel('Number of Iterations');
-ylabel('Occurance');
-tt = join(split(fname, '_'), ' '); 
-tt = tt{1};
-title(['Comparing LCP solvers for ' tt])
-xticks(1:length(edges))
-xticklabels([string(edges(1:9)), (string(edges(10:end-1)) + "-" +string(edges(11:end)))])
-legend({'BB-PGD', 'L-BFGS-B', 'P-L-BFGS' 'zerosr1', 'proxQuasNewton'})
-saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/' fname '.pdf'])
+% f = figure();
+% hold on
+% edges = [1:1:9 10:5:50, 100];
+% [N,edges] = histcounts(iter_bbpgd(mcGood),edges);
+% [N1,edges] = histcounts(iter_lbfgsb(mcGood),edges);
+% [N2,edges] = histcounts(iter_plbfgs(mcGood),edges);
+% [N3,edges] = histcounts(iter_zerosr1(mcGood),edges);
+% [N4,edges] = histcounts(iter_pq(mcGood),edges);
+% bar([N;N1;N2;N3;N4]');
+% xlabel('Number of Iterations');
+% ylabel('Occurance');
+% tt = join(split(fname, '_'), ' '); 
+% tt = tt{1};
+% title(['Comparing LCP solvers for ' tt])
+% xticks(1:length(edges))
+% xticklabels([string(edges(1:9)), (string(edges(10:end-1)) + "-" +string(edges(11:end)))])
+% legend({'BB-PGD', 'L-BFGS-B', 'P-L-BFGS' 'zerosr1', 'proxQuasNewton'})
+% saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/' fname '.pdf'])
+end
+
+function Ax= Acounter(x,A)
+persistent matVecCnt 
+
+if isempty(matVecCnt)
+    matVecCnt = 0;
+end
+
+if ischar(x) 
+    if strcmpi(x, 'cnt')
+        Ax = matVecCnt; 
+        return 
+    elseif strcmpi(x, 'reset')
+        Ax = matVecCnt; 
+        matVecCnt = 0;
+        return 
+    else
+        assert(false, ['Option: ' x ' not recognized'])
+    end
+end
+
+Ax = A*x;
+matVecCnt = matVecCnt + 1;
+end
+
+function [f,g] = objGrad(x,A,b)
+
+Ax = A(x);
+f = 1/2 * dot(x, Ax) + dot(x, b);
+if nargout == 1
+    g = [];
+    return 
+end
+g = Ax + b;
+end
+
+
+function [x, info] = callCVX(fg, x0, opts)
+
+n = length(x0);
+cvx_begin quiet
+        variable x(n)
+        minimize fg(x) 
+        subject to 
+        0 <= x
+cvx_end 
+
+info.iter = NaN;
+info.kkt = NaN;
+info.errHist = NaN;
+info.iterHist = NaN;
+end
+
+% function [f,g] = objGradWithHist(fg, x, errFcn)
+%     persistent errHist
+% 
+%     if ischar(x)
+%         if strcmpi(x, 'errHist')
+%             f = errHist;
+%             g = [];
+%             return 
+%         elseif strcmpi(x, 'reset')
+%             f = errHist;
+%             g = [];
+%             if ishandle(errFcn)
+%                 errHist = zeros(0,1);
+%             elseif iscell(errFcn)
+%                 errHist = zeros(0,numel(errFcn));
+%             end
+%             return 
+%         end
+%     end
+%     [f,g] = fg(x);
+%     if ~isempty(errFcn)
+%         if isempty(errHist)
+%             if ishandle(errFcn)
+%                 errHist = zeros(0,1);
+%             elseif iscell(errFcn)
+%                 errHist = zeros(0,numel(errFcn));
+%             end
+%         end
+% 
+%         if ishandle(errFcn)
+%             errHist(end+1) = errFcn(x);
+%         elseif iscell(errFcn)
+%             for i = 1:numel(errFcn)
+%                 fcn = errFcn{i};
+%                 xtmp = x;
+%                 errHist(end+1,i) = fcn(xtmp); %#ok<AGROW>
+%             end
+%         end
+%     end
+% end
+
+function e = abs_kkt(x, A, b)
+    g = A*x + b;
+    phi = min(x,g);
+    e = 1/2*dot(phi, phi);
+end % abs_kkt
+
+function diff = rel_kkt(x, A, b)
+    persistent olde 
+    if ischar(x) && strcmpi(x,'reset')
+        olde = [];
+        diff = NaN;
+        return
+    end
+    g = A*x + b;
+    phi = min(x,g);
+    e = 1/2*dot(phi, phi);
+    if isempty(olde) 
+        diff = NaN;
+    else 
+        diff = abs(e - olde) / abs(e);
+    end
+    olde = e;
+end % rel_kkt
+
+function e = abs_iter(x, xstar)
+e = norm(x - xstar);
+end % abs_iter
+
+function e = rel_iter(x, xstar)
+e = norm(x-xstar) / norm(xstar);
+end % rel_iter
