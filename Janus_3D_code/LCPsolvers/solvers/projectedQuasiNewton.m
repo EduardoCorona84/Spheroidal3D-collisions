@@ -1,4 +1,4 @@
-function [ x, info] = P_L_BFGS( fg, x0, opts )
+efunction [ x, info] = P_L_BFGS( fg, x0, opts )
 % Nic Rummel April 2025
 if ~exist('opts','var') || isempty(opts)
     opts = defaultOpts();

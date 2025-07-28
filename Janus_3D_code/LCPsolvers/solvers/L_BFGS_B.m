@@ -13,7 +13,7 @@ end
 %    max{|proj g_i | i = 1, ..., n} <= pgtol
 %    this is effectively a bound on the inf-norm of the gradient, so we use
 %    the abs_tol
-fctr = max(opts.tol_rel, opts.tol_abs) / eps();
+fctr = 1; %max(opts.tol_rel, opts.tol_abs) / eps();
 lbfgsOpts = struct(...
     'x0', x0, ...
     'printEvery', Inf, ...
@@ -26,19 +26,21 @@ lbfgsOpts.errFcn = opts.errFcn;
 if ishandle(opts.errFcn)
         info.errHist = opts.errFcn(x0);
 elseif iscell(opts.errFcn)
-    info.errHist = zeros(1,numel(opts.errFcn));
+    info.errHist = zeros(1,numel(opts.errFcn)+1);
     for i = 1:numel(opts.errFcn)
         fcn = opts.errFcn{i};
         info.errHist(1,i) = fcn(x0);
     end
+    info.errHist(1,end) = fg(x0, [], [], []);
 end
 n = numel(x0);
 lb = zeros(n,1);
 ub = Inf(n,1);
-[x, ~, lbfgsInfo] = lbfgsb( fg , lb, ub, lbfgsOpts );
+this_fg = @(x) fg(x, [], [], []);
+[x, ~, lbfgsInfo] = lbfgsb(this_fg , lb, ub, lbfgsOpts );
 info.iter = lbfgsInfo.iterations;
 if ~isempty(opts.errFcn)
-    info.errHist = cat(1, info.errHist, lbfgsInfo.err(:,3:end));
+    info.errHist = cat(1, info.errHist, cat(2, lbfgsInfo.err(:,3:end), lbfgsInfo.err(:,1)));
     info.kkt = lbfgsInfo.err(end,3); % assumes that the first errFcn is kkt
 else 
     [~,g] = fg(x);

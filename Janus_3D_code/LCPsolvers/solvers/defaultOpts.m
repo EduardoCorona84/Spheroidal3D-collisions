@@ -42,10 +42,10 @@ if ~isfield(opts, 'tau_max')
     opts.tau_max = Inf;
 end
 
-if ~isfield(opts, 'kappa')
-    opts.kappa = struct('init', 'uniform',...
-        'fwd', 'uniform', ...
-        'bwd', 'uniform');
+if ~isfield(opts, 'stepSize')
+    opts.stepSize = struct('init', 'uniform',...
+        'kappa', 'uniform', ...
+        'eta', 'uniform');
 end
 
 if ~isfield(opts, 'r')
@@ -54,14 +54,24 @@ else
     assert(opts.r > 0, 'Memory/effective-rank or hessian must by positive');
     opts.r = min(opts.r, n);
 end
-opts.S = zeros(n, opts.r);
-opts.Y = zeros(n, opts.r);
 
 if ~isfield(opts, 'qnUpdate') || isempty(opts.qnUpdate)
     opts.qnUpdate = 'bfgs';
 else 
     assert( strcmpi('bfgs', opts.qnUpdate) ...
         || strcmpi('sr1', opts.qnUpdate), 'Must choose SR1 or BFGS')
+end
+
+  
+if ~isfield(opts, 'prox')|| isempty(opts.prox)
+    opts.prox = struct( ...
+        'maxiter', 1000, ...
+        'res_abstol', 0, ...
+        'res_reltol', 0, ...
+        'alp_abstol', 0, ...
+        'alp_reltol', 1e-12, ...
+        'verbose', false, ...
+        'runCVX', false);
 end
 
 if ~isfield(opts, 'errFcn') || isempty(opts.errFcn)

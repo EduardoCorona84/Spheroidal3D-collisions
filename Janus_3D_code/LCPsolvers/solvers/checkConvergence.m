@@ -1,22 +1,23 @@
 function [converged, info] = checkConvergence(k, f_k, x_k, ...
-    grad_k, kappa, info, opts)
+    Ax, eta, info, opts)
 persistent old_kkt
 if k == 0
     old_kkt = [];
 end
 % Check for convergence
 converged = false;
+phi = min(Ax + opts.b,x_k);
+kkt = 0.5*dot(phi, phi);
 if k >= opts.max_iter
+    info.flag =  8;
     converged = true;
-elseif kappa < 10*eps
-    % if step direction gets too small give up
-    info.flag =  5;
-    converged = true;
+% elseif eta < 10*eps
+%     % if step direction gets too small give up
+%     info.flag =  5;
+%     converged = true;
 else
     % kkt conditions / LCP being satisified is equivalent to
     % the grad_k(i) = 0 \perp x_k(i) = 0
-    phi = min(grad_k,x_k);
-    kkt = 0.5*dot(phi, phi);
     if ~isempty(old_kkt) && (abs(kkt - old_kkt) / abs(kkt)) < opts.tol_rel
         % Relative stopping criteria
         info.flag = 3;
