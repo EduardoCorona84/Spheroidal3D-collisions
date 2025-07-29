@@ -1,16 +1,15 @@
-function [opts, info] = defaultOpts(opts,x0)
-% initialize info
-info = struct('kkt', [], ...
-    'iter',[],...
-    'flag', [],...
-    'msg',[]);
+function [opts, info] = defaultLCPOpts(opts,x0)
 n = numel(x0);
 if ~exist('opts','var') || isempty(opts)
     opts = struct();
 end
 
-if ~exist('n', 'var') || isempty(n)
-    n = 0;
+if ~isfield(opts, 'solver')
+    opts.solver = 'bbpgd';
+end
+
+if ~isfield(opts, 'n')
+    opts.n = n;
 end
 
 if ~isfield(opts, 'max_iter')
@@ -44,8 +43,13 @@ end
 
 if ~isfield(opts, 'stepSize')
     opts.stepSize = struct('init', 'uniform',...
-        'kappa', 'uniform', ...
-        'eta', 'uniform');
+        'eta', 'opt');
+    switch lower(opts.solver)
+        case 'bbpgd'
+            opts.stepSize.kappa = 'bb1';
+        otherwise 
+            opts.stepSize.kappa = 'uniform';
+    end
 end
 
 if ~isfield(opts, 'r')
@@ -74,6 +78,11 @@ if ~isfield(opts, 'prox')|| isempty(opts.prox)
         'runCVX', false);
 end
 
+%% initialize info
+info = struct('kkt', [], ...
+    'iter',[],...
+    'flag', [],...
+    'msg',[]);
 if ~isfield(opts, 'errFcn') || isempty(opts.errFcn)
     opts.errFcn = [];
 elseif isa(opts.errFcn,'function_handle')
@@ -94,4 +103,4 @@ if ~isfield(opts, 'storeIts') || isempty(opts.storeIts)
 elseif opts.storeIts
     info.iterHist = zeros(opts.max_iter+1, n);
 end
-end % defaultOpts
+end % defaultLCPOpts

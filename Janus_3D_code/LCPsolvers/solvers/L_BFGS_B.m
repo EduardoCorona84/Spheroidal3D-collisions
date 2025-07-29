@@ -1,8 +1,7 @@
 function [ x, info] = L_BFGS_B(fg, x0, opts )
 % Nic Rummel April 2025
-if ~exist('opts','var') || isempty(opts)
-    opts = defaultOpts();
-end
+opts = defaultLCPOpts(opts, x0);
+
 
 % The error bounds are slightly different for this code than that of the other
 % solvers in particular
@@ -43,7 +42,7 @@ if ~isempty(opts.errFcn)
     info.errHist = cat(1, info.errHist, cat(2, lbfgsInfo.err(:,3:end), lbfgsInfo.err(:,1)));
     info.kkt = lbfgsInfo.err(end,3); % assumes that the first errFcn is kkt
 else 
-    [~,g] = fg(x);
+    [~,g] = this_fg(x);
     phi = min(x,g);
     info.kkt = 1/2 * dot(phi,phi);
 end

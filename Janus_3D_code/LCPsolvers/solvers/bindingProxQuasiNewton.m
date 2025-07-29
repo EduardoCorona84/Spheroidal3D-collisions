@@ -1,5 +1,5 @@
 function [x, info] = bindingProxQuasiNewton(fg, x0, opts)
-[opts, info] = defaultOpts(opts, x0);
+[opts, info] = defaultLCPOpts(opts, x0);
 checkOpts(opts)
 n = numel(x0);
 eta = 1;
@@ -12,7 +12,7 @@ k = 0;
 while true
     [f_k, grad_k, Ax_k] = fg(x_k, Ax_km1, Aq, eta);
     [converged, info] = checkConvergence(k, f_k, x_k, ...
-        Ax_k, eta, info, opts);
+        grad_k, eta, info, opts);
     if converged
         x = x_k;
         break

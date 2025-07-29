@@ -1,4 +1,4 @@
-function [Fparams]=Test_ModLap_Mobility_Amphi(fname,n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,boundary_label,saveLCPs, LCPs_file_path)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,boundary_label,saveLCPs)
 %{
 Sedimentation test for Stokesian suspension of n^3 spherical rigid bodies 
 inside a spherical shell.
@@ -22,17 +22,28 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
-
+%% Files to save results
+mfilePath = mfilename('fullpath');
+if contains(mfilePath,'LiveEditorEvaluationHelper')
+    mfilePath = matlab.desktop.editor.getActiveFilename;
+end
+[mfilePath,~,~] = fileparts(mfilePath);
+resultsDir = fullfile(mfilePath, 'results');
+mkdir(resultsDir)
+postFix = ['.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
+fname=fullfile(resultsDir, ['amphi' postFix]);
+lcpResDir = fullfile(mfilePath, 'LCPsolvers/results');
+mkdir(lcpResDir);
+LCP_file_path=fullfile(lcpResDir, ['amphiLCPs' postFix]);
+%% Make sure all the code is on the matlabpath'
 %Remove addpaths if compiling in command line (mcc)
 addpath ./; 
 addpath ./support; 
-addpath ./LCPsolvers/Num4LCP_MatLab; 
-addpath ./LCPsolvers/Num4LCP_MatLab/ext;
+addpath(genpath(fullfile(mfilePath, 'LCPsolvers/solvers')))
 addpath ./FMMLIB/fmmlib3d-1.2/matlab/;
 addpath ./FMMLIB/stfmmlib3d-1.2/matlab/;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%Particle centers (cubic lattice in this example)
+%% Particle centers (cubic lattice in this example)
 Cdst=mean(rd)*Cdst; %make center distance relative to radii
 lx=0:Cdst:Cdst*(n-1);
 lx = lx - mean(lx); 
@@ -75,21 +86,23 @@ if nargin<11
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
+%% Fill Parameter Structs
 % body parameters
 parbd = struct('Shape','','n3',n3,'rd',rd,'p',p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
 
+% LCP solver parameters
+lcpOpts = struct('solver','bbpgd','max_iter',100,'tol_rel',1e-12,'tol_abs',1e-12);
+
 % linear solver parameters
-parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],...
-    'colsolver','BBPGD','coltol',1e-4,'colmaxit',100,'col_tolrel',tol,'col_tolabs',0.1*tol);  
+parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[]);  
 
 %Create Fparams struct 
-Fparams = struct('parbd',parbd,'parslv',parslv,...
+Fparams = struct('parbd',parbd,'parslv',parslv,'lcpOpts',lcpOpts,...
     'Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp','lambda',lambda,'gamma',gamma,...
-'denseMV',denseMV,'typeMV','Vsh','tdisc',tdisc,'init_dir',init_dir,'boundary_label',boundary_label,'denseforce',denseforce, 'saveLCPs',saveLCPs,'LCPs_file_path',LCPs_file_path);
+'denseMV',denseMV,'typeMV','Vsh','tdisc',tdisc,'init_dir',init_dir,'boundary_label',boundary_label,'denseforce',denseforce,...
+'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%Run Rigid Body Stokes 
-
+%% Run Rigid Body Stokes 
 RBS_mobility(fname,Fparams,[]);
-
 end

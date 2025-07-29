@@ -279,12 +279,16 @@ fprintf('\n -------------------------------------------------------------\n');
 t = t+dt;
 tt(i+1)=t;
 fprintf('\n dt: %2.2f ',dt)
-if mod(i,2)==1                                                                                                                                              
-save(fname,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
-else                                                                                                                                                        
-save([fname '2'],'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                   
+if mod(i,2)==1    
+    saveFile = [fname '.mat'];
+    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
+else    
+    saveFile = [fname '.2.mat'];
+    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                   
 end  
-save([fname '_profile'],'timings'); 
+
+saveFile = [fname '.profile.mat'];
+save(saveFile,'timings'); 
 end
 
 
@@ -857,17 +861,6 @@ den = 10000*(den==0)+den;
 
 end
 
-function [f,g] = objGrad(x,A,b)
-
-Ax = A(x);
-f = 1/2 * dot(x, Ax) + dot(x, b);
-if nargout == 1
-    g = [];
-    return 
-end
-g = Ax + b;
-end
-
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
 persistent A_list b_list save_iter
@@ -884,7 +877,7 @@ if ~isfield(Fparams, 'LCP_file_path')
         mfilePath = matlab.desktop.editor.getActiveFilename;
     end
     [mfilePath,~,~] = fileparts(mfilePath);
-    LCP_file_path = fullpath(mfilename
+    LCP_file_path = fullfile(mfilePath, 'LCPsolvers/data/lcpProblems');
 else 
     LCP_file_path = Fparams.LCP_file_path;
 end
@@ -895,6 +888,7 @@ else
     endFlag = Fparams.endFlag;
 end
 if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter))
+    assert(Fparams.denseMV, 'Saving LCPs is not implemented without denseMV');
     A_list = {};
     b_list = {};
     save_iter = 1;
@@ -908,11 +902,8 @@ diam = Fparams.parbd.diam; %diam(i,j) = r_i + r_j
 mxrd = Fparams.parbd.mxrd; %max(r_i,r_j)
 eps = Fparams.parbd.eps;
 Nb = Fparams.parbd.Nb; 
-tol = parslv.tol; 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%Setup (build A and b)
- 
+%% Setup (build A and b)
 shflg = isfield(Fparams,'parsh');
 ip = collist(:,1); jp = collist(:,2); 
 if shflg
@@ -934,9 +925,7 @@ R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3
 NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 
 Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj|
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%Build A 
-
+%% Build A 
 F = zeros(6*n3,numF+numFS); 
 
 for k=1:numF
@@ -953,38 +942,32 @@ end
 
 % A is built using the dense or matfree mobility matrix. Can be accelerated
 % by employing only self interaction (block-diagonal) for TD and SD. 
-
-% Different criteria can be added as needed
-% TODO nic change this back 
-denseMV = Fparams.denseMV; % || numF+numFS > 1; 
-bkdiag=false; 
-
-if denseMV
-    parslv.tol = tol; 
+if Fparams.denseMV
     Bf = (Bk.')*F; 
     %(3) (-0.5I-K)*rho_c
     MNS = -Lapp(TD,Bf)+Lk*Bf;
     %(4) 3x3 MNS=VNS*S(mu_c+rho_c)  
     MuNS = Lslv(TD,MNS,parslv); 
-
     % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
     Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
     A = @(x) Amat*x;
 else % matfree
-    parslv.tol = parslv.coltol; 
     Bf = @(x) (Bk.')*(F*x);
-    if bkdiag % this is just preconditioner on the solve 
-        S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); %#ok<UNRCH>
-        IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-        A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+    if ~isempty(parslv.prec) && parslv.prec
+        switch lower(parslv.prtype)
+            case 'bkdiag' % this is just preconditioner on the solve 
+                S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
+                IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
+                A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+            otherwise 
+                error(['Preconditioner ' parslv.prtype 'not implement'])
+        end
     else 
         A = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
     end
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Build constant vector b: 
-
+%% Build constant vector b: 
 % Compute (1/dt)*phi
 phib = zeros(numF+numFS,1); 
 if numF>0
@@ -1001,34 +984,25 @@ end
 %b_k = (1/dt)*phi_k + F.'V_k
 bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%LCP solve
-%LCP params
-max_iter=parslv.colmaxit; 
-tol_rel=parslv.col_tolrel; %1e-6; 
-tol_abs=parslv.col_tolabs; %1e-9; 
-profile=1;
-
+%% LCP solve
+% TODO: warm start intelligently
 x0 = zeros(size(bvec));
-
-opts = struct( ...
-    'max_iter', max_iter, ...
-    'tol_rel', tol_rel, ...
-    'tol_abs', tol_abs ...
-);
-fg = @(x) objGrad(x, A, bvec);
-switch parslv.colsolver  
-    case 'BBPGD'
-        [lam, info] = projectedGradientDescent(fg, x0, opts);    
-    case 'L-BFGS-B'
-        [lam, info] = L_BFGS_B(fg, x0, opts); 
-    case 'P-L-BFGS'
-        [lam, info] = projectedQuasiNewton(fg, x0, opts);    
-    case 'proxQuasiNewton'
-        [lam, info] = proxQuasiNewton(fg, x0, opts);
+lcpOpts = Fparams.lcpOpts;
+% Give the solvers access to the mat vec alone
+lcpOpts.A = A; 
+lcpOpts.b = bvec; 
+fg = @(x, Ax, Aq, eta) quadraticLoss(x, A, bvec, Ax, Aq, eta);
+switch lower(lcpOpts.solver)  
+    case 'bbpgd'
+        [lam, info] = projectedGradientDescent(fg, x0, lcpOpts);    
+    case 'l-bfgs-b'
+        [lam, info] = L_BFGS_B(fg, x0, lcpOpts); 
+    case 'p-l-bfgs'
+        [lam, info] = projectedQuasiNewton(fg, x0, lcpOpts);    
+    case 'proxquasinewton'
+        [lam, info] = proxQuasiNewton(fg, x0, lcpOpts);
     otherwise
-        [lam, info] = projectedGradientDescent(fg, x0, opts); 
+        [lam, info] = projectedGradientDescent(fg, x0, lcpOpts); 
 end
 
 if saveLCPs
@@ -1046,7 +1020,7 @@ if saveLCPs
     A_list{end+1} = Amat; 
     b_list{end+1} = bvec;
 end
-fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
+fprintf(['\n minmap ' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
 

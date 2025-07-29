@@ -1,8 +1,6 @@
-efunction [ x, info] = P_L_BFGS( fg, x0, opts )
+function [ x, info] = P_L_BFGS( fg, x0, opts )
 % Nic Rummel April 2025
-if ~exist('opts','var') || isempty(opts)
-    opts = defaultOpts();
-end
+opts = defaultLCPOpts(opts, x0);
 
 % set up this solvers options
 pqnOpt = pqn_solopt();
@@ -21,7 +19,8 @@ pqnOpt.tolg = NaN;
 pqnOpt.verbose = false; 
 pqnOpt.errFcn = opts.errFcn;
 % call to the solver wrapper
-out = pqn_general(fg, x0, pqnOpt);
+this_fg = @(x) fg(x, [], [], []);
+out = pqn_general(this_fg, x0, pqnOpt);
 x = out.x;
 info.iter = out.iter; 
 % Make err match that of BBPGD

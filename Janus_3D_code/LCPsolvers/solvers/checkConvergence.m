@@ -1,12 +1,12 @@
 function [converged, info] = checkConvergence(k, f_k, x_k, ...
-    Ax, eta, info, opts)
+    grad_k, eta, info, opts)
 persistent old_kkt
 if k == 0
     old_kkt = [];
 end
 % Check for convergence
 converged = false;
-phi = min(Ax + opts.b,x_k);
+phi = min(grad_k,x_k);
 kkt = 0.5*dot(phi, phi);
 if k >= opts.max_iter
     info.flag =  8;

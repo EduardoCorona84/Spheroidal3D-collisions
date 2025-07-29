@@ -45,6 +45,7 @@ algoNames = {
     % 'Proximal QuasiNewton (BFGS, \kappa = \kappa^*, \eta = \eta^*)';
     'Proximal QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)';
     'Optimal Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
+    'Online Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
     % 'L-BFGS-B';
     % 'Projected QuasiNewton (BFGS)';
     % 'Binding Proximal QuasiNewton (BFGS)'
@@ -55,6 +56,7 @@ algoHndls = {
     % @zeroSr1_nic; 
     @proxQuasiNewton;% @proxQuasiNewton; 
     @optDiagPrecond;
+    @onlineScaledGradient;
     % @L_BFGS_B; 
     % @projectQuasiNewton_nic;  
     % @bindingProxQuasiNewton
@@ -74,33 +76,39 @@ results = repmat(...
 );
 mcGood = [];
 MC = numel(A_list);
+fromFile =false ;
 for mc = 1:MC
-    %% Load problem from list
-    A = A_list{mc};
-    A = 1/2*(A +A');
-
-    b = b_list{mc};
-    n = size(A,2);
-    if n < minSz || maxSz <= n
-        continue;
+    if fromFile
+        %% Load problem from list
+        A = A_list{mc};
+        A = 1/2*(A +A');
+        b = b_list{mc};
+        n = size(A,2);
+        if n < minSz || maxSz <= n
+            continue;
+        end
+    else
+        %% Generate random problem 
+        condNum = 1e4;
+        n = minSz + int64(round((maxSz-minSz)*rand(1)));
+        B = randn(n,n);
+        % [Q, ~] = qr(B);
+        vv = 1 + condNum * rand(n,1);
+        % A = Q*diag(vv)*Q';
+        A = (B+B') + diag(vv);
+        [vecs,vals] = eig(A);
+        vals = max(1,diag(vals));
+        A = vecs*diag(vals)*vecs';
+        x_unconstrained = randn(n,1);
+        while ~any(x_unconstrained < 0)
+            x_unconstrained = randn(n,1);
+        end
+        b = -A*x_unconstrained;
     end
-    %% Generate random problem 
-    % condNum = 1e4;
-    % n = minSz + int64(round((maxSz-minSz)*rand(1)));
-    % B = randn(n,n);
-    % % [Q, ~] = qr(B);
-    % vv = 1 + condNum * rand(n,1);
-    % % A = Q*diag(vv)*Q';
-    % A = 0.01*(B+B') + diag(vv);
-    % x_unconstrained = randn(n,1);
-    % while ~any(xstar < 0)
-    %     x_unconstrained = randn(n,1);
-    % end
-    % b = -A*x_unconstrained;
     %% Build cost function 
     Acnt = @(x) Acounter(x,A, false);
     x0 = zeros(n,1);
-    fg = @(x, Ax, Aq, eta) fncGrad(x, Acnt,b, Ax, Aq, eta);
+    fg = @(x, Ax, Aq, eta) quadraticLoss(x, Acnt,b, Ax, Aq, eta);
     %% Fill the opts with problem specific information
     opts.A = Acnt;
     opts.b = b;
@@ -240,28 +248,6 @@ else
     Ax = A*x;
 end
 matVecCnt = matVecCnt + 1;
-end
-
-function [f, g, Ax] = fncGrad(x, A, b, Ax, Aq, eta)
-
-if isempty(Ax) || isempty(Aq)
-    Ax = A(x);
-    f = 1/2*dot(x,Ax) + dot(b,x);
-    if nargout == 1
-        return 
-    end
-    g = Ax + b;
-    return 
-end
-assert(exist('Aq','var') && exist('eta','var'))
-assert(~isempty(Aq) && ~isempty(eta))
-Ax = Ax + eta*Aq;
-f = 1/2 *dot(x, Ax) + dot(x, b);
-if nargout == 1
-    return 
-end
-g = Ax + b; 
-
 end
 
 function [x, info] = callCVX(~, x0, opts) %#ok<STOUT>
