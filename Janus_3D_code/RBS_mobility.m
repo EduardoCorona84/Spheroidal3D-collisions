@@ -140,7 +140,6 @@ end
 MRot = @(wh,t) RotationMat(wh,t);
 
 Xt{1}=Xrp; Ct{1}=Fparams.parbd.C;
-Fparams.saveLCPs = true; % TODO: change this to false
 for i=1:Nt
     if i == Nt 
         Fparams.endFlag = true; 
@@ -878,6 +877,18 @@ if ~isfield(Fparams, 'saveLCPs')
 else 
     saveLCPs = Fparams.saveLCPs;
 end
+
+if ~isfield(Fparams, 'LCP_file_path') 
+    mfilePath = mfilename('fullpath');
+    if contains(mfilePath,'LiveEditorEvaluationHelper')
+        mfilePath = matlab.desktop.editor.getActiveFilename;
+    end
+    [mfilePath,~,~] = fileparts(mfilePath);
+    LCP_file_path = fullpath(mfilename
+else 
+    LCP_file_path = Fparams.LCP_file_path;
+end
+
 if ~isfield(Fparams, 'endFlag') 
     endFlag = false; 
 else 
@@ -1021,13 +1032,8 @@ switch parslv.colsolver
 end
 
 if saveLCPs
-    if length(A_list) >= 100 || endFlag
-        mfilePath = mfilename('fullpath');
-        if contains(mfilePath,'LiveEditorEvaluationHelper')
-            mfilePath = matlab.desktop.editor.getActiveFilename;
-        end
-        [mfilePath,~,~] = fileparts(mfilePath);
-        save([mfilePath '/LCPSolvers/test/3x3x3_amphi_data_' num2str(save_iter) '.mat'], ...
+    if length(A_list) >= 100 || endFlag 
+        save([LCP_file_path '.prt_' num2str(save_iter) '.mat'], ...
             'A_list', 'b_list')
         A_list = {};
         b_list = {};

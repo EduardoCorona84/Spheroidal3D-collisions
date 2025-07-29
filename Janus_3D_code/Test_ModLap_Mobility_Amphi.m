@@ -1,4 +1,4 @@
-function [Fparams]=Test_ModLap_Mobility_Amphi(fname,n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,boundary_label)
+function [Fparams]=Test_ModLap_Mobility_Amphi(fname,n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,boundary_label,saveLCPs, LCPs_file_path)
 %{
 Sedimentation test for Stokesian suspension of n^3 spherical rigid bodies 
 inside a spherical shell.
@@ -86,7 +86,7 @@ parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag'
 %Create Fparams struct 
 Fparams = struct('parbd',parbd,'parslv',parslv,...
     'Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp','lambda',lambda,'gamma',gamma,...
-'denseMV',denseMV,'typeMV','Vsh','tdisc',tdisc,'init_dir',init_dir,'boundary_label',boundary_label,'denseforce',denseforce);
+'denseMV',denseMV,'typeMV','Vsh','tdisc',tdisc,'init_dir',init_dir,'boundary_label',boundary_label,'denseforce',denseforce, 'saveLCPs',saveLCPs,'LCPs_file_path',LCPs_file_path);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %Run Rigid Body Stokes 
 

@@ -19,7 +19,7 @@
 
 ###TARGET=matlab-maci
 ###TARGET=matlab-maci-openmp
-TARGET=matlab-maca64
+# TARGET=matlab-maca64
 ###TARGET=matlab-maci64-openmp
 
 ###TARGET=matlab-windows-w32
@@ -250,7 +250,8 @@ TARGET=matlab-maca64
 
 # ifeq ($(TARGET), matlab-maci64)
 
-FFLAGS=-g -O2 -fPIC -fallow-argument-mismatch -mmacosx-version-min=12.0
+FFLAGS=-g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch
+#-fallow-argument-mismatch -mmacosx-version-min=12.0
 
 # Use the following for Matlab + gfortran 4.4.x
 TESTC99COMPLEX=test_c99_complex
@@ -259,22 +260,28 @@ CC=    gcc
 CXX=   g++
 # Uncomment this line for new-style classdef support
 # OOFLAG=-DR2008OO
-MEX=   mex $(OOFLAG) CC=gcc LD=gcc ARCH=maca64
+# MEX=   mex $(OOFLAG) CC=gcc LD=gcc ARCH=maca64
+MEX=   mex -largeArrayDims $(OOFLAG) 
+#CC=gcc LD=gcc ARCH=maca64
 # Use the following for 64-bit MEX
 ###MEX=   mex -largeArrayDims $(OOFLAG) ARCH=maci64
 MEX_FC=   $(FC)
 MEX_CC=   $(CXX)
 MW=mwrap
-MWFLAGS=-c99complex -mex        
-MEX_LIBS=-lgfortran -lm
-MEX_LINK=
-
-MEX_FLAGS=
 OBJSUF=o
 MODSUF=mod
 
+MWFLAGS=-c99complex -mex     
+MEX_LINK=
+MEX_FLAGS=
 # endif
-
+ifeq (,$(findstring openmp,$(TARGET)))
+# openmp is NOT in TARGET    
+MEX_LIBS=-lgfortran -lm
+else 
+# openmp is in TARGET
+MEX_LIBS=-lgfortran -lgomp -lm
+endif
 
 # ifeq ($(TARGET), matlab-maci64-openmp)
 
