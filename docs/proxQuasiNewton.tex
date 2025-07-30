@@ -134,30 +134,27 @@ This is a direct application the general convex analysis result given in Corolla
 Specifically, when the Quasi-Newton update rule is chosen to be the SR1 update with zero memory finding the root of $\mathcal{L}(\alpha)$ is a one dimensional problem and can be solved in $\mathcal{O}(n\log(n))$ time by locating the interval where the root occurs and solving for the root in closed form, see Appendix \ref{sec:0SR1}. In the general case, the root can be found using a semi-smooth newton solver, see Appendix \ref{sec:ss-newton}. The benefit of this approach of is that root finding problem is significantly smaller than the original problem. Thus the computational burden of the overall algorithm lies in the number of iterations.
 
 \section{Step Size}
-For the unconstrained case, once a search direction $\p_k$ is chosen an optimal step size can be computed with the cost of two mat-vec's: 
-% \[\kappa^* = \argmin_\kappa \bigl\langle \x_k - \kappa\p_k, \tfrac{1}{2}\A(\x_k - \kappa\p_k) +\b\bigr\rangle = -\frac{\langle \nabla f_k, \p_k\rangle }{\langle \p_k,\A\p_k\rangle}\]
-% So for the price of one extra mat-vec the optimal step size can be computed explicitly. 
+For the unconstrained case, once a search direction is chosen an optimal step size can be computed with the cost of two mat-vec's: 
 \begin{align*}
-    \kappa^* &= \argmin_\kappa \langle \x + \kappa\p, \tfrac{1}{2}\A(\x + \kappa\p) +\b\rangle \\
-    0 &\stackrel{set}{=} \frac{d}{d\kappa } \bigl(\langle \x + \kappa\p, \tfrac{1}{2}\A(\x + \kappa\p) +\b\rangle\bigr)\\
-    % &=\frac{d}{d\kappa } \bigl(\langle \x + \kappa\p, \tfrac{1}{2}\A(\x + \kappa\p) \rangle + \langle\x + \kappa\p,\b\rangle\bigr)\\
-    % &=\frac{d}{d\kappa } \bigl(\langle \x, \tfrac{1}{2}\A(\x + \kappa\p) \rangle + \tfrac{1}{2} \langle \kappa\p,\A\x\rangle  + \tfrac{1}{2} \langle \kappa \p, \A \kappa\p\rangle + \langle\x + \kappa\p,\b\rangle\bigr)\\
-    % &= \tfrac{1}{2} \langle \x, \A \p\rangle +\tfrac{1}{2} \langle \p, \A \x\rangle +  \kappa \langle \p, \A \p\rangle + \langle \p, \b\rangle\\
-    \kappa^* = h(\p) &=: -\frac{\tfrac{1}{2} (\langle \x, \A \p\rangle + \langle \p, \A \x\rangle) + \langle \p, \b\rangle}{\langle \p, \A \p\rangle}
+    \eta^* &= \argmin_\eta \langle \x + \eta\q, \tfrac{1}{2}\A(\x + \eta\q) +\b\rangle \\
+    0 &\stackrel{set}{=} \frac{d}{d\eta } \bigl(\langle \x + \eta\q, \tfrac{1}{2}\A(\x + \eta\q) +\b\rangle\bigr)\\
+    \eta^* = h(\q) &=: -\frac{\tfrac{1}{2} (\langle \x, \A \q\rangle + \langle \q, \A \x\rangle) + \langle \q, \b\rangle}{\langle \q, \A \q\rangle}
 \end{align*}
 
 In the constrained case, the following iteration could be used 
 \begin{align*}
     \p_k &= \H_k \nabla f_k &\text{(Quasi-Newton Step Direction)}\\
-    \kappa_k &= h(\p_k) &\text{(Unconstrained Optimal Step Size)}\\
+    \kappa_k &= 1 &\text{(Unconstrained Step Size)}\\
     \bar{\x}_k &= \prox_{\x\geq 0}^{\B_k}(\x_k +\kappa_k \p_k) &\text{(Apply Proximal Operator)}\\
     \q_k &= \bar{\x}_k - \x_k &\text{(Feasible Step Direction)}\\
     \eta_k &= \min\left(1,  h(\q_k)\right) &\text{(\emph{Semi}-Optimal Feasible Step Size)} \\
-    \x_{k+1} &= \x_k + \eta^* \q_k &\text{(Next Iterate)} 
+    \x_{k+1} &= \x_k + \eta_k \q_k &\text{(Next Iterate)} 
 \end{align*}
-More testing and analytic compution is require to demonstrate whether the additional mat-vecs per iteration are necessary. 
 
-In the literature it has been shown for quasi-Newton methods (without limited memory) that $\alpha^* \rightarrow 1$. As we are in the limited memory regime it is less clear as wether this will be the case. 
+In the literature it has been shown for quasi-Newton methods (without limited memory) that $\kappa^* \rightarrow 1$. In the limited memory and constrained case, there is not clear theory on the optimal step size here, but experimentally a choice of 1 is competitive.
+
+Using the optimal step size $\eta$ after the proximal step does not require the use of an additional mat-vec because we can get the next gradient computation for free by caching $\A\q_k$. Experimentally, this gives competitive results.
+\[\nabla f_{k+1} = \A\x_k + \eta_k \A\q_k + b\] 
 \section{Stopping Criterion}
 A nature merit function is 
 \begin{equation}\label{eq:stop-crit}
@@ -301,56 +298,58 @@ and KKT conditions of
 This does not solve the same problem as the LCP, but it is close, and mathematically $\A$ should be symmetric.
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{optBwd_n_10_50_boxPlot.pdf}
-    \caption{\protect \input{fig/optBwd_n_10_50_caption.tex}}
+    \includegraphics[width=\textwidth]{n_10_50_boxPlot.pdf}
+    \caption{\protect \input{fig/n_10_50_caption.tex}}
     \label{fig:bi-easy}
 \end{figure}
 
 \begin{table}[ht]
     \resizebox{\textwidth}{!}{
-    \input{fig/optBwd_n_10_50_table.tex}
+    \input{fig/n_10_50_table.tex}
     }
     \caption{Table for $n\in[10, 50]$}
 \end{table}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{optBwd_n_50_100_boxPlot.pdf}
-    \caption{\protect \input{fig/optBwd_n_50_100_caption.tex}}
+    \includegraphics[width=\textwidth]{n_50_100_boxPlot.pdf}
+    \caption{\protect \input{fig/n_50_100_caption.tex}}
     \label{fig:bi-med}
 \end{figure}
 
 \begin{table}[ht]
     \resizebox{\textwidth}{!}{
-    \input{fig/optBwd_n_50_100_table.tex}
+    \input{fig/n_50_100_table.tex}
     }
     \caption{Table for $n\in[50, 100]$}
 \end{table}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{optBwd_n_100_150_boxPlot.pdf}
-    \caption{\protect \input{fig/optBwd_n_100_150_caption.tex}}
+    \includegraphics[width=\textwidth]{n_100_150_boxPlot.pdf}
+    \caption{\protect \input{fig/n_100_150_caption.tex}}
     \label{fig:ammphi-easy}
 \end{figure}
 
 \begin{table}[ht]
     \resizebox{\textwidth}{!}{
-    \input{fig/optBwd_n_100_150_table.tex}
+    \input{fig/n_100_150_table.tex}
     }
     \caption{Table for $n\in[100, 150]$}
 \end{table}
+\subsection{Random Problems Problems}
+\paragraph{No Structure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{optBwd_n_150_200_boxPlot.pdf}
-    \caption{\protect \input{fig/optBwd_n_150_200_caption.tex}}
+    \includegraphics[width=\textwidth]{randProblems_noStructure_n_100_150_boxPlot.pdf}
+    \caption{\protect \input{fig/randProblems_noStructure_n_100_150_caption.tex}}
     \label{fig:ammphi-med}
 \end{figure} 
 
 \begin{table}[ht]
     \resizebox{\textwidth}{!}{
-    \input{fig/optBwd_n_150_200_table.tex}
+    \input{fig/randProblems_noStructure_n_100_150_table.tex}
     }
     \caption{Table for $n\in[150, 200]$}
 \end{table}

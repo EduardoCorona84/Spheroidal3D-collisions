@@ -76,7 +76,7 @@ end
 %init_dir=init_dir./repmat(sqrt(init_dir(:,1).^2+init_dir(:,2).^2+init_dir(:,3).^2),1,3);
 
 % misc extra parameters
-tol=1e-4; 
+tol=1e-4;
 mdist=3; 
 denseMV=false; 
 denseforce=1;

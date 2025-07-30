@@ -4,14 +4,18 @@ restart_kaleido(plotly_version = "2.35.2", mathjax = true)
 using Latexify, LaTeXStrings, PlotlyJS, LaTeXTabulars, Statistics
 Latexify.set_default(fmt = "%.4g")
 using MAT: matread
+include("tableFormatter.jl")
 ##
-fname = "randProblems_n_50_100"
+metricName = "matVec"
+rel_tol_kkt = 1e-8
+abs_tol_kkt = 1e-8
+nMin = 100 
+nMax = 150
+fname = "randProblems_diagDom_n_$(nMin)_$(nMax)"
 matdic = matread("/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/results_$(fname).mat")
 _results = matdic["results"]
 mcGood = Int.(matdic["mcGood"])[:]
 algoNames = _results["name"]
-nMin = 50 
-nMax = 100
 results = Dict()
 for (ix, name) in enumerate(algoNames)
     if name == "CVX"
@@ -30,15 +34,10 @@ for (ix, name) in enumerate(algoNames)
     end
 end
 ##
-metricName = "matVec"
-rel_tol_kkt = 1e-4
-abs_tol_kkt = 1e-4
 trs = AbstractTrace[]
-# for name in ["Projected Gradient Descent", "(noBwd) Projected Gradient Descent","Proximal QuasiNewton (BFGS)", "Binding Proximal QuasiNewton (BFGS)"]
-#     res = results[name]
-for (name, res) in results
+for name in algoNames
     metric = []
-    for errHist in res["errHist"]
+    for errHist in results[name]["errHist"]
         errHist[1,2] = Inf
         ix = findfirst((errHist[:,1] .< rel_tol_kkt) .|| (errHist[:,2] .< abs_tol_kkt))
         if !isnothing(ix)
@@ -63,6 +62,7 @@ for (name, res) in results
         )
     )
 end
+problem_size_string = "\$n \\in [$(nMin),$(nMax))\$"
 num_problems = length(mcGood)
 save_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig"
 open(joinpath(save_dir, "$(fname)_caption.tex"), "w") do f
@@ -83,7 +83,7 @@ p = plot(
         xaxis_type="log",
         showlegend=false,
         annotations=[attr(
-            text="\$n \\in [$(nMin),$(nMax), \\varepsilon_\\text{rel} = $(rel_tol_kkt), \\varepsilon_\\text{abs} = $(abs_tol_kkt)\$",
+            text="$(problem_size_string[1:end-1]), \\varepsilon_\\text{rel} = $(rel_tol_kkt), \\varepsilon_\\text{abs} = $(abs_tol_kkt)\$",
             font=attr(
                 size= 13, # Adjust font size as needed
                 color= "rgb(116, 101, 130)" # Set subtitle color
@@ -99,17 +99,25 @@ p = plot(
 )
 savefig(
     p,
-    joinpath(save_dir, "$(fname)_boxPlot.png"),
+    joinpath(save_dir, "$(fname)_boxPlot.pdf"),
     height=600,
     width=800
 )
-p
+display(p)
 ##
 rows = Any[]
 push!(rows, ["", "Minimum", "Lower Quartile", "Median", "Upper Quartile", "Maximum"])
     push!(rows, Rule(:top))
-for (name,res) in results
-    metric = res[metricName]
+for name in algoNames
+    metric = results[name][metricName]
+    if contains(name, "\\kappa")
+        prts = split(name, "\\kappa")
+        name = string("\\text{"*prts[1]*"}\\kappa"*prts[end])
+        println(name )
+        name = replace(name, 
+            "\\kappa"=>raw"\kappa", "\\eta"=>raw"\eta", "\\tau"=>raw"\tau", "\\_"=>raw"\_")
+        name = LaTeXString("\$"*name*"\$")
+    end
     push!(rows, [name, minimum(metric), quantile(metric,0.25), quantile(metric,0.5), quantile(metric, 0.75), maximum(metric)])
 end
 push!(rows, Rule(:bottom))
@@ -119,5 +127,5 @@ table_file = joinpath(save_dir, "$(fname)_table.tex")
 latex_tabular(
     table_file, 
     Tabular("lccccc"), 
-    rows
+    rows; formatter=myFormatter
 )
