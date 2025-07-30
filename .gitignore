@@ -8,3 +8,8 @@ docs_old/*
 *.o
 *.log
 *.dvi
+*._*
+Janus_3D_code/FMMLIB/mwrap
+*.mex*
+*.a
+Janus_3D_code/results

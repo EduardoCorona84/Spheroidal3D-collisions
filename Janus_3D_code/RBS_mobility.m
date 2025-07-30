@@ -49,7 +49,8 @@ recorded timestep
 %}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 global timings;
- 
+diaryFile = [fname '.diary.log'];
+diary(diaryFile);
 %(0.1) (optional) Load data in init, initialize output arrays
 Nt = Fparams.Nt; n3=Fparams.parbd.n3; 
 tt = zeros(Nt+1,1); 
@@ -289,6 +290,8 @@ end
 
 saveFile = [fname '.profile.mat'];
 save(saveFile,'timings'); 
+diary off;
+
 end
 
 
@@ -888,7 +891,6 @@ else
     endFlag = Fparams.endFlag;
 end
 if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter))
-    assert(Fparams.denseMV, 'Saving LCPs is not implemented without denseMV');
     A_list = {};
     b_list = {};
     save_iter = 1;
@@ -1016,7 +1018,13 @@ if saveLCPs
             save_iter = 1;
         end
     end
-    
+    if ~denseMV
+        n = numel(lam);
+        Amat = eye(n) 
+        for i = 1:n 
+            Amat(:,i) = A(Amat(:,i)); 
+        end
+    end
     A_list{end+1} = Amat; 
     b_list{end+1} = bvec;
 end

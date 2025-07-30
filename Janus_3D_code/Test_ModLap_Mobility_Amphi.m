@@ -1,4 +1,4 @@
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,boundary_label,saveLCPs)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs)
 %{
 Sedimentation test for Stokesian suspension of n^3 spherical rigid bodies 
 inside a spherical shell.
@@ -35,6 +35,8 @@ fname=fullfile(resultsDir, ['amphi' postFix]);
 lcpResDir = fullfile(mfilePath, 'LCPsolvers/results');
 mkdir(lcpResDir);
 LCP_file_path=fullfile(lcpResDir, ['amphiLCPs' postFix]);
+%% boundary_label function
+boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
 %% Make sure all the code is on the matlabpath'
 %Remove addpaths if compiling in command line (mcc)
 addpath ./; 
@@ -76,7 +78,7 @@ end
 % misc extra parameters
 tol=1e-4; 
 mdist=3; 
-denseMV=true; 
+denseMV=false; 
 denseforce=1;
 gamma=1; 
 
