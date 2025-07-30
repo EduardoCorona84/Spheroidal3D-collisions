@@ -1,4 +1,4 @@
-function coeffs = spheroidalgraddivSLcoefficients(u, v, n, m, is_oblate)
+function coeffs = spheroidalgraddivSLcoefficients(u, v, phi, n, m, is_oblate)
         %{
             Spectral coefficients for spheroidal graddiv SL. Not designed to be
             human readable.

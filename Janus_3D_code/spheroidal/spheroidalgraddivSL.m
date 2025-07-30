@@ -20,9 +20,7 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
     %    
     %   Returns
     %--------------------------------------------------------------------%
-    
-    DEBUG_FLAG = true;
-    
+
     % Pre-processing
     %--------------------------------------------------------------------%
     if isempty(params.u0)
@@ -190,7 +188,7 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
             
             Xt_k = Xt{k};
             [nt_k,d] = size(Xt_k);
-            DP_k_x = zeros(nt_k, nf); DP_k_y = zeros(nt_k, nf); DP_k_z = zeros(nt_k, nf);
+            GDSL_k_x = zeros(nt_k, nf); GDSL_k_y = zeros(nt_k, nf); GDSL_k_z = zeros(nt_k, nf);
     
             % Grab the sigma coefficients associated with the spheroid
             Gshc_x_k = Gshc_x(:,:,k);
@@ -223,7 +221,7 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
 
                 % For each of the three regions, we need to take care of
                 % the x, y, and z components.
-                DPregions=cell(3,3,1);
+                GDSL_regions=cell(3,3,1);
                 
                 % Loop over each region
                 for r=1:3
@@ -241,36 +239,36 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
                         [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0(k),a,u_x_r,v_x_r,phi_x_r,Gshc_x_k,Gshc_y_k,Gshc_z_k,oblate(k));
                         
                         % Now, we are done, so store the information for the associated region.
-                        DPregions{r, 1} = Ucomponent;
-                        DPregions{r, 2} = Vcomponent;
-                        DPregions{r, 3} = PHIcomponent;
+                        GDSL_regions{r, 1} = Ucomponent;
+                        GDSL_regions{r, 2} = Vcomponent;
+                        GDSL_regions{r, 3} = PHIcomponent;
                     end
                 end
             
                 % Recombine all DPs from interior/exterior/surface
-                DP_k_x(u_x < u0(k),:) = DPregions{1,1};
-                DP_k_x(u_x == u0(k),:) = DPregions{2,1};
-                DP_k_x(u_x > u0(k),:) = DPregions{3,1};
+                GDSL_k_x(u_x < u0(k),:) = GDSL_regions{1,1};
+                GDSL_k_x(u_x == u0(k),:) = GDSL_regions{2,1};
+                GDSL_k_x(u_x > u0(k),:) = GDSL_regions{3,1};
 
-                DP_k_y(u_x < u0(k),:) = DPregions{1,2};
-                DP_k_y(u_x == u0(k),:) = DPregions{2,2};
-                DP_k_y(u_x > u0(k),:) = DPregions{3,2};
+                GDSL_k_y(u_x < u0(k),:) = GDSL_regions{1,2};
+                GDSL_k_y(u_x == u0(k),:) = GDSL_regions{2,2};
+                GDSL_k_y(u_x > u0(k),:) = GDSL_regions{3,2};
 
-                DP_k_z(u_x < u0(k),:) = DPregions{1,3};
-                DP_k_z(u_x == u0(k),:) = DPregions{2,3};
-                DP_k_z(u_x > u0(k),:) = DPregions{3,3};
+                GDSL_k_z(u_x < u0(k),:) = GDSL_regions{1,3};
+                GDSL_k_z(u_x == u0(k),:) = GDSL_regions{2,3};
+                GDSL_k_z(u_x > u0(k),:) = GDSL_regions{3,3};
         
                 if isReal
-                    DP_k_x = real(DP_k_x);
-                    DP_k_y = real(DP_k_y);
-                    DP_k_z = real(DP_k_z);
+                    GDSL_k_x = real(GDSL_k_x);
+                    GDSL_k_y = real(GDSL_k_y);
+                    GDSL_k_z = real(GDSL_k_z);
                 end
             end
             
             %%% Evaluation for particle k
-            graddivSL_x{k} = DP_k_x;
-            graddivSL_y{k} = DP_k_y;
-            graddivSL_z{k} = DP_k_z;
+            graddivSL_x{k} = GDSL_k_x;
+            graddivSL_y{k} = GDSL_k_y;
+            graddivSL_z{k} = GDSL_k_z;
         end
 
         if ~isa(X, "cell")
@@ -279,35 +277,6 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
             graddivSL_z = cell2mat(reshape(graddivSL_z,1,1,ns));
         end
     end
-end
-    
-    
-function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum(p, u0, a, oblate)
-    %{
-        Calculates the coefficients for D'^-, D'^+, and D' on the surface of the spheroid. 
-    %}
-    sp = (p+1)^2;
-    ii = (1:sp)';
-    nn = floor(sqrt(ii-1));
-    mm = ii - nn.^2 - nn - 1;
-    anm_base = factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm));
-
-    L = [];
-    if ~oblate
-        anm = anm_base .* -1 .* (u0.^2 + 1); % cnm
-        L = legendre_otc(p,1j.*u0,1,1,1);
-    else
-        error("Not implemented.");
-        anm = anm_base .* (u0.^2 - 1); % bnm
-        L = legendre_otc(p,u0,1,1,1);
-    end
-
-    P = L{1}; Q = L{2}; dP = L{3}; dQ = L{4};
-
-    % Coefficient of D' of surface
-    lambda_nm_prime = anm.' .* sqrt(u0.^2 - 1) .* dP.' .* dQ.' ./ a;
-    lambda_nm = anm .* ((dQ .* P + dP .* Q) ./ 2) ./ a; % Is this right?
-    lambda_n1m = lambda_nm;
 end
      
 function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,Gshc_x,Gshc_y,Gshc_z,oblate)
@@ -326,7 +295,6 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
             - oblate
     %}
     sp=(p+1)^2;
-    ii = (1:sp)'; n = floor(sqrt(ii-1)); m=ii-n.^2-n-1;
     nt_r=length(u);
 
     % Necessary for looping later
@@ -355,15 +323,17 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
     end
 
     %%% Calculate fnm and fnm' and fnm''
+    ii = (1:sp)'; nn=floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
     if oblate
         error("not implemented.");
     else
-        bnm = a*factorial(n-m)./factorial(n+m) .* ((-1) .^ (m)) .* sqrt(u0.^2-1);
+        bnm = a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2-1);
         L = legendre_otc(p,u0,1,1,1);
         if abs(u)-u0 < 1e-14 % interior
-            gnm = L{4}; % Q'(u_0)
+            error("not implemented.");
+            gnm = L{2}; % Q(u_0)
         elseif abs(u)-u0 > 1e-14 % exterior
-            gnm = L{3}; % P'(u_0)
+            gnm = L{1}; % P(u_0)
         end
         [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, u, oblate);
         common_coeffs = a.^(-2).*bnm.*gnm;
@@ -396,7 +366,6 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
         if norm(abs(u)-u0)<1e-14 % on surface with arbitrary nu
             error("on surface not implemented.");
         else % off-surface.
-            n = n'; m = m';
             %%% Note that below is very granually split so that it's easier
             %%% to debug/fix size issues (hence, the ugliness).
             % Working backwards, the procedure is this (so step 3 is first 
@@ -404,7 +373,7 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
             % 1. Handle each sigma coefficient
             % 2. Within each sigma coefficient, handle the Ynm coefficients
             % 3. Within each Ynm coefficient, handle the f coefficients
-            coeffs = spheroidalgraddivSLcoefficients(u, v, n, m, oblate);
+            coeffs = spheroidalgraddivSLcoefficients(u, v, nn', mm', oblate);
 
             %%% --- U COMPONENT ---
             Ucomponent = 0;
@@ -450,6 +419,7 @@ function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x, oblate)
     end
 
     if abs(u_x)-u0 < -1e-14 % Interior
+        error("not implemented.");
         PQ=legendre_otc(p,u_x,1,2,2);
         P=PQ{1}; dP=PQ{3}; ddP = PQ{5};
         Fr=P.'; Fp=dP.'; Fpp=ddP.';
