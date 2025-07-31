@@ -284,15 +284,6 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
         Obtains the coefficients associated with Y_k^m for k = n, n+1, n+2
         Note that unlike all of the similar functions (e.g. spheroidalSP, etc.), this
         handles ALL coefficients associated with the spheroidal harmonics.
-
-        Inputs
-            - p
-            - u0
-            - a
-            - u_x
-            - v_x
-            - Gshc_x, Gshc_y, Gshc_z
-            - oblate
     %}
     sp=(p+1)^2;
     nt_r=length(u);
@@ -325,18 +316,25 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
     %%% Calculate fnm and fnm' and fnm''
     ii = (1:sp)'; nn=floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
     if oblate
-        error("not implemented.");
+        cnm = 1j*a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2 + 1);
+        L = legendre_otc(p,1j*u0,1,1,1);
+        if abs(u)-u0 < 1e-14 % interior
+            gnm = L{2}; % Q(iu_0)
+        elseif abs(u)-u0 > 1e-14 % exterior
+            gnm = L{1}; % P(iu_0)
+        end
+        [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, 1j*u);
+        common_coeffs = cnm.*gnm./(a.^2);
     else
-        bnm = a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2-1);
+        bnm = a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2 - 1);
         L = legendre_otc(p,u0,1,1,1);
         if abs(u)-u0 < 1e-14 % interior
-            error("not implemented.");
             gnm = L{2}; % Q(u_0)
         elseif abs(u)-u0 > 1e-14 % exterior
             gnm = L{1}; % P(u_0)
         end
-        [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, u, oblate);
-        common_coeffs = a.^(-2).*bnm.*gnm;
+        [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, u);
+        common_coeffs = bnm.*gnm./(a.^2);
     end
 
     %%% Define helper function
@@ -362,49 +360,45 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
                      + Yn2m_coeff.*Yr(2*nt_r+1:end,:);
     end
 
-    if ~oblate
-        if norm(abs(u)-u0)<1e-14 % on surface with arbitrary nu
-            error("on surface not implemented.");
-        else % off-surface.
-            %%% Note that below is very granually split so that it's easier
-            %%% to debug/fix size issues (hence, the ugliness).
-            % Working backwards, the procedure is this (so step 3 is first 
-            % and step 1 is last):
-            % 1. Handle each sigma coefficient
-            % 2. Within each sigma coefficient, handle the Ynm coefficients
-            % 3. Within each Ynm coefficient, handle the f coefficients
-            coeffs = spheroidalgraddivSLcoefficients(u, v, nn', mm', oblate);
+    if norm(abs(u)-u0)<1e-14 % on surface with arbitrary nu
+        error("on surface not implemented.");
+    else % off-surface.
+        %%% Note that below is very granually split so that it's easier
+        %%% to debug/fix size issues (hence, the ugliness).
+        % Working backwards, the procedure is this (so step 3 is first 
+        % and step 1 is last):
+        % 1. Handle each sigma coefficient
+        % 2. Within each sigma coefficient, handle the Ynm coefficients
+        % 3. Within each Ynm coefficient, handle the f coefficients
+        coeffs = spheroidalgraddivSLcoefficients(u, v, phi, nn', mm', oblate);
 
-            %%% --- U COMPONENT ---
-            Ucomponent = 0;
-            for i = 1:3
-                type = gshc_types{i};
-                Gshc_coeff = calculate_gshc_coeff(coeffs.U.(type));
-                Ucomponent = Ucomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
-            end
-
-            %%% --- V COMPONENT ---
-            Vcomponent = 0;
-            for i = 1:3
-                type = gshc_types{i};
-                Gshc_coeff = calculate_gshc_coeff(coeffs.V.(type));
-                Vcomponent = Vcomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
-            end
-
-            %%% --- PHI COMPONENT ---
-            PHIcomponent = 0;
-            for i = 1:3
-                type = gshc_types{i};
-                Gshc_coeff = calculate_gshc_coeff(coeffs.PHI.(type));
-                PHIcomponent = PHIcomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
-            end
+        %%% --- U COMPONENT ---
+        Ucomponent = 0;
+        for i = 1:3
+            type = gshc_types{i};
+            Gshc_coeff = calculate_gshc_coeff(coeffs.U.(type));
+            Ucomponent = Ucomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
         end
-    else
-        error("oblate not implemented.");
+
+        %%% --- V COMPONENT ---
+        Vcomponent = 0;
+        for i = 1:3
+            type = gshc_types{i};
+            Gshc_coeff = calculate_gshc_coeff(coeffs.V.(type));
+            Vcomponent = Vcomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
+        end
+
+        %%% --- PHI COMPONENT ---
+        PHIcomponent = 0;
+        for i = 1:3
+            type = gshc_types{i};
+            Gshc_coeff = calculate_gshc_coeff(coeffs.PHI.(type));
+            PHIcomponent = PHIcomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
+        end
     end
 end
 
-function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x, oblate)
+function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x)
     %{
         Solid spheroidal harmonics can be written as f_n^m(u)Y_n^m(v, phi).
         This function returns what Fr = f_n^m is (and its derivative as Fp), depending 
@@ -413,10 +407,6 @@ function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x, oblate)
     Fr = ones(size(u_x,1),(p+1)^2);
     Fp = ones(size(u_x,1),(p+1)^2);
     Fpp = ones(size(u_x,1),(p+1)^2);
-
-    if oblate
-        u_x = 1j.*u_x;
-    end
 
     if abs(u_x)-u0 < -1e-14 % Interior
         error("not implemented.");
