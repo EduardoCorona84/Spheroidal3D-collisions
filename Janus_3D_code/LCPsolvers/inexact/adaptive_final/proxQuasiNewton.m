@@ -1,4 +1,4 @@
-function [x, info] = prox_quasi_newton_noise_tolerant(fcnGrad, x0, opts)
+function [x, info] = proxQuasiNewton(fcnGrad, x0, opts)
 [opts, info] = defaultOpts(opts, x0);
 checkOpts(opts)
 n = numel(x0);
@@ -16,31 +16,9 @@ while true
         break
     end
 
+
     s_k = x_k - x_km1;
     y_k = grad_k - grad_km1;
-
-
-    if opts.noise_control == true && k > 0
-        if y_k'*s_k >= 2*(1 + opts.noise_control_parameter)*opts.noise*norm(s_k) 
-            %do nothing, not noisy
-        else
-            switch opts.noise_control_type
-                case 'simple'
-                    %Just extend along the step
-                    [s_k, y_k] = simple_noise_control(x_km1, s_k, grad_km1, y_k, fcnGrad, opts);
-
-                case 'projected'
-                    %Extend along the projected arc (norm is the identity)
-                    [s_k, y_k] = projected_noise_control(x_km1, s_k, grad_km1, y_k, fcnGrad, opts);
-
-                case 'proximal'
-                    %Extend along the proximal arc
-                    [s_k, y_k] = proximal_noise_control(x_km1, kappa, p, grad_km1, h0, U, V, fcnGrad, opts);
-            end
-
-        end
-
-    end
 
     x_km1 = x_k;
     grad_km1 = grad_k;
@@ -48,13 +26,12 @@ while true
     % quasi-newton step direction
     p = -H(grad_k);
     % step size direction
-    %kappa = stepSize(k, p, grad_k, opts); 
-    
+    kappa = stepSize(k, p, grad_k, opts); 
     x_k = prox(x_km1 + kappa * p, h0, U, V, opts);    
     % Possibly a step length update after the projection
-    %q = x_k - x_km1;
-    %eta = min(1, stepSize(-1, q, grad_k, opts));
-    %x_k = x_km1 + eta*q;
+    q = x_k - x_km1;
+    eta = min(1, stepSize(-1, q, grad_k, opts));
+    x_k = x_km1 + eta*q;
     % Increment the number of iterations
     k = k + 1;
 end

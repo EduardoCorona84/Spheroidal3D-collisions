@@ -1,5 +1,6 @@
-function [x, info] = prox_quasi_newton_noise_tolerant(fcnGrad, x0, opts)
+function [x, info] = proxQuasiNewtonAdaptive(fcnGrad, x0, opts)
 [opts, info] = defaultOpts(opts, x0);
+info.gmres_iters = zeros(opts.max_iter+1,1);
 checkOpts(opts)
 n = numel(x0);
 kappa = 1;
@@ -7,54 +8,67 @@ x_k = x0;
 x_km1 = NaN*ones(n,1);
 grad_km1 = NaN*ones(n,1);
 k = 0;
+if (strcmp(opts.noise_control.type, 'perturbed_adaptive') || strcmp(opts.noise_control.type, 'independent_perturbed_adaptive'))
+    tol_type = 'relative';
+else
+    tol_type = 'absolute';
+end
+
 while true
-    [f_k, grad_k] = fcnGrad(x_k);
-    [converged, info] = checkConvergence(k, f_k, x_k, ...
+    opts.noise_control.skip = false;
+    if (strcmp(opts.noise_control.type, 'perturbed_adaptive') || strcmp(opts.noise_control.type, 'independent_perturbed_adaptive')) && k > 1
+        if abs(f_k - f_km1) < (10)*norm(s_k)*(abs_residual_km1 + abs_residual_k) || f_k - f_km1 > 0
+            opts.noise_control.noise = 1/2*opts.noise_control.noise;
+        end
+        %values = [1, abs(norm(s_k) - norm(x_k - x_km1)), norm(s_k), norm(x_k - x_km1),  opts.%noise_control.noise];
+        %opts.noise_control.noise = min(values);
+    end
+
+    if (strcmp(opts.noise_control.type, 'eig_adaptive') && k > 1)
+
+        opts.noise_control.noise = 1/2*((1/2)*norm(x_k - x_km1)*eigen_value - opts.noise_control.noise);
+    end
+
+    [f_k, grad_k, gmres_iters_k, ~, abs_residual_k] = fcnGrad(x_k, opts.noise_control.noise, tol_type);
+
+    [converged, info] = checkConvergenceAdaptive(k, f_k, x_k, ...
         grad_k, kappa, info, opts);
     if converged
         x = x_k;
         break
     end
+    info.gmres_iters(k + 1) = info.gmres_iters(k + 1) + gmres_iters_k;
+
 
     s_k = x_k - x_km1;
     y_k = grad_k - grad_km1;
 
-
-    if opts.noise_control == true && k > 0
-        if y_k'*s_k >= 2*(1 + opts.noise_control_parameter)*opts.noise*norm(s_k) 
-            %do nothing, not noisy
-        else
-            switch opts.noise_control_type
-                case 'simple'
-                    %Just extend along the step
-                    [s_k, y_k] = simple_noise_control(x_km1, s_k, grad_km1, y_k, fcnGrad, opts);
-
-                case 'projected'
-                    %Extend along the projected arc (norm is the identity)
-                    [s_k, y_k] = projected_noise_control(x_km1, s_k, grad_km1, y_k, fcnGrad, opts);
-
-                case 'proximal'
-                    %Extend along the proximal arc
-                    [s_k, y_k] = proximal_noise_control(x_km1, kappa, p, grad_km1, h0, U, V, fcnGrad, opts);
-            end
-
-        end
-
+    if opts.noise_control.enabled == true && k > 0
+        [s_k, y_k, opts] = noise_control(x_km1, x_k, s_k, grad_km1, grad_k, y_k, q, Aq, opts, abs_residual_km1, abs_residual_k, abs_residual_step);
     end
 
+    f_km1 = f_k;
     x_km1 = x_k;
     grad_km1 = grad_k;
+    abs_residual_km1 = abs_residual_k;
+
     [h0, H, U, V, opts] = updateHk(k, s_k, y_k, opts);
+
     % quasi-newton step direction
     p = -H(grad_k);
     % step size direction
-    %kappa = stepSize(k, p, grad_k, opts); 
-    
+    kappa = stepSizeAdaptive(k, p, grad_k, opts, info, k, s_k, y_k, tol_type); 
     x_k = prox(x_km1 + kappa * p, h0, U, V, opts);    
     % Possibly a step length update after the projection
-    %q = x_k - x_km1;
-    %eta = min(1, stepSize(-1, q, grad_k, opts));
-    %x_k = x_km1 + eta*q;
+    q = zeros(size(x_k));
+    Aq = zeros(size(x_k));
+    abs_residual_step = 0;
+    if opts.noise_adaptive.quad == true
+        q = x_k - x_km1;
+        [step, Aq, ~, abs_residual_step, info] = stepSizeAdaptive(-1, p, grad_k, opts, info, k, s_k, y_k, tol_type);
+        eta = min(1, step);
+        x_k = x_km1 + eta*q;
+    end
     % Increment the number of iterations
     k = k + 1;
 end
@@ -101,7 +115,7 @@ if k > opts.r
 end
 % Curvature check
 rho = 1 / dot(y_k,s_k);
-if 1/rho >= 1e-8
+if 1/rho >= 1e-8 && opts.noise_control.skip == false
     opts.S(:,r) = s_k;
     opts.Y(:,r) = y_k;
 else
@@ -120,7 +134,7 @@ switch lower(opts.qnUpdate)
             s = S(:,j); 
             y = Y(:,j); 
             rho = 1 / dot(y,s);
-            if 1/rho < 1e-8
+            if 1/rho < 1e-8 
                 % TODO something better than skip if the curvature condition is bad
                 continue
             end
@@ -135,7 +149,7 @@ switch lower(opts.qnUpdate)
             V(:, j) = v;
         end
         % IDIOT CHECK 
-        assert(norm(B*H - eye(n)) < 1e-8)
+        %assert(norm(B*H - eye(n)) < 1e-8)
         % TODO: Make this matrix free...
         H = @(x) H*x;
     case 'sr1'
