@@ -53,229 +53,116 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
     if length(a)==1
         a=a*ones(1,ns); 
     end
+
+    if isempty(X)
+        X = params.get_X();
+    end
+
+    %%% Input processing and input validation
+    if isa(X, "cell")
+        Xt=X;
+    else
+        Xt = mat2cell(X,size(X,1),size(X,2),ones(1,size(X,3)));
+        Xt = reshape(Xt,1,length(Xt));
+    end
     
-    % No target points given; do self evaluation
-    % -----------------------------------------------------------------------
-    if nargin==1
-        error("not implemented.");
-        %if X not given, calculate on-surface points; nu taken to be surface
-        %normal
-    
-        [theta_x,phi_x]=gl_grid(p);
-        v_x=cos(theta_x);
-        nt=length(theta_x);
+    if length(Xt) ~= ns
+        error("dimensions of target input and number of surfaces do not match. X should be a 1 x N cell or nt x 3 x N matrix.")
+    end
+
+    %%% Actual computation
+    % Calculate spectra for interior, exterior, and surface
+    for k=1:ns % Loop over each spheroid surface
         
-        Y=zeros(nt,sp);
-        for n=0:p  %loop over terms in spheroidal harmonic expansion
-            Yn = Ynm(n,[],acos(v_x)',phi_x);
-            Y(:,n^2+1:(n+1)^2)=Yn;
-        end
-    
-        % Calculate spectra on surface with outward normal
-        [spectra_surf,~,~]=DPspectrum(p,u0,params.a,oblate);
-    
-        %reshape so that each column of DP_coefs corresponds to each function 
-        % on each spheroid
-        spectra_surf = reshape(spectra_surf,sp,1,ns);
-        spectra_matrix = repmat(spectra_surf,1,nf,1);
-        DP_coefs = spectra_matrix .* shc; 
-        DP_coefs = reshape(DP_coefs, sp, [], 1);
-    
-        %multiply coefficients with spheroidal harmonics
-        DP=Y*DP_coefs;
-    
-        % reshape to match original shape of sigma
-        DP = reshape(DP,[],nf,ns);
-    
-        %%%%%%%%%%%%
-        % assuming nf=1
-        coef_mat=zeros(np,1,ns);
-        for i=1:ns
-            coef_mat(:,:,i)=oblate(i).*1./sqrt(u0(i)^2+v_x.^2)+~oblate(i).*1./sqrt(u0(i)^2-v_x.^2);
-        end
-        DP = coef_mat.*DP;    
-        %%%%%%%%%%%%%%%%
-    
-        if isReal
-            DP=real(DP);
-        end
-    %  Self Eval, arbitrary normal.
-    % ------------------------------------------------------------------------
-    elseif isempty(X)
-        error("not implemented.");
-        % When we want to get surface dS/dnu with arbitrary normal,
-        % to avoid error in converting coordinates, enter X=[] with nu vectors
-        % to perform on-surface calculations.
-    
-        if isa(nu,"cell")
-            nu_t=nu;
-        else
-            nu_t=mat2cell(nu,size(nu,1),size(nu,2),ones(1,size(nu,3)));
-            nu_t=reshape(nu_t,1,length(nu_t));
-        end
-    
-        DP=cell(1,ns);
-    
-        [theta2,phi_k]=gl_grid(p);
-        v_k=cos(theta2);
-        nt_r=length(v_k);
-        Yr=zeros(nt_r*2,sp);
-    
-        for n=0:p  %loop over terms in spheroidal harmonic expansion
-            Yn=Ynm(n,[],real(acos(v_k))',phi_k); % v_x_r exceeds [-1,1] by 1e-8, but acos() returns imaginary values. Impose real values for Ynm.
-            Yr(1:nt_r,n^2+1:(n+1)^2)=Yn;
+        Xt_k = Xt{k};
+        [nt_k,d] = size(Xt_k);
+        GDSL_k_x = zeros(nt_k, nf); GDSL_k_y = zeros(nt_k, nf); GDSL_k_z = zeros(nt_k, nf);
 
-            Yn1=Ynm(n+1,-n:n,real(acos(v_k))',phi_k); 
-            yn1_scale = sqrt((2*n+1)/(2*n+3).*(n+(-n:n)+1)./(n-(-n:n)+1));
+        % Grab the sigma coefficients associated with the spheroid
+        Gshc_x_k = Gshc_x(:,:,k);
+        Gshc_y_k = Gshc_y(:,:,k);
+        Gshc_z_k = Gshc_z(:,:,k);
 
-            Yr(nt_r+1:end,n^2+1:(n+1)^2) = yn1_scale.*Yn1;
-        end
-        %%%%%%%%%%%%%%%%%%%%%
-
-        for k=1:ns  %loop over each spheroid surface we want to evaluate
-            [~,Xself_k]=params.get_X(k);
-            S=cart2spheroidal(Xself_k,a(k),oblate(k));
-    
-            u_k=u0(k).*ones(size(v_k));
-    
-            nu_list=cell(1,nvarin+1); nu_sph_list=nu_list;
-            nu_list{1}=nu_t{k};
-            nu_sph_list{1}=cartNu2spheroidal(nu_t{k},S,a(k),oblate(k));
-            for nu_ind=1:nvarin
-                nu_list{nu_ind+1}=nu_extra_cells{nu_ind}{k};
-                [nu_sph_temp,~]=cartNu2spheroidal(nu_list{nu_ind+1},S,a(k),oblate(k));
-                nu_sph_list{nu_ind+1}=nu_sph_temp;
+        if nt_k > 0
+            if d~=3
+                error("Dimensions of target point array should be N x 3.")
             end
-    
-            for nu_ind=1:nvarin+1
-                [spectra_nm_prime,spectra_nm,spectra_n1m] = graddivSL_away(p,u0(k),a,u_k,v_k,nu_sph_list{nu_ind},oblate(k));
-                
-                FYr = (spectra_nm_prime + spectra_nm).*Yr(1:nt_r,:) + spectra_n1m.*Yr(nt_r+1:end,:);
-                DP_k=FYr*shc(:,:,k);
-    
-                if isReal
-                    DP_k=real(DP_k);
-                end
-                
-                if nu_ind==1
-                    DP{k}=DP_k;
-                else
-                    varargout{nu_ind-1}{k}=DP_k;
-                end
-            end
-    
-        end
-    
-        if ~isa(nu, "cell")
-            DP = cell2mat(reshape(DP,1,1,ns));
-        end
-    elseif nargin > 1 % Target points given
-        %%% Input processing and input validation
-        if isa(X, "cell")
-            Xt=X;
-        else
-            Xt = mat2cell(X,size(X,1),size(X,2),ones(1,size(X,3)));
-            Xt = reshape(Xt,1,length(Xt));
-        end
+
+            % Convert targets to spheroidal coords
+            S=cart2spheroidal(Xt_k,a(k),oblate(k));
+            u_x=S(:,1);
+            
+            % Split up interior/surface/exterior
+            S_int=S(u_x < u0(k),:);
+            S_surf=S(u_x == u0(k),:);
+            S_ext=S(u_x > u0(k),:);
+
+            % If there's no points in a particular region, don't do any
+            % computations.
+            do_int=~isempty(S_int);
+            do_surf=~isempty(S_surf); 
+            do_ext=~isempty(S_ext);
         
-        if length(Xt) ~= ns
-            error("dimensions of target input and number of surfaces do not match. X should be a 1 x N cell or nt x 3 x N matrix.")
-        end
-    
-        %%% Actual computation
-        % Calculate spectra for interior, exterior, and surface
-        for k=1:ns % Loop over each spheroid surface
+            % Split coordinates into 3 regions.
+            regions=[do_int,do_surf,do_ext];
+            Sregions={S_int,S_surf,S_ext};
+
+            % For each of the three regions, we need to take care of
+            % the x, y, and z components.
+            GDSL_regions=cell(3,3,1);
             
-            Xt_k = Xt{k};
-            [nt_k,d] = size(Xt_k);
-            GDSL_k_x = zeros(nt_k, nf); GDSL_k_y = zeros(nt_k, nf); GDSL_k_z = zeros(nt_k, nf);
-    
-            % Grab the sigma coefficients associated with the spheroid
-            Gshc_x_k = Gshc_x(:,:,k);
-            Gshc_y_k = Gshc_y(:,:,k);
-            Gshc_z_k = Gshc_z(:,:,k);
-
-            if nt_k > 0
-                if d~=3
-                    error("Dimensions of target point array should be N x 3.")
-                end
-
-                % Convert targets to spheroidal coords
-                S=cart2spheroidal(Xt_k,a(k),oblate(k));
-                u_x=S(:,1);
-                
-                % Split up interior/surface/exterior
-                S_int=S(u_x < u0(k),:);
-                S_surf=S(u_x == u0(k),:);
-                S_ext=S(u_x > u0(k),:);
-
-                % If there's no points in a particular region, don't do any
-                % computations.
-                do_int=~isempty(S_int);
-                do_surf=~isempty(S_surf); 
-                do_ext=~isempty(S_ext);
-            
-                % Split coordinates into 3 regions.
-                regions=[do_int,do_surf,do_ext];
-                Sregions={S_int,S_surf,S_ext};
-
-                % For each of the three regions, we need to take care of
-                % the x, y, and z components.
-                GDSL_regions=cell(3,3,1);
-                
-                % Loop over each region
-                for r=1:3
-                    if regions(r)
-                        Sr=Sregions{r};
-                        u_x_r=Sr(:,1);
-                        v_x_r=Sr(:,2);
-                        phi_x_r=Sr(:,3);
-                        v_x_r_real=real(v_x_r);
-                        if abs(v_x_r_real-v_x_r)>1e-10
-                            fprintf("v_x_r imaginary\n ")
-                        end
-                        v_x_r=v_x_r_real;
-
-                        [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0(k),a,u_x_r,v_x_r,phi_x_r,Gshc_x_k,Gshc_y_k,Gshc_z_k,oblate(k));
-                        
-                        % Now, we are done, so store the information for the associated region.
-                        GDSL_regions{r, 1} = Ucomponent;
-                        GDSL_regions{r, 2} = Vcomponent;
-                        GDSL_regions{r, 3} = PHIcomponent;
+            % Loop over each region
+            for r=1:3
+                if regions(r)
+                    Sr=Sregions{r};
+                    u_x_r=Sr(:,1);
+                    v_x_r=Sr(:,2);
+                    phi_x_r=Sr(:,3);
+                    v_x_r_real=real(v_x_r);
+                    if abs(v_x_r_real-v_x_r)>1e-10
+                        fprintf("v_x_r imaginary\n ")
                     end
-                end
-            
-                % Recombine all DPs from interior/exterior/surface
-                GDSL_k_x(u_x < u0(k),:) = GDSL_regions{1,1};
-                GDSL_k_x(u_x == u0(k),:) = GDSL_regions{2,1};
-                GDSL_k_x(u_x > u0(k),:) = GDSL_regions{3,1};
+                    v_x_r=v_x_r_real;
 
-                GDSL_k_y(u_x < u0(k),:) = GDSL_regions{1,2};
-                GDSL_k_y(u_x == u0(k),:) = GDSL_regions{2,2};
-                GDSL_k_y(u_x > u0(k),:) = GDSL_regions{3,2};
-
-                GDSL_k_z(u_x < u0(k),:) = GDSL_regions{1,3};
-                GDSL_k_z(u_x == u0(k),:) = GDSL_regions{2,3};
-                GDSL_k_z(u_x > u0(k),:) = GDSL_regions{3,3};
-        
-                if isReal
-                    GDSL_k_x = real(GDSL_k_x);
-                    GDSL_k_y = real(GDSL_k_y);
-                    GDSL_k_z = real(GDSL_k_z);
+                    [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0(k),a,u_x_r,v_x_r,phi_x_r,Gshc_x_k,Gshc_y_k,Gshc_z_k,oblate(k));
+                    
+                    % Now, we are done, so store the information for the associated region.
+                    GDSL_regions{r, 1} = Ucomponent;
+                    GDSL_regions{r, 2} = Vcomponent;
+                    GDSL_regions{r, 3} = PHIcomponent;
                 end
             end
-            
-            %%% Evaluation for particle k
-            graddivSL_x{k} = GDSL_k_x;
-            graddivSL_y{k} = GDSL_k_y;
-            graddivSL_z{k} = GDSL_k_z;
-        end
+        
+            % Recombine all DPs from interior/exterior/surface
+            GDSL_k_x(u_x < u0(k),:) = GDSL_regions{1,1};
+            GDSL_k_x(u_x == u0(k),:) = GDSL_regions{2,1};
+            GDSL_k_x(u_x > u0(k),:) = GDSL_regions{3,1};
 
-        if ~isa(X, "cell")
-            graddivSL_x = cell2mat(reshape(graddivSL_x,1,1,ns));
-            graddivSL_y = cell2mat(reshape(graddivSL_y,1,1,ns));
-            graddivSL_z = cell2mat(reshape(graddivSL_z,1,1,ns));
+            GDSL_k_y(u_x < u0(k),:) = GDSL_regions{1,2};
+            GDSL_k_y(u_x == u0(k),:) = GDSL_regions{2,2};
+            GDSL_k_y(u_x > u0(k),:) = GDSL_regions{3,2};
+
+            GDSL_k_z(u_x < u0(k),:) = GDSL_regions{1,3};
+            GDSL_k_z(u_x == u0(k),:) = GDSL_regions{2,3};
+            GDSL_k_z(u_x > u0(k),:) = GDSL_regions{3,3};
+    
+            if isReal
+                GDSL_k_x = real(GDSL_k_x);
+                GDSL_k_y = real(GDSL_k_y);
+                GDSL_k_z = real(GDSL_k_z);
+            end
         end
+        
+        %%% Evaluation for particle k
+        graddivSL_x{k} = GDSL_k_x;
+        graddivSL_y{k} = GDSL_k_y;
+        graddivSL_z{k} = GDSL_k_z;
+    end
+
+    if ~isa(X, "cell")
+        graddivSL_x = cell2mat(reshape(graddivSL_x,1,1,ns));
+        graddivSL_y = cell2mat(reshape(graddivSL_y,1,1,ns));
+        graddivSL_z = cell2mat(reshape(graddivSL_z,1,1,ns));
     end
 end
      
@@ -301,30 +188,30 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
     for n=0:p  % Loop over terms in spheroidal harmonic expansion
         % v_x_r exceeds [-1,1] by 1e-8, but acos() returns imaginary values. Impose real values for Ynm.
         %%% Store Yn harmonics
-        Yn=Ynm(n, [], real(acos(v))', phi);
+        Yn=Ynm(n, [], real(acos(v)), phi);
         Yr(1:nt_r, n^2+1:(n+1)^2)=Yn;
 
         %%% Store Yn+1 harmonics
-        Yn1=Ynm(n+1, -n:n, real(acos(v))', phi);
+        Yn1=Ynm(n+1, -n:n, real(acos(v)), phi);
         Yr(nt_r+1:2*nt_r, n^2+1:(n+1)^2) = Yn1;
 
         %%% Store Yn+2 harmonics
-        Yn2=Ynm(n+2, -n:n, real(acos(v))', phi); 
+        Yn2=Ynm(n+2, -n:n, real(acos(v)), phi); 
         Yr(2*nt_r+1:end, n^2+1:(n+1)^2) = Yn2;
     end
 
     %%% Calculate fnm and fnm' and fnm''
     ii = (1:sp)'; nn=floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
     if oblate
-        cnm = 1j*a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2 + 1);
+        cnm = 1j.*a.*factorial(nn-mm)./factorial(nn+mm).*((-1).^mm).*sqrt(u0.^2+1);
         L = legendre_otc(p,1j*u0,1,1,1);
         if abs(u)-u0 < 1e-14 % interior
             gnm = L{2}; % Q(iu_0)
         elseif abs(u)-u0 > 1e-14 % exterior
             gnm = L{1}; % P(iu_0)
         end
-        [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, 1j*u);
-        common_coeffs = cnm.*gnm./(a.^2);
+        [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, 1j.*u);
+        common_coeffs = a^(-2).*cnm.*gnm;
     else
         bnm = a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2 - 1);
         L = legendre_otc(p,u0,1,1,1);
@@ -377,7 +264,7 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
         for i = 1:3
             type = gshc_types{i};
             Gshc_coeff = calculate_gshc_coeff(coeffs.U.(type));
-            Ucomponent = Ucomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
+            Ucomponent = Ucomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
         end
 
         %%% --- V COMPONENT ---
@@ -385,7 +272,7 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
         for i = 1:3
             type = gshc_types{i};
             Gshc_coeff = calculate_gshc_coeff(coeffs.V.(type));
-            Vcomponent = Vcomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
+            Vcomponent = Vcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
         end
 
         %%% --- PHI COMPONENT ---
@@ -393,7 +280,7 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
         for i = 1:3
             type = gshc_types{i};
             Gshc_coeff = calculate_gshc_coeff(coeffs.PHI.(type));
-            PHIcomponent = PHIcomponent + (common_coeffs' .* Gshc_coeff) * Gshc_data{i};
+            PHIcomponent = PHIcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
         end
     end
 end
@@ -409,7 +296,6 @@ function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x)
     Fpp = ones(size(u_x,1),(p+1)^2);
 
     if abs(u_x)-u0 < -1e-14 % Interior
-        error("not implemented.");
         PQ=legendre_otc(p,u_x,1,2,2);
         P=PQ{1}; dP=PQ{3}; ddP = PQ{5};
         Fr=P.'; Fp=dP.'; Fpp=ddP.';

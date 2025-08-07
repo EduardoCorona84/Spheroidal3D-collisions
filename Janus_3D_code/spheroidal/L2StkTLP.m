@@ -147,9 +147,7 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
 
     %%% Finally, we calculate the Stokes traction layer potentials in term of
     %%% the Laplace potentials.
-    
     if isempty(X_eval)
-        error("not implemented.");
         % Verify that the total number of surface discretization points is split
         % up evenly among the spheroidal bodies.
         [Xloc,~]=pars.get_X();
@@ -162,7 +160,7 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
         Stk_x=cell(1,ns); Stk_y=Stk_x; Stk_z=Stk_x;
         for i=1:ns % Loop over each body
             Xloc_i=Xloc((i-1)*np+1:i*np,:);
-            n_dot_x = dot(Xloc{i}, nu_eval{i}, 2);
+            n_dot_x = dot(X_loc{i}, nu_eval{i}, 2);
 
             SP_sum_term_x = nx_trg{i}.*SP_sigmax_X{i} + ny_trg{i}.*SP_sigmax_Y{i} + nz_trg{i}.*SP_sigmax_Z{i};
             SP_sum_term_y = nx_trg{i}.*SP_sigmay_X{i} + ny_trg{i}.*SP_sigmay_Y{i} + nz_trg{i}.*SP_sigmay_Z{i};
