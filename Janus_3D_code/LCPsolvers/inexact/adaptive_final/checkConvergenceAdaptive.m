@@ -26,6 +26,9 @@ else
         info.flag = 4;
         converged = true;
     end
+    if opts.storeKKT
+        info.kktHist(k+1) = kkt;
+    end
     old_kkt = kkt;
 end
 
@@ -44,6 +47,12 @@ end
 if opts.storeIts 
     info.iterHist(k+1,:) = x_k;
 end
+if opts.storeGrads 
+    info.gradHist(k+1,:) = grad_k;
+end
+if opts.storeFs
+    info.fHist(k+1) = f_k;
+end
 % Fill up info if converged
 if converged 
     if k == 0 
@@ -59,23 +68,32 @@ if converged
     if opts.storeIts
         info.iterHist = info.iterHist(1:k+1,:);
     end
+    if opts.storeGrads
+        info.gradHist = info.gradHist(1:k+1,:);
+    end
+    if opts.storeFs
+        info.fHist = info.fHist(1:k+1);
+    end
+    if opts.storeKKT
+        info.kktHist = info.kktHist(1:k+1); 
+    end
 end
 end % checkConvergence
 
-function msg = flag2msg(flag)
-assert(1 <= flag && flag <= 9)
+%function msg = flag2msg(flag)
+%assert(1 <= flag && flag <= 9)
 % Just a list of human readable text strings to convert the flag return
 % code into something readable by writing msg(flag) onto the screen.
-msgs = {...
-    'preprocessing';  % info.flag =  1
-    'iterating';      % info.flag =  2
-    'relative';       % info.flag =  3
-    'absolute';       % info.flag =  4
-    'stagnation';     % info.flag =  5
-    'local minima';   % info.flag =  6
-    'nondescent';     % info.flag =  7
-    'maxlimit';       % info.flag =  8
-    'x0 is sufficient'% info.flag =  9
-};
-msg = msgs{flag};
-end % flag2msg
+%msgs = {...
+%    'preprocessing';  % info.flag =  1
+%    'iterating';      % info.flag =  2
+%    'relative';       % info.flag =  3
+%   'absolute';       % info.flag =  4
+%   'stagnation';     % info.flag =  5
+%   'local minima';   % info.flag =  6
+%   'nondescent';     % info.flag =  7
+%   'maxlimit';       % info.flag =  8
+%   'x0 is sufficient'% info.flag =  9
+%};
+%msg = msgs{flag};
+%end % flag2msg

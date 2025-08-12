@@ -44,8 +44,8 @@ end
 
 if ~isfield(opts, 'kappa')
     opts.kappa = struct('init', 'uniform',...
-        'fwd', 'bb1', ...
-        'bwd', 'bb1');
+        'fwd', 'uniform', ...
+        'bwd', 'uniform');
 end
 
 if ~isfield(opts, 'r')

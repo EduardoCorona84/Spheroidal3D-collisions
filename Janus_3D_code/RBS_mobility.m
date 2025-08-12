@@ -48,6 +48,7 @@ init    - (string) optional filename to resume a simulation from last
 recorded timestep
 %}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+addpath('LCPsolvers/solvers/');
 global timings;
  
 %(0.1) (optional) Load data in init, initialize output arrays
@@ -306,7 +307,6 @@ MRot = @(wh,t) RotationMat(wh,t);
 % Get incoming force distribution: 
 tic; 
 [FT,sigma,VW,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt,Sc); 
-Ct
 fprintf('\n Time to compute incoming force: %e ',toc)
 timings.incoming(it) = timings.incoming(it) + toc; 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -871,7 +871,7 @@ end
 
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
-persistent A_list b_list save_iter
+persistent A_list A_diag_list b_list save_iter
 
 if ~isfield(Fparams, 'saveLCPs') 
     saveLCPs = false;
@@ -883,7 +883,8 @@ if ~isfield(Fparams, 'endFlag')
 else 
     endFlag = Fparams.endFlag;
 end
-if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter))
+if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter) || isempty(A_diag_list))
+    A_diag_list = {};
     A_list = {};
     b_list = {};
     save_iter = 1;
@@ -959,6 +960,24 @@ if denseMV
     % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
     Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
     A = @(x) Amat*x;
+
+    %save out block diagonal version
+    if saveLCPs
+        Nb = Fparams.parbd.Nb;
+        TD_diag = zeros(size(TD));
+        total_blocks = size(TD, 1)/Nb;
+        for i = 1:total_blocks
+            TD_diag((i-1)*Nb+1:i*Nb,(i-1)*Nb+1:i*Nb) = TD((i-1)*Nb+1:i*Nb,(i-1)*Nb+1:i*Nb);
+        end
+        SD_diag = zeros(size(SD));
+        for i = 1:total_blocks
+            SD_diag((i - 1)*Nb+1:i*Nb,(i - 1)*Nb+1:i*Nb) = SD((i - 1)*Nb+1:i*Nb,(i - 1)*Nb+1:i*Nb);
+        end
+        MNS_diag = -Lapp(TD_diag, Bf) + Lk*Bf;
+        MuNS_diag = Lslv(TD_diag, MNS_diag, parslv);
+        Amat_diag = real(F.'*(Ck*Lapp(SD_diag, MuNS_diag+Bf)));
+
+    end
 else % matfree
     parslv.tol = parslv.coltol; 
     Bf = @(x) (Bk.')*(F*x);
@@ -1021,15 +1040,16 @@ switch parslv.colsolver
 end
 
 if saveLCPs
-    if length(A_list) >= 100 || endFlag
+    if  endFlag
         mfilePath = mfilename('fullpath');
         if contains(mfilePath,'LiveEditorEvaluationHelper')
             mfilePath = matlab.desktop.editor.getActiveFilename;
         end
         [mfilePath,~,~] = fileparts(mfilePath);
-        save([mfilePath '/LCPSolvers/test/3x3x3_amphi_data_' num2str(save_iter) '.mat'], ...
-            'A_list', 'b_list')
+        save([mfilePath '/LCPsolvers/test_data/3x3x3_amphi_data_' num2str(save_iter) '.mat'], ...
+            'A_list', 'A_diag_list', 'b_list')
         A_list = {};
+        A_diag_list = {};
         b_list = {};
         save_iter = save_iter + 1;
         if endFlag 
@@ -1038,6 +1058,7 @@ if saveLCPs
     end
     
     A_list{end+1} = Amat; 
+    A_diag_list{end+1} = Amat_diag;
     b_list{end+1} = bvec;
 end
 fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);

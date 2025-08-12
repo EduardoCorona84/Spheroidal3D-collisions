@@ -1,6 +1,20 @@
 function [x, info] = proxQuasiNewtonAdaptive(fcnGrad, x0, opts)
 [opts, info] = defaultOpts(opts, x0);
-info.gmres_iters = zeros(opts.max_iter+1,1);
+opts.storeKKT = true;
+opts.storeGrads = true;
+opts.storeFs = true;
+opts.storeCurvature = true;
+opts.storeR = true;
+opts.storeSkip = true;
+opts.storeStepDirection = true;
+info.gmres_iters = zeros(1, opts.max_iter+1);
+info.gradHist = zeros(opts.max_iter+1, numel(x0));
+info.KKTHist = zeros(opts.max_iter+1, 1);
+info.fHist = zeros(opts.max_iter+1, 1);
+info.curvatureHist = zeros(opts.max_iter+1, 1);
+info.stepDirHist = zeros(opts.max_iter+1, numel(x0));
+info.skipHist = false(opts.max_iter+1, 1);
+info.r = zeros(opts.max_iter+1, 1);
 checkOpts(opts)
 n = numel(x0);
 kappa = 1;
@@ -52,13 +66,17 @@ while true
     grad_km1 = grad_k;
     abs_residual_km1 = abs_residual_k;
 
-    [h0, H, U, V, opts] = updateHk(k, s_k, y_k, opts);
+    [h0, H, U, V, opts, info] = updateHk(k, s_k, y_k, info, opts);
 
     % quasi-newton step direction
     p = -H(grad_k);
     % step size direction
     kappa = stepSizeAdaptive(k, p, grad_k, opts, info, k, s_k, y_k, tol_type); 
     x_k = prox(x_km1 + kappa * p, h0, U, V, opts);    
+    q = x_k - x_km1;
+    if opts.storeStepDirection
+        info.stepDirHist(k + 1, :) = q;
+    end
     % Possibly a step length update after the projection
     q = zeros(size(x_k));
     Aq = zeros(size(x_k));
@@ -75,7 +93,7 @@ end
 
 end % proxQuasiNewton
 
-function [h0, H, U, V, opts] = updateHk(k, s_k, y_k, opts)
+function [h0, H, U, V, opts, info] = updateHk(k, s_k, y_k, info, opts)
 
 if k == 0 
     % Initial step we do not compute any curvature information because only
@@ -93,6 +111,7 @@ assert(opts.tau_min < opts.tau_max, "tau_max must be larger than tau_min");
 assert(0 < opts.gamma && opts.gamma < 1, "gamma must be in (0,1)");
 n = length(s_k);
 tau_bb2 = dot(s_k,y_k) / norm(y_k,2)^2;
+info.diag(k + 1) = tau_bb2;
 tau_bb2 = clip(tau_bb2, opts.tau_min, opts.tau_max);
 if tau_bb2 == opts.tau_min
     warning('Convexity of cost function is stagnating'); 
@@ -106,6 +125,7 @@ if ~isempty(skipped_r) && r < k
     r = max(skipped_r-1, 1);
 end
 
+
 % Let memory fall out of context window regardless of wether we skip or not
 if k > opts.r
     opts.S(:,1:r-1) = opts.S(:,2:r);
@@ -115,12 +135,23 @@ if k > opts.r
 end
 % Curvature check
 rho = 1 / dot(y_k,s_k);
+if opts.storeCurvature
+    info.curvatureHist(k + 1) = 1/rho;
+end
 if 1/rho >= 1e-8 && opts.noise_control.skip == false
     opts.S(:,r) = s_k;
     opts.Y(:,r) = y_k;
 else
+    if opts.storeSkip
+        info.skipHist(k + 1) = true;
+    end
     r = r - 1;
 end
+
+if opts.storeR
+    info.r(k + 1) = r;
+end
+
 S = opts.S(:,1:r);
 Y = opts.Y(:,1:r);
 

@@ -1,5 +1,5 @@
 addpath("../matrix_utilities");
-problem_size = 1000;
+problem_size = 100;
 matrices = construct_test_matrices(problem_size);
 b = (rand(problem_size, 1) - 1/2)*100;
 

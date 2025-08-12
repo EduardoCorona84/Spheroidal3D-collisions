@@ -30,9 +30,9 @@ while true
     % Projection to positive orthant
     x_k = max(0, x_k);
     % Possibly a step length update after the projection
-    q = x_k - x_km1;
-    eta = min(1, stepSize(-1, q, grad_k, opts));
-    x_k = x_km1 + eta*q;
+    %q = x_k - x_km1;
+    %eta = min(1, stepSize(-1, q, grad_k, opts));
+    %x_k = x_km1 + eta*q;
     % Increment the number of iterations
     k = k + 1;
 end
