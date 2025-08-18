@@ -1,4 +1,4 @@
-function operator = construct_matrix(f, input_size)
+function operator = construct_matrix_from_function(f, input_size)
     %Constructs a matrix representation of the linear operator f
     identity = eye(input_size);
     firstColumn = f(identity(:,1));

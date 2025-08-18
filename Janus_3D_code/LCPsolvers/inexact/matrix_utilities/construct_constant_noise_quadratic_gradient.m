@@ -1,4 +1,4 @@
-function quadratic_gradient_function = quadratic_gradient_maker(A, b)
+function quadratic_gradient_function = construct_constant_noise_quadratic_gradient(A, b, noise_level)
 
     if class(A) ~= "function_handle"
         A_func = @(x) A * x; % Ensure A is a function handle
@@ -8,7 +8,7 @@ function quadratic_gradient_function = quadratic_gradient_maker(A, b)
 
     quadratic_gradient_function = @quad_grad_f;
 
-    function [objective, gradient] = quad_grad_f(input, noise_level)
+    function [objective, gradient] = quad_grad_f(input)
 
         %First we generate noise
         noise = sqrt(2)*randn(size(input));

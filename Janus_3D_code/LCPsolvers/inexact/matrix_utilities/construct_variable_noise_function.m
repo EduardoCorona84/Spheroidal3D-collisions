@@ -1,4 +1,4 @@
-function noisy_function = noise_maker(f)
+function noisy_function = construct_variable_noise_function(f)
     %this function returns a function evaluation with noise that is uniformly distributed over the sphere of radius noise_level centered at the true function evaluation.
     noisy_function = @noisy_f;
     function output = noisy_f(input, noise_level)

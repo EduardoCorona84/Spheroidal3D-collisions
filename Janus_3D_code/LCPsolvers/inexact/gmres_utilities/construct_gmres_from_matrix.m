@@ -1,4 +1,5 @@
-function my_gmres = matrix_construct_gmres(matrix_inverse, matrix_norm, matrix_inverse_norm, restart, max_iter)
+function my_gmres = construct_gmres_from_matrix(matrix_inverse, matrix_norm, matrix_inverse_norm, restart, max_iter)
+    %This function constructs a function that performs a matrix matvec with the gmres solve.
 
     my_gmres = @myGmresFunction;
 

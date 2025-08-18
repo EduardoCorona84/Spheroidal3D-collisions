@@ -18,9 +18,12 @@ function [s_k, y_k, opts] = noise_control(x_km1, x_k, s_k, grad_km1, grad_k, y_k
         %gradient noise is chosen such that the lower bound on the BB step length is opts.noise_control.eig_adaptive_scaling * opts.noise_control.min_eig (min eigenvalue).
         opts.noise_control.skip = true; 
         
-        case 'perturbed_adaptive'
+        case 'perturbed_adaptive_skip'
         %gradient errors follow a forcing sequence like that of inexact newton, BB/uniform step sizes are used, curvature updates are skipped if the curvature condition is not satisfied. Assume no optimal step size
         opts.noise_control.skip = true;
+
+        case 'perturbed_adaptive_no_skip'
+        %same as above, but no skips
 
         case 'independent_perturbed_adaptive'
         %gradient errors follow a forcing sequence like that of inexact newton, curvature information is updated independently of the gradient errors using the optimal step size, the noise level for this can be very large or small. 

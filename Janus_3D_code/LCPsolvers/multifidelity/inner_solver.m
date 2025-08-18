@@ -1,5 +1,5 @@
 function [x_inner_1, info_inner] = inner_solver(x_outer_1, grad_outer_1, grad_inner, s_1, y_1, outer_iter, opts)
-    %This is a wrapper function that takes one initial high fidelity step (using whatever method is prescribed by opts.step) and then takes a set amount of steps or til a tolerance of the corrected low fidelity operator.
+    %This is a wrapper function that takes one initial high fidelity step (using whatever method is prescribed by opts.outer.solver) and then takes a set amount of steps or til a tolerance of the corrected low fidelity operator.
     switch lower(opts.outer.solver)
         case 'bb'
             x_inner_0 = x_outer_1 - ((s_1'*s_1)/(s_1'*y_1))*grad_outer_1;

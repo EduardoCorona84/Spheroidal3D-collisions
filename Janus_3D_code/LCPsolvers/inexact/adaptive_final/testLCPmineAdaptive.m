@@ -21,7 +21,7 @@ opts = struct( ...
     'storeIts', true...
 );
 MC = length(A_list);
-min_iters = zeros(300, 7, 5);
+min_iters = zeros(300, 6, 5);
 noise_levels = [1e0, 1e-2, 1e-4, 1e-6, 1e-8];
 
 mcGood = [];
@@ -60,50 +60,78 @@ for mc = 101:400
 
     %Now do fixed noise levels
     fcnGrad = construct_gmres_quadratic_gradient(invA, b, norm(A, 2), norm(invA, 2), restart, gmres_max_iter);
-    error_data = cell(length(noise_levels), 1);
-    iter_data = cell(length(noise_levels), 1);
-
-    %go through all the noise_levels of runs and store the info
-    for i = 1:length(noise_levels)
-        opts.noise_control.noise = noise_levels(i);
-        [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
-        error_cur = zeros(info.iter, 1);
-        for j = 1:info.iter
-            error_cur(j) = norm(info.iterHist(j, :)' - ref_x_val)/norm(ref_x_val);
-        end
-        error_data{i} = error_cur;
-        iter_data{i} = cumsum(info.gmres_iters(1:info.iter));
-    end
+    error_data = cell(6, 1);
+    iter_data = cell(6, 1);
+    %1 = 1e0 1/10 start skips
+    %2 = 1e0 1/5 start skips
+    %3 = 1e0 1/2 start skips
+    %4 = 1e-1 start 1/10 skips
+    %5 = 1e-1 start 1/5 skips
+    %6 = 1e-1 start 1/2 skips
 
     %Now do adaptive
     opts.noise_control.enabled = true;
-    opts.adjust = 1/2;
     opts.noise_control.type = 'perturbed_adaptive_skip';
-    opts.noise_control.parameter = 1;
-    opts.noise_control.noise = 1/2;
+    opts.noise_control.parameter = 1e0;
+    opts.noise_control.noise = 1e0;
+    opts.adjust = 1/10;
 
     [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
-    error_skip_perturbed = zeros(info.iter, 1);
     for i = 1:info.iter
-        error_skip_perturbed(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
+        error_data{1}(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
     end
-    iter_skip_perturbed = cumsum(info.gmres_iters(1:info.iter));
+    iter_data{1} = cumsum(info.gmres_iters(1:info.iter));
 
-    opts.noise_control.type = 'perturbed_adaptive_no_skip';
-    opts.noise_control.parameter = 1;
-    opts.noise_control.noise = 2/3;
+    opts.noise_control.noise = 1e0;
+    opts.adjust = 1/5;
 
     [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
-    error_no_skip_perturbed = zeros(info.iter, 1);
     for i = 1:info.iter
-        error_no_skip_perturbed(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
+        error_data{2}(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
     end
-    iter_no_skip_perturbed = cumsum(info.gmres_iters(1:info.iter));
+    iter_data{2} = cumsum(info.gmres_iters(1:info.iter));
+
+    opts.noise_control.noise = 1e0;
+    opts.adjust = 1/2;
+
+    [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
+    for i = 1:info.iter
+        error_data{3}(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
+    end
+    iter_data{3} = cumsum(info.gmres_iters(1:info.iter));
+
+    opts.noise_control.noise = 1e-1;
+    opts.adjust = 1/10;
+
+    [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
+    for i = 1:info.iter
+        error_data{4}(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
+    end
+    iter_data{4} = cumsum(info.gmres_iters(1:info.iter));
+
+    opts.noise_control.noise = 1e-1;
+    opts.adjust = 1/5;
+
+    [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
+    for i = 1:info.iter
+        error_data{5}(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
+    end
+    iter_data{5} = cumsum(info.gmres_iters(1:info.iter));
+
+    opts.noise_control.noise = 1e-1;
+    opts.adjust = 1/2;
+
+    [~, info] = proxQuasiNewtonAdaptive(fcnGrad, zeros(size(b)), opts);
+    for i = 1:info.iter
+        error_data{6}(i) = norm(info.iterHist(i, :)' - ref_x_val)/norm(ref_x_val);
+    end
+    iter_data{6} = cumsum(info.gmres_iters(1:info.iter));
+
 
     %Now from each run find the min gmres iteration corresponding to a specific error level
     %i corresponds to the noise level of the method, j the tolerance to reach
     %for each method, check over each noise level if it met that level
-    for i = 1:length(noise_levels)
+    for i = 1:6
         for j = 1:length(noise_levels)
             %find the iters of method i that reached less than noise level j
             valid_iters = iter_data{i}(error_data{i} < noise_levels(j));
@@ -116,24 +144,6 @@ for mc = 101:400
             end
         end
     end
-    %for i = 6, we do the same for adaptive with skips
-    for j = 1:length(noise_levels)
-        valid_iters = iter_skip_perturbed(error_skip_perturbed < noise_levels(j));
-        if isempty(valid_iters)
-            min_iters(true_mc, 6, j) = Inf; % or NaN, or some default value
-        else
-            min_iters(true_mc, 6, j) = min(valid_iters);
-        end
-    end
-    %for i = 7, we do the same for adaptive with no skips
-    for j = 1:length(noise_levels)
-        valid_iters = iter_no_skip_perturbed(error_no_skip_perturbed < noise_levels(j));
-        if isempty(valid_iters)
-            min_iters(true_mc, 7, j) = Inf; % or NaN, or some default value
-        else
-            min_iters(true_mc, 7, j) = min(valid_iters);
-        end
-    end
 
     %we check if the min iters are greater than 0. This should always happen, unless there was no collision (for checking, I should outot the size of this on the graph. We should expect 300 (or very close to it)).
     if all(min_iters(true_mc, :, :) > 0)
@@ -143,7 +153,7 @@ for mc = 101:400
 
 end
 
-method_names = {'1e0', '1e-2 ', '1e-4 ', '1e-6 ', '1e-8 ', 'Adaptive Skip 1e0 init', 'Adaptive No Skip 1e0 init'};
+method_names = {'1e0, 1/10', '1e0, 1/5', '1e0, 1/2 ', '1e-1, 1/10 ', '1e-1, 1/5 ', '1e-1, 1/2 '};
 tolerance_names = {'1e0', '1e-2', '1e-4', '1e-6', '1e-8'};
 
 %go through each tolerance we want to meet
@@ -191,7 +201,7 @@ for j = 1:length(noise_levels)
     xtickangle(45);
 
     % Save the figure as an SVG file
-    filename = ['performance_tolerance_2_3_' tolerance_names{j} '.svg'];
+    filename = ['performance_adaptives_' tolerance_names{j} '.svg'];
     saveas(gcf, filename);
 end
 

@@ -27,7 +27,7 @@ function plot_stuff(matrix, b)
     gmres_max_iter = 200;
 
     %Create Noisy Function Eval, and now go through noise levels.
-    fcnGrad = construct_gmres_gradient(matrix.inverse, b, matrix.matrixNorm, matrix.inverseNorm, restart, gmres_max_iter);
+    fcnGrad = construct_gmres_quadratic_gradient(matrix.inverse, b, matrix.matrixNorm, matrix.inverseNorm, restart, gmres_max_iter);
     error_data = cell(length(noise_levels), 1);
     iter_data = cell(length(noise_levels), 1);
 

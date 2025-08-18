@@ -1,12 +1,12 @@
 function [x, info] = proxQuasiNewtonAdaptive(fcnGrad, x0, opts)
 [opts, info] = defaultOpts(opts, x0);
-opts.storeKKT = true;
-opts.storeGrads = true;
-opts.storeFs = true;
-opts.storeCurvature = true;
-opts.storeR = true;
-opts.storeSkip = true;
-opts.storeStepDirection = true;
+opts.storeKKT = false;
+opts.storeGrads = false;
+opts.storeFs = false;
+opts.storeCurvature = false;
+opts.storeR = false;
+opts.storeSkip = false;
+opts.storeStepDirection = false;
 info.gmres_iters = zeros(1, opts.max_iter+1);
 info.gradHist = zeros(opts.max_iter+1, numel(x0));
 info.KKTHist = zeros(opts.max_iter+1, 1);
@@ -22,26 +22,28 @@ x_k = x0;
 x_km1 = NaN*ones(n,1);
 grad_km1 = NaN*ones(n,1);
 k = 0;
+
+%{
 if (strcmp(opts.noise_control.type, 'perturbed_adaptive') || strcmp(opts.noise_control.type, 'independent_perturbed_adaptive'))
     tol_type = 'relative';
 else
     tol_type = 'absolute';
 end
-
+%}
+tol_type = 'relative';
 while true
+
     opts.noise_control.skip = false;
-    if (strcmp(opts.noise_control.type, 'perturbed_adaptive') || strcmp(opts.noise_control.type, 'independent_perturbed_adaptive')) && k > 1
-        if abs(f_k - f_km1) < (10)*norm(s_k)*(abs_residual_km1 + abs_residual_k) || f_k - f_km1 > 0
-            opts.noise_control.noise = 1/2*opts.noise_control.noise;
+    if (strcmp(opts.noise_control.type, 'perturbed_adaptive_skip') || strcmp(opts.noise_control.type, 'perturbed_adaptive_no_skip')) && k > 1
+        if abs(f_k - f_km1) < (norm(x_km1) * abs_residual_km1 + norm(x_k) * abs_residual_k) || f_k - f_km1 > 0
+            opts.noise_control.noise = opts.adjust*opts.noise_control.noise;
         end
-        %values = [1, abs(norm(s_k) - norm(x_k - x_km1)), norm(s_k), norm(x_k - x_km1),  opts.%noise_control.noise];
-        %opts.noise_control.noise = min(values);
     end
 
-    if (strcmp(opts.noise_control.type, 'eig_adaptive') && k > 1)
-
-        opts.noise_control.noise = 1/2*((1/2)*norm(x_k - x_km1)*eigen_value - opts.noise_control.noise);
+    if k > 0
+        f_km1 = f_k;
     end
+
 
     [f_k, grad_k, gmres_iters_k, ~, abs_residual_k] = fcnGrad(x_k, opts.noise_control.noise, tol_type);
 
@@ -61,7 +63,6 @@ while true
         [s_k, y_k, opts] = noise_control(x_km1, x_k, s_k, grad_km1, grad_k, y_k, q, Aq, opts, abs_residual_km1, abs_residual_k, abs_residual_step);
     end
 
-    f_km1 = f_k;
     x_km1 = x_k;
     grad_km1 = grad_k;
     abs_residual_km1 = abs_residual_k;
@@ -81,12 +82,14 @@ while true
     q = zeros(size(x_k));
     Aq = zeros(size(x_k));
     abs_residual_step = 0;
+    %{
     if opts.noise_adaptive.quad == true
         q = x_k - x_km1;
         [step, Aq, ~, abs_residual_step, info] = stepSizeAdaptive(-1, p, grad_k, opts, info, k, s_k, y_k, tol_type);
         eta = min(1, step);
         x_k = x_km1 + eta*q;
     end
+    %}
     % Increment the number of iterations
     k = k + 1;
 end

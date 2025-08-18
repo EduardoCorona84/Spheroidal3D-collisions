@@ -1,4 +1,4 @@
-function myGmres = noprec_construct_gmres(F, Bk, Lk, TD, SD, Ck, restart, max_iter)
+function myGmres = construct_gmres_from_noprec(F, Bk, Lk, TD, SD, Ck, restart, max_iter)
 
     %This function constructs the function handle for the GMRES solver without preconditioning
     myGmres =@myGmresFunction;

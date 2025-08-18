@@ -9,7 +9,7 @@ function [opts, info] = set_default_opts(x0, opts)
     end
 
     if ~isfield(opts.outer, 'max_iter')
-        opts.outer.max_iter = 100;
+        opts.outer.max_iter = 200;
     end
 
     %warm start the high fidelity solver with low fidelity evaluations
@@ -17,16 +17,32 @@ function [opts, info] = set_default_opts(x0, opts)
         opts.outer.warm_start.enabled = false;
     end
 
+    if ~isfield(opts.outer.warm_start, 'only')
+        opts.outer.warm_start.only = false;
+    end
+
     %first step of the high fidelity solver
     if ~isfield(opts.outer, 'step_init')
         opts.outer.step_init = 0.1;
     end
 
-    opts.outer.update_matrix = zeros(length(x0)); 
+    if ~isfield(opts.outer, 'correction')
+        opts.outer.correction = true;
+    end
+
+    opts.outer.update_matrix = zeros(length(x0));
+
+    if ~isfield(opts.outer, 'store_updates')
+        opts.outer.store_updates = false;
+    end
 
     %use DFP as default as this directly targets the matrix (not its inverse)
     if ~isfield(opts.outer, 'low_update')
         opts.outer.low_update = 'sr1';
+    end
+
+    if ~isfield(opts.outer, 'adaptive')
+        opts.outer.adaptive = 'high';
     end
 
     %default to prox qn
@@ -114,6 +130,9 @@ function [opts, info] = set_default_opts(x0, opts)
     end
     if opts.outer.store_f
         info.outer.f_iters = zeros(1, opts.outer.max_iter);
+    end
+    if opts.outer.store_updates
+        info.outer.updates = cell(1, opts.outer.max_iter);
     end
 
     %a cell array, where each array corresponds to one outer/high fidelity evaluation. A struct of the information associated with the inner solver/low fidelity will be in each cell, some may be empty.
