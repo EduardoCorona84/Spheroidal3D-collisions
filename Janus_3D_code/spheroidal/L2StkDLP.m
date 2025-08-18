@@ -10,9 +10,8 @@ function [Stk_x, Stk_y, Stk_z] = L2StkDLP(Xeval, pars, sigma_x, sigma_y, sigma_z
             sigma_z     -
             ns          -   number of spheroidal bodies
     %}
-
     %%% First, let's generate the necessary vectors for the normal derivatives
-    % of the Laplace double layer potentials.
+    % of the Laplace layer potentials.
     if isempty(Xeval) % Self-evaluation
         % For each body, 
         nu_x_spectral=repmat([1,0,0],size(sigma_x,1),size(sigma_x,2),ns);
@@ -34,12 +33,6 @@ function [Stk_x, Stk_y, Stk_z] = L2StkDLP(Xeval, pars, sigma_x, sigma_y, sigma_z
             nu_z_spectral{i} = repmat([0,0,1],size(Xeval{i},1),1);
         end
     end
-
-    %%% Get normal vectors (at source points) necessary for densities
-    norm_vecs = get_norm_vecs(pars.p, pars.u0, pars.oblate);
-    nx_src = norm_vecs(:,1);
-    ny_src = norm_vecs(:,2);
-    nz_src = norm_vecs(:,3);
 
     %% Calculate associated layer potentials
     % i = 1
@@ -68,6 +61,13 @@ function [Stk_x, Stk_y, Stk_z] = L2StkDLP(Xeval, pars, sigma_x, sigma_y, sigma_z
 
     pars.sigma = y_dot_sig; pars.get_shc;
     [ydotsig_dx,ydotsig_dy,ydotsig_dz] = spheroidalDP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
+
+    %%% Get normal vectors (at source points) necessary for densities
+    % TODO: change this for multiple spheroids
+    norm_vecs = get_norm_vecs(pars.p, pars.u0, pars.oblate);
+    nx_src = norm_vecs(:,1);
+    ny_src = norm_vecs(:,2);
+    nz_src = norm_vecs(:,3);
 
     %%% Now, we must calculate the third quantity, which involves NINE terms.
     % For x-component: \nabla \cdot (S_L[n_x \sigma])

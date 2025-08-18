@@ -1,4 +1,4 @@
-function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_y, sigma_z, ns)
+function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_y, sigma_z, ns, alternate_spp_flag)
     %{
         An implementation of the Laplace to Stokes traction layer potential.
 
@@ -11,10 +11,15 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
             sigma_z     -
             ns          -   number of spheroidal bodies
     %}
+    pars.sigma = sigma_x; p = pars.p;
 
     % Flag to enable alternative calculation and avoid the use of the
     % second derivative.
-    ALTERNATE_TO_SPP_FLAG = false;
+    if alternate_spp_flag
+        ALTERNATE_TO_SPP_FLAG = true;
+    else
+        ALTERNATE_TO_SPP_FLAG = false;
+    end
 
     %%% First, let's generate the necessary vectors for the normal derivatives
     % of the Laplace layer potentials.
@@ -53,51 +58,6 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
     %%%%
     %%%% Calculate layer potentials
     %%%%
-    %%% First, handle double-derivative (gradient of divergence of vector SLP)
-    [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(pars, sigma_x, sigma_y, sigma_z, X_eval);
- 
-    sigma = struct();
-    sigma.x = sigma_x; sigma.y = sigma_y; sigma.z = sigma_z;
-
-    % Handle y_j * \vec{\sigma} for j = 1,2,3.
-    xyz_fields = {'x', 'y', 'z'};
-    y_times_sig = struct();
-    for j = 1:3 % Index for Xloc
-        for k = 1:3 % Index for sigma
-            field_name = sprintf('%s%d', xyz_fields{k}, j); % 'x1', 'y2', etc.
-            y_times_sig.(field_name) = zeros(size(sigma.x));
-        end
-    end
-
-    for i=1:ns
-        if ~pars.oblate(i)
-            Xloc = prolate_spheroid_shape(pars.p, pars.u0(i), pars.a(i));
-        else
-            Xloc = oblate_spheroid_shape(pars.p, pars.u0(i), pars.a(i));
-        end
-    
-        for j = 1:3
-            for k = 1:3
-                sig_field = xyz_fields{k};
-                output_field = sprintf('%s%d', sig_field, j); % 'x1', 'y2', etc.
-                % y_times_sig.z3 means y3*sig_z
-                y_times_sig.(output_field)(:,:,i) = sigma.(sig_field)(:,:,i) .* Xloc(:,j);
-            end
-        end
-    end
-    
-    [graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x1, y_times_sig.y1, y_times_sig.z1, X_eval);
-    [graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x2, y_times_sig.y2, y_times_sig.z2, X_eval);
-    [graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x3, y_times_sig.y3, y_times_sig.z3, X_eval);
-
-    graddivSL_sph = {
-        {graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI},
-        {graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI},
-        {graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI},
-    };
-
-    % Now, need to handle the normal derivatives (this is necessary since the code for S''
-    % is for the gradient, and not for the normal derivative).
     graddivSL = struct();
     for j=1:3
         for k=1:3
@@ -106,32 +66,163 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
         end
     end
 
-    for k=1:ns
-        S_eval_k = cart2spheroidal(X_eval{k}, pars.a(k), pars.oblate(k));
+    if ~ALTERNATE_TO_SPP_FLAG
+        [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(pars, sigma_x, sigma_y, sigma_z, X_eval);
+    
+        sigma = struct();
+        sigma.x = sigma_x; sigma.y = sigma_y; sigma.z = sigma_z;
 
-        [nu_x_sph, ~] = cartNu2spheroidal(nu_x_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
-        [nu_y_sph, ~] = cartNu2spheroidal(nu_y_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
-        [nu_z_sph, ~] = cartNu2spheroidal(nu_z_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
-        nu_sph_vecs = { nu_x_sph, nu_y_sph, nu_z_sph };
-
-        for j = 1:3
-            for m = 1:3 % X,Y,Z index
-                nu_sph = nu_sph_vecs{m};
-                density_field = sprintf('y%dsig', j);
-
-                % etc. graddivSL.y#sig.x
-                % Converts (U, V, PHI) to (X, Y, Z)
-                % The notation graddivSL_sph{j}{1}{k} means the j-th
-                % spheroidal coordinate of graddivSL_y1timessigma for the 
-                % k-th particle.
-                graddivSL.(density_field).(xyz_fields{m}) = nu_sph(:,1).*graddivSL_sph{j}{1}{k} + nu_sph(:,2).*graddivSL_sph{j}{2}{k} + nu_sph(:,3).*graddivSL_sph{j}{3}{k};
+        % Handle y_j * \vec{\sigma} for j = 1,2,3.
+        xyz_fields = {'x', 'y', 'z'};
+        y_times_sig = struct();
+        for j = 1:3 % Index for Xloc
+            for k = 1:3 % Index for sigma
+                field_name = sprintf('%s%d', xyz_fields{k}, j); % 'x1', 'y2', etc.
+                y_times_sig.(field_name) = zeros(size(sigma.x));
             end
         end
 
-        for m=1:3
-            nu_sph = nu_sph_vecs{m}; 
-            graddivSL.sig.(xyz_fields{m}) = nu_sph(:,1).*graddivSL_sig_U{k} + nu_sph(:,2).*graddivSL_sig_V{k} + nu_sph(:,3).*graddivSL_sig_PHI{k};
+        for i=1:ns
+            if ~pars.oblate(i)
+                Xloc = prolate_spheroid_shape(pars.p, pars.u0(i), pars.a(i));
+            else
+                Xloc = oblate_spheroid_shape(pars.p, pars.u0(i), pars.a(i));
+            end
+        
+            for j = 1:3
+                for k = 1:3
+                    sig_field = xyz_fields{k};
+                    output_field = sprintf('%s%d', sig_field, j); % 'x1', 'y2', etc.
+                    % y_times_sig.z3 means y3*sig_z
+                    y_times_sig.(output_field)(:,:,i) = sigma.(sig_field)(:,:,i) .* Xloc(:,j);
+                end
+            end
         end
+        
+        [graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x1, y_times_sig.y1, y_times_sig.z1, X_eval);
+        [graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x2, y_times_sig.y2, y_times_sig.z2, X_eval);
+        [graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x3, y_times_sig.y3, y_times_sig.z3, X_eval);
+
+        graddivSL_sph = {
+            {graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI},
+            {graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI},
+            {graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI},
+        };
+
+        % Now, need to handle the normal derivatives (this is necessary since the code for S''
+        % is for the gradient, and not for the normal derivative).
+        for k=1:ns
+            if ~pars.oblate(k)
+                Xloc = prolate_spheroid_shape(pars.p, pars.u0(k), pars.a(k));
+            else
+                Xloc = oblate_spheroid_shape(pars.p, pars.u0(k), pars.a(k));
+            end
+            S_eval_k = cart2spheroidal(Xloc, pars.a(k), pars.oblate(k));
+
+            [nu_x_sph, ~] = cartNu2spheroidal(nu_x_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
+            [nu_y_sph, ~] = cartNu2spheroidal(nu_y_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
+            [nu_z_sph, ~] = cartNu2spheroidal(nu_z_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
+            nu_sph_vecs = { nu_x_sph, nu_y_sph, nu_z_sph };
+
+            for j = 1:3
+                for m = 1:3 % X,Y,Z index
+                    nu_sph = nu_sph_vecs{m};
+                    density_field = sprintf('y%dsig', j);
+
+                    % etc. graddivSL.y#sig.x
+                    % Converts (U, V, PHI) to (X, Y, Z)
+                    % The notation graddivSL_sph{j}{1}{k} means the j-th
+                    % spheroidal coordinate of graddivSL_y1timessigma for the 
+                    % k-th particle.
+                    graddivSL.(density_field).(xyz_fields{m}) = nu_sph(:,1).*graddivSL_sph{j}{1}{k} + nu_sph(:,2).*graddivSL_sph{j}{2}{k} + nu_sph(:,3).*graddivSL_sph{j}{3}{k};
+                end
+            end
+
+            for m=1:3
+                nu_sph = nu_sph_vecs{m}; 
+                graddivSL.sig.(xyz_fields{m}) = nu_sph(:,1).*graddivSL_sig_U{k} + nu_sph(:,2).*graddivSL_sig_V{k} + nu_sph(:,3).*graddivSL_sig_PHI{k};
+            end
+        end
+    else % Only first-order derivatives
+        % Some repeat code. Will need to trim later.
+        sigma = struct();
+        sigma.x = sigma_x; sigma.y = sigma_y; sigma.z = sigma_z;
+
+        % Handle y_j * \vec{\sigma} for j = 1,2,3.
+        xyz_fields = {'x', 'y', 'z'};
+        y_times_sig = struct();
+        for j = 1:3 % Index for Xloc
+            for k = 1:3 % Index for sigma
+                field_name = sprintf('%s%d', xyz_fields{k}, j); % 'x1', 'y2', etc.
+                y_times_sig.(field_name) = zeros(size(sigma.x));
+            end
+        end
+
+        for i=1:ns
+            if ~pars.oblate(i)
+                Xloc = prolate_spheroid_shape(pars.p, pars.u0(i), pars.a(i));
+            else
+                Xloc = oblate_spheroid_shape(pars.p, pars.u0(i), pars.a(i));
+            end
+        
+            for j = 1:3
+                for k = 1:3
+                    sig_field = xyz_fields{k};
+                    output_field = sprintf('%s%d', sig_field, j); % 'x1', 'y2', etc.
+                    % y_times_sig.z3 means y3*sig_z
+                    y_times_sig.(output_field)(:,:,i) = sigma.(sig_field)(:,:,i) .* Xloc(:,j);
+                end
+            end
+
+            n = get_norm_vecs(pars.p, pars.u0(i), pars.oblate(i));
+            n_dot_sig = sigma_x(:,:,i).*n(:,1) + sigma_y(:,:,i).*n(:,2) + sigma_z(:,:,i).*n(:,3);
+            n_dot_y1timessig = y_times_sig.x1.*n(:,1) + y_times_sig.y1.*n(:,2) + y_times_sig.z1.*n(:,3);
+            n_dot_y2timessig = y_times_sig.x2.*n(:,1) + y_times_sig.y2.*n(:,2) + y_times_sig.z2.*n(:,3);
+            n_dot_y3timessig = y_times_sig.x3.*n(:,1) + y_times_sig.y3.*n(:,2) + y_times_sig.z3.*n(:,3); 
+        end
+
+        Sloc = cart2spheroidal(Xloc, pars.a, pars.oblate);
+        div_y1timessig = calculate_surf_div(pars, Sloc, y_times_sig.x1, y_times_sig.y1, y_times_sig.z1);
+        div_y2timessig = calculate_surf_div(pars, Sloc, y_times_sig.x2, y_times_sig.y2, y_times_sig.z2);
+        div_y3timessig = calculate_surf_div(pars, Sloc, y_times_sig.x3, y_times_sig.y3, y_times_sig.z3);
+        div_sig = calculate_surf_div(pars, Sloc, sigma_x, sigma_y, sigma_z);
+
+        %%% Next, we finally handle the layer potential calculations.
+        pars.sigma = div_y1timessig; pars.get_shc;
+        [SP_divy1timessig_X, SP_divy1timessig_Y, SP_divy1timessig_Z] = spheroidalSP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+        pars.sigma = n_dot_y1timessig; pars.get_shc;
+        [DP_ndoty1timessig_X, DP_ndoty1timessig_Y, DP_ndoty1timessig_Z] = spheroidalDP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+
+        pars.sigma = div_y2timessig; pars.get_shc;
+        [SP_divy2timessig_X, SP_divy2timessig_Y, SP_divy2timessig_Z] = spheroidalSP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+        pars.sigma = n_dot_y2timessig; pars.get_shc;
+        [DP_ndoty2timessig_X, DP_ndoty2timessig_Y, DP_ndoty2timessig_Z] = spheroidalDP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+
+        pars.sigma = div_y3timessig; pars.get_shc;
+        [SP_divy3timessig_X, SP_divy3timessig_Y, SP_divy3timessig_Z] = spheroidalSP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+        pars.sigma = n_dot_y3timessig; pars.get_shc;
+        [DP_ndoty3timessig_X, DP_ndoty3timessig_Y, DP_ndoty3timessig_Z] = spheroidalDP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+
+        graddivSL.y1sig.x = SP_divy1timessig_X{1} - DP_ndoty1timessig_X{1};
+        graddivSL.y1sig.y = SP_divy1timessig_Y{1} - DP_ndoty1timessig_Y{1};
+        graddivSL.y1sig.z = SP_divy1timessig_Z{1} - DP_ndoty1timessig_Z{1};
+
+        graddivSL.y2sig.x = SP_divy2timessig_X{1} - DP_ndoty2timessig_X{1};
+        graddivSL.y2sig.y = SP_divy2timessig_Y{1} - DP_ndoty2timessig_Y{1};
+        graddivSL.y2sig.z = SP_divy2timessig_Z{1} - DP_ndoty2timessig_Z{1};
+
+        graddivSL.y3sig.x = SP_divy3timessig_X{1} - DP_ndoty3timessig_X{1};
+        graddivSL.y3sig.y = SP_divy3timessig_Y{1} - DP_ndoty3timessig_Y{1};
+        graddivSL.y3sig.z = SP_divy3timessig_Z{1} - DP_ndoty3timessig_Z{1};
+
+        % Handle S''[\sigma]
+        pars.sigma = div_sig; pars.get_shc;
+        [SP_divsig_X, SP_divsig_Y, SP_divsig_Z] = spheroidalSP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+        pars.sigma = n_dot_sig; pars.get_shc;
+        [DP_ndotsig_X, DP_ndotsig_Y, DP_ndotsig_Z] = spheroidalDP(pars, X_eval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
+        graddivSL.sig.x = SP_divsig_X{1} - DP_ndotsig_X{1};
+        graddivSL.sig.y = SP_divsig_Y{1} - DP_ndotsig_Y{1};
+        graddivSL.sig.z = SP_divsig_Z{1} - DP_ndotsig_Z{1};
     end
 
     %%% Now, handle first derivatives.
