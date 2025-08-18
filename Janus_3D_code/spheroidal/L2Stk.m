@@ -5,7 +5,7 @@ function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
         Inputs
             Xeval       -   target points
             pars        -   parameters needed for to calculate spheroidal Laplace LPs
-            sigma_x     -  
+            sigma_x     -   vector
             sigma_y     -
             sigma_z     -
             ns          -   number of spheroidal bodies
@@ -18,11 +18,12 @@ function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
 
     % Self evaluation ----------------------------------------------
     if isempty(Xeval)
+        % Setup for directional derivative
         nu_x_spectral=repmat([1,0,0],size(sigma_x,1),size(sigma_x,2),ns);
         nu_y_spectral=repmat([0,1,0],size(sigma_x,1),size(sigma_x,2),ns);
         nu_z_spectral=repmat([0,0,1],size(sigma_x,1),size(sigma_x,2),ns);
 
-        % i=1
+        % i=1; d/dx SL[sigma_x], etc.
         pars.sigma=sigma_x; pars.get_shc;
         SL1=spheroidalSL(pars); % SL self always returns N-D array
         [SP1dx,SP1dy,SP1dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
@@ -38,13 +39,14 @@ function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
         [SP3dx,SP3dy,SP3dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
     % All to targets
     else
-        % Demand consistent inputs.
-        % It should be up to the user to provide the right input.
-        assert(isa(Xeval, "cell"), ...
-            "The evaluation points (i.e. the first argument) need to have type " + ...
+        error_msg = "The evaluation points (i.e. the first argument) need to have type " + ...
             "'cell' of size 1 x ns. Each cell should contain the target points " + ...
             "for the associated body, and each cell should be of size nt x 3, where " + ...
-            "nt is the number of target points on the body.");
+            "nt is the number of target points on the body.\n" + ...
+            "If you have a nt x 3 x ns matrix, then use squeeze(num2cell(Xeval, [1, 2])).' " + ...
+            "to reduce back to a 1 x ns cell.";
+        assert(isa(Xeval, "cell"), error_msg);
+        assert(size(Xeval,1) == 1 && size(Xeval, 2) == ns, error_msg)
         nu_x_spectral=cell(1,ns); nu_y_spectral=nu_x_spectral; nu_z_spectral=nu_x_spectral; 
         for i=1:ns
             nu_x_spectral{i} = repmat([1,0,0],size(Xeval{i},1),1);
@@ -69,10 +71,7 @@ function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
     end
 
     % extra term y dot sigma, for each i=1,2,3
-    % Yself=pars.get_X();
-    % y_src_x=Yself(:,1); y_src_y=Yself(:,2); y_src_z=Yself(:,3);
     new_sig=zeros(size(sigma_x));
-    % np=size(sigma_x,1);
     for i=1:ns
         if ~pars.oblate(i)
             Xloc=prolate_spheroid_shape(pars.p,pars.u0(i),pars.a(i));
@@ -84,14 +83,6 @@ function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
     pars.sigma=new_sig;
     pars.get_shc();
     [Fdx,Fdy,Fdz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
-
-    % add up contribution from all spheroids on target point
-    % Stk_x=zeros(size(Xeval,1),1); Stk_y=Stk_x; Stk_z=Stk_x;
-    % for i=1:ns
-    %     Stk_x=Stk_x + 1/2.*(SL1(:,:,i)-Xeval(:,1,i).*SP1dx(:,:,i)-Xeval(:,2,i).*SP2dx(:,:,i)-Xeval(:,3,i).*SP3dx(:,:,i)+Fdx(:,:,i));
-    %     Stk_y=Stk_y + 1/2.*(SL2(:,:,i)-Xeval(:,1,i).*SP1dy(:,:,i)-Xeval(:,2,i).*SP2dy(:,:,i)-Xeval(:,3,i).*SP3dy(:,:,i)+Fdy(:,:,i));
-    %     Stk_z=Stk_z + 1/2.*(SL3(:,:,i)-Xeval(:,1,i).*SP1dz(:,:,i)-Xeval(:,2,i).*SP2dz(:,:,i)-Xeval(:,3,i).*SP3dz(:,:,i)+Fdz(:,:,i));
-    % end
 
     if isempty(Xeval)
         [Xloc,~]=pars.get_X();
@@ -141,48 +132,50 @@ function LOCAL_test_L2Stk()
     % Test Stokes operator made from Laplace operators on a system of 3
     % prolate spheroids, compared to Kernel_Eval for reference.
 
+    clear;
     pstart=2; pend=12;
     parr=(pstart:2:pend)';
     
-    % p_test=16; np_test=2*p_test*(p_test+1);
+    p_test=16; np_test=2*p_test*(p_test+1);
     
     % % Set up --- 1 spheroid
-    % ns_test=1;
-    % pars_test=SpheroidalParameters;
-    % pars_test.u0=1.1; pars_test.a=1/1.1;
-    % pars_test.p=p_test; pars_test.oblate=0;
-    % pars_test.centers = [0 0 0];
-    % pars_test.Rmat=eye(3);
+    ns_test=1;
+    pars_test=SpheroidalParameters;
+    pars_test.u0=1.1; pars_test.a=1/1.1;
+    pars_test.p=p_test; pars_test.oblate=0;
+    pars_test.centers = [0 0 0];
+    pars_test.Rmat=eye(3);
 
     % Set up ---- 3 spheroids
-    ns_test=3;
-    u0=[1.1 1.2 1.3];
-    pars_test=SpheroidalParameters;
-    pars_test.matvec_eta = 2;
-    pars_test.isReal=0;
-    pars_test.u0=u0;
-    alist = 1./u0;
-    pars_test.a=alist;
-    pars_test.oblate=[0 0 0];
+    % ns_test=3;
+    % u0=[1.1 1.2 1.3];
+    % pars_test=SpheroidalParameters;
+    % pars_test.matvec_eta = 2;
+    % pars_test.isReal=0;
+    % pars_test.u0=u0;
+    % alist = 1./u0;
+    % pars_test.a=alist;
+    % pars_test.oblate=[0 0 0];
 
-    pars_test.centers = [0 0 0; 150 60 0; 130 -140 150];
-    thetas = [0 pi/10 5*pi/3];
-    phis = [0 0 pi/5];
+    % pars_test.centers = [0 0 0; 150 60 0; 130 -140 150];
+    % thetas = [0 pi/10 5*pi/3];
+    % phis = [0 0 pi/5];
 
-    Ri=zeros(3,3,3);
-    for ii=1:3
-        thetai=thetas(ii);
-        phii=phis(ii);
-        Riy=[cos(thetai) 0 sin(thetai); 0 1 0; -sin(thetai) 0 cos(thetai)];
-        Riz=[cos(phii) -sin(phii) 0; sin(phii) cos(phii) 0; 0 0 1];
-        Ri(:,:,ii)=Riz*Riy;
-    end
-    pars_test.Rmat=Ri;
+    % Ri=zeros(3,3,3);
+    % for ii=1:3
+    %     thetai=thetas(ii);
+    %     phii=phis(ii);
+    %     Riy=[cos(thetai) 0 sin(thetai); 0 1 0; -sin(thetai) 0 cos(thetai)];
+    %     Riz=[cos(phii) -sin(phii) 0; sin(phii) cos(phii) 0; 0 0 1];
+    %     Ri(:,:,ii)=Riz*Riy;
+    % end
+    % pars_test.Rmat=Ri;
 
     err_x=zeros(1,length(parr));
     err_y=err_x; err_z=err_x;
     for pind=1:length(parr)
-        p_test=parr(pind); 
+        %p_test=parr(pind); 
+        p_test=8;
         fprintf("\n Current p: %d",p_test);
         np_test=2*p_test*(p_test+1);
 
@@ -245,7 +238,7 @@ function LOCAL_test_L2Stk()
         
         % tic
         for ii=1:ns_test
-            fprintf("\n Spheroid number %d", ii);
+            fprintf("\n Spheroid number %d\n", ii);
             Xself_centered=prolate_spheroid_shape(p_test,pars_test.u0(ii),pars_test.a(ii));
             Sns=SurfaceSph(Xself_centered);
     
@@ -275,15 +268,14 @@ function LOCAL_test_L2Stk()
             SLx = SLx + LP(:,1);
             SLy = SLy + LP(:,2);
             SLz = SLz + LP(:,3);
-    
         end
         % toc
     
         % tic
-        [LSLx,LSLy,LSLz]=L2Stk(Xtrg,pars_test,sigma1,sigma2,sigma3,ns_test);
-        LSLx=real(sum(LSLx,3));
-        LSLy=real(sum(LSLy,3));
-        LSLz=real(sum(LSLz,3));
+        [LSLx,LSLy,LSLz] = L2Stk(squeeze(num2cell(Xtrg_test, [1, 2]))', pars_test, sigma1, sigma2, sigma3, ns_test);
+        LSLx = real(sum(LSLx,3));
+        LSLy = real(sum(LSLy,3));
+        LSLz = real(sum(LSLz,3));
         % toc
     
         % display(norm(sqrt(sum((SLx-LSLx).^2)./size(SLx,1))))
