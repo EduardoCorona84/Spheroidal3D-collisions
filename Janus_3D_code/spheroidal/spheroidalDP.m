@@ -315,9 +315,9 @@ function [DP,varargout]=spheroidalDP(params,X,nu,varargin)
                     Nu_surf_extra=cell(1,nvarin);
                     Nu_ext_extra=cell(1,nvarin);
                     for nu_ind=1:nvarin
-                        Nu_int_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(u_x<u0(k),:);
-                        Nu_surf_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(u_x==u0(k),:);
-                        Nu_ext_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(u_x>u0(k),:);
+                        Nu_int_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(indices_interior,:);
+                        Nu_surf_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(indices_surface,:);
+                        Nu_ext_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(indices_exterior,:);
                     end
                 end
                 
@@ -495,7 +495,7 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
             gnm = L{3}; % P'(u_0)
         end
 
-        if norm(abs(u_x)-u0)<1e-14 % on surface with arbitrary nu
+        if norm(abs(u_x)-u0) < 9e-14 % on surface with arbitrary nu
             [lambda_nm_prime,lambda_nm,lambda_n1m] = DPspectrum(p,u0,a,oblate);
             lambda_nm_prime = lambda_nm_prime ./ sqrt(u_x.^2-v_x.^2) .* nu_u;
             
@@ -528,7 +528,9 @@ function [lambda_nm_prime, lambda_nm, lambda_n1m] = DPspectrum_away(p,u0,a,u_x,v
             lambda_n1m = -lambda_n1m.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2));
         else
             lambda_nm_prime = 1j.*anm.'.*gnm.'.*sqrt((u_x.^2+1)./(u_x.^2+v_x.^2)).*nu_u ./ a;
+            
             lambda_nm = anm.'.*gnm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2))) ./ a;
+
             lambda_n1m = -anm.'.*gnm.'.*(nn'-mm'+1).*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2)) ./ a;
         end
     end

@@ -366,9 +366,9 @@ elseif nargin > 1
                 Nu_surf_extra=cell(1,nvarin);
                 Nu_ext_extra=cell(1,nvarin);
                 for nu_ind=1:nvarin
-                    Nu_int_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(u_x<u0(k),:);
-                    Nu_surf_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(u_x==u0(k),:);
-                    Nu_ext_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(u_x>u0(k),:);
+                    Nu_int_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(indices_interior,:);
+                    Nu_surf_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(indices_surface,:);
+                    Nu_ext_extra{nu_ind}=nu_extra_cells{nu_ind}{k}(indices_exterior,:);
                 end
             end
             

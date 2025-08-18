@@ -1,4 +1,4 @@
-function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(params, sigma_x, sigma_y, sigma_z, X)
+function [graddivSL_x, graddivSL_y, graddivSL_z]=spheroidalgraddivSL(params, sigma_x, sigma_y, sigma_z, X)
     %--------------------------------------------------------------------%
     % spheroidalgraddivSL computes the gradient of the divergence of the Laplace vector SLP.
     % Note that the input density should be a vector, and the output will be a vector.
@@ -73,7 +73,6 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
     %%% Actual computation
     % Calculate spectra for interior, exterior, and surface
     for k=1:ns % Loop over each spheroid surface
-        
         Xt_k = Xt{k};
         [nt_k,d] = size(Xt_k);
         GDSL_k_x = zeros(nt_k, nf); GDSL_k_y = zeros(nt_k, nf); GDSL_k_z = zeros(nt_k, nf);
@@ -91,11 +90,15 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
             % Convert targets to spheroidal coords
             S=cart2spheroidal(Xt_k,a(k),oblate(k));
             u_x=S(:,1);
+
+            indices_interior = (u_x < u0(k) - 1e-14);
+            indices_surface = (abs(u_x-u0(k)) <= 1e-14);
+            indices_exterior = (u_x > u0(k) + 1e-14);
             
             % Split up interior/surface/exterior
-            S_int=S(u_x < u0(k),:);
-            S_surf=S(u_x == u0(k),:);
-            S_ext=S(u_x > u0(k),:);
+            S_int=S(indices_interior,:);
+            S_surf=S(indices_surface,:);
+            S_ext=S(indices_exterior,:);
 
             % If there's no points in a particular region, don't do any
             % computations.
@@ -134,17 +137,17 @@ function [graddivSL_x, graddivSL_y, graddivSL_z,varargout]=spheroidalgraddivSL(p
             end
         
             % Recombine all DPs from interior/exterior/surface
-            GDSL_k_x(u_x < u0(k),:) = GDSL_regions{1,1};
-            GDSL_k_x(u_x == u0(k),:) = GDSL_regions{2,1};
-            GDSL_k_x(u_x > u0(k),:) = GDSL_regions{3,1};
+            GDSL_k_x(indices_interior,:) = GDSL_regions{1,1};
+            GDSL_k_x(indices_surface,:) = GDSL_regions{2,1};
+            GDSL_k_x(indices_exterior,:) = GDSL_regions{3,1};
 
-            GDSL_k_y(u_x < u0(k),:) = GDSL_regions{1,2};
-            GDSL_k_y(u_x == u0(k),:) = GDSL_regions{2,2};
-            GDSL_k_y(u_x > u0(k),:) = GDSL_regions{3,2};
+            GDSL_k_y(indices_interior,:) = GDSL_regions{1,2};
+            GDSL_k_y(indices_surface,:) = GDSL_regions{2,2};
+            GDSL_k_y(indices_exterior,:) = GDSL_regions{3,2};
 
-            GDSL_k_z(u_x < u0(k),:) = GDSL_regions{1,3};
-            GDSL_k_z(u_x == u0(k),:) = GDSL_regions{2,3};
-            GDSL_k_z(u_x > u0(k),:) = GDSL_regions{3,3};
+            GDSL_k_z(indices_interior,:) = GDSL_regions{1,3};
+            GDSL_k_z(indices_surface,:) = GDSL_regions{2,3};
+            GDSL_k_z(indices_exterior,:) = GDSL_regions{3,3};
     
             if isReal
                 GDSL_k_x = real(GDSL_k_x);
@@ -205,20 +208,24 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
     if oblate
         cnm = 1j.*a.*factorial(nn-mm)./factorial(nn+mm).*((-1).^mm).*sqrt(u0.^2+1);
         L = legendre_otc(p,1j*u0,1,1,1);
-        if abs(u)-u0 < 1e-14 % interior
+        if abs(u)-u0 < -1e-14 % interior
             gnm = L{2}; % Q(iu_0)
         elseif abs(u)-u0 > 1e-14 % exterior
             gnm = L{1}; % P(iu_0)
+        else % on-surface (handled in solid_harmonic_prime)
+            gnm = ones(size(L{1}));
         end
         [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, 1j.*u);
         common_coeffs = a^(-2).*cnm.*gnm;
     else
         bnm = a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2 - 1);
         L = legendre_otc(p,u0,1,1,1);
-        if abs(u)-u0 < 1e-14 % interior
+        if abs(u)-u0 < -1e-14 % interior
             gnm = L{2}; % Q(u_0)
         elseif abs(u)-u0 > 1e-14 % exterior
             gnm = L{1}; % P(u_0)
+        else % on-surface (handled in solid_harmonic_prime)
+            gnm = ones(size(L{1}));
         end
         [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, u);
         common_coeffs = bnm.*gnm./(a.^2);
@@ -247,41 +254,38 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
                      + Yn2m_coeff.*Yr(2*nt_r+1:end,:);
     end
 
-    if norm(abs(u)-u0)<1e-14 % on surface with arbitrary nu
-        error("on surface not implemented.");
-    else % off-surface.
-        %%% Note that below is very granually split so that it's easier
-        %%% to debug/fix size issues (hence, the ugliness).
-        % Working backwards, the procedure is this (so step 3 is first 
-        % and step 1 is last):
-        % 1. Handle each sigma coefficient
-        % 2. Within each sigma coefficient, handle the Ynm coefficients
-        % 3. Within each Ynm coefficient, handle the f coefficients
-        coeffs = spheroidalgraddivSLcoefficients(u, v, phi, nn', mm', oblate);
+    coeffs = spheroidalgraddivSLcoefficients(u, v, phi, nn', mm', oblate);
 
-        %%% --- U COMPONENT ---
-        Ucomponent = 0;
-        for i = 1:3
-            type = gshc_types{i};
-            Gshc_coeff = calculate_gshc_coeff(coeffs.U.(type));
-            Ucomponent = Ucomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
-        end
+    %%% Note that below is very granually split so that it's easier
+    %%% to debug/fix size issues (hence, the ugliness).
+    % Working backwards, the procedure is this (so step 3 is first 
+    % and step 1 is last):
+    % 1. Handle each sigma coefficient
+    % 2. Within each sigma coefficient, handle the Ynm coefficients
+    % 3. Within each Ynm coefficient, handle the f coefficients
 
-        %%% --- V COMPONENT ---
-        Vcomponent = 0;
-        for i = 1:3
-            type = gshc_types{i};
-            Gshc_coeff = calculate_gshc_coeff(coeffs.V.(type));
-            Vcomponent = Vcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
-        end
+    %%% --- U COMPONENT ---
+    Ucomponent = 0;
+    for i = 1:3
+        type = gshc_types{i};
+        Gshc_coeff = calculate_gshc_coeff(coeffs.U.(type));
+        Ucomponent = Ucomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
+    end
 
-        %%% --- PHI COMPONENT ---
-        PHIcomponent = 0;
-        for i = 1:3
-            type = gshc_types{i};
-            Gshc_coeff = calculate_gshc_coeff(coeffs.PHI.(type));
-            PHIcomponent = PHIcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
-        end
+    %%% --- V COMPONENT ---
+    Vcomponent = 0;
+    for i = 1:3
+        type = gshc_types{i};
+        Gshc_coeff = calculate_gshc_coeff(coeffs.V.(type));
+        Vcomponent = Vcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
+    end
+
+    %%% --- PHI COMPONENT ---
+    PHIcomponent = 0;
+    for i = 1:3
+        type = gshc_types{i};
+        Gshc_coeff = calculate_gshc_coeff(coeffs.PHI.(type));
+        PHIcomponent = PHIcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
     end
 end
 
@@ -289,7 +293,7 @@ function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x)
     %{
         Solid spheroidal harmonics can be written as f_n^m(u)Y_n^m(v, phi).
         This function returns what Fr = f_n^m is (and its derivative as Fp), depending 
-        on whether we are in the exterior or interior.
+        on whether we are in the exterior or interior (or on the surface).
     %}
     Fr = ones(size(u_x,1),(p+1)^2);
     Fp = ones(size(u_x,1),(p+1)^2);
@@ -297,12 +301,19 @@ function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x)
 
     if abs(u_x)-u0 < -1e-14 % Interior
         PQ=legendre_otc(p,u_x,1,2,2);
-        P=PQ{1}; dP=PQ{3}; ddP = PQ{5};
+        P=PQ{1}; dP=PQ{3}; ddP=PQ{5};
         Fr=P.'; Fp=dP.'; Fpp=ddP.';
     elseif abs(u_x)-u0 > 1e-14 % Exterior
         PQ=legendre_otc(p,u_x,1,2,2);
         Q=PQ{2}; dQ=PQ{4}; ddQ=PQ{6};
         Fr=Q.'; Fp=dQ.'; Fpp=ddQ.';
+    else % Note that this implicitly handles gnm and fnm. This is done for simplicity.
+        PQ=legendre_otc(p,u_x,1,2,2);
+        P=PQ{1}; dP=PQ{3}; ddP=PQ{5};
+        Q=PQ{2}; dQ=PQ{4}; ddQ=PQ{6};
+        Fr=P.' .* Q.';
+        Fp=(Q.' .* dP.' + P.' .* dQ.')./2;
+        Fpp=(Q.' .* ddP.' + P.' .* ddQ.')./2;
     end
 end
 
