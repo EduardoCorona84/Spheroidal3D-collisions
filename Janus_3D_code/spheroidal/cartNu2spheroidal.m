@@ -1,4 +1,9 @@
 function [S,recons] = cartNu2spheroidal(nu_cart,strg,a,oblate)
+    %{
+        nu_cart are the normal vectors in Cartesian coordinates
+        strg represents the spheroidal coordinates of the target points
+        a is the eccentricity
+    %}
     if nargin<1
         test(1);
         return;

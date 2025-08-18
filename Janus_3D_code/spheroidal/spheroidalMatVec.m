@@ -1,6 +1,6 @@
 function LP=spheroidalMatVec(params,potential,X,nu_vec)
 %--------------------------------------------------------------------%
-% spheroidalMatVec computes the Laplace Double Layer potential of spheroids with 
+% spheroidalMatVec computes the Laplace layer potential of spheroids with 
 % density 'sigma' evaluated either on the surfaces of all spheroids or at targets X. "far"
 % particles are evaluated using smooth quadrature while near particles are 
 % evaluated using spheroidal harmonics.

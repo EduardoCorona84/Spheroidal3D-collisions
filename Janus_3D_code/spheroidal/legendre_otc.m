@@ -269,10 +269,6 @@ if dPoption == 2 | dQoption == 2
             d2P(geti(n,m),:) = ddPnm;
         end
 
-        if dPoption == 2
-            % Alternate evaluation
-        end
-
         if dQoption == 2
             one_minus_x2 = 1 - u.^2;
             ddQnm_term = 2.*u.*dQ(geti(n,m),:) - (n*(n + 1) - m^2./one_minus_x2).*Q(geti(n,m),:);
