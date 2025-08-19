@@ -201,15 +201,24 @@ function M = SLPmatrix(IDparams, np, ns)
     % Get all SP matrices. Each output is np x np x ns.
     [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_all, nu_y_all, nu_z_all);
 
+    % A crutch to handle the ns=1 case...
+    if ns == 1
+        SP_x_cells = {SP_x_cells}; SP_y_cells = {SP_y_cells}; SP_z_cells = {SP_z_cells};
+    end
+
     for i=1:ns
+        if ns==1
+            X_src_i = IDparams.get_X();
+        else
+            X_src_i = IDparams.get_X(i);
+        end
+
         % Extract SL term
         % M1 for each spheroid: 3np x 3np
         % [ SL 0  0 ][ sigma_x ] = [ SL[sigma_x] ]
         % [ 0  SL 0 ][ sigma_y ]   [ SL[sigma_y] ]
         % [ 0  0  SL][ sigma_z ]   [ SL[sigma_z] ] 
         M1 = kron(eye(3), SLM);
-
-        X_src_i = IDparams.get_X(i);
 
         % Extract SP terms
         SP_x_i = SP_x_cells{i};
@@ -222,13 +231,13 @@ function M = SLPmatrix(IDparams, np, ns)
         % [ x*dSx y*dSx z*dSx ][ sigma_x ]
         % [ x*dSy y*dSy z*dSy ][ sigma_y ]
         % [ x*dSz y*dSz z*dSz ][ sigma_z ]
-        M2_xx = diag(X_src_i(:,1)) * SP_x_i; M2_xy = diag(X_src_i(:,1)) * SP_y_i; M2_xz = diag(X_src_i(:,1)) * SP_z_i;
-        M2_yx = diag(X_src_i(:,2)) * SP_x_i; M2_yy = diag(X_src_i(:,2)) * SP_y_i; M2_yz = diag(X_src_i(:,2)) * SP_z_i;
-        M2_zx = diag(X_src_i(:,3)) * SP_x_i; M2_zy = diag(X_src_i(:,3)) * SP_y_i; M2_zz = diag(X_src_i(:,3)) * SP_z_i;
+        Dx = diag(X_src_i(:,1));
+        Dy = diag(X_src_i(:,2));
+        Dz = diag(X_src_i(:,3));
         M2 = [
-            M2_xx, M2_yx, M2_zx; 
-            M2_xy, M2_yy, M2_zy; 
-            M2_xz, M2_yz, M2_zz
+            Dx*SP_x_i, Dy*SP_x_i, Dz*SP_x_i;
+            Dx*SP_y_i, Dy*SP_y_i, Dz*SP_y_i;
+            Dx*SP_z_i, Dy*SP_z_i, Dz*SP_z_i
         ];
 
         % SPM[Xsrc dot sigma]
@@ -237,10 +246,10 @@ function M = SLPmatrix(IDparams, np, ns)
         % [ dSx ]                        [ sigma_x ]
         % [ dSy ][ Xsrc_x Xsrc_y Xsrc_z ][ sigma_y ]
         % [ dSz ]                        [ sigma_z ]
-        M3 = [SP_x_i; SP_y_i; SP_z_i] * [diag(X_src_i(:,1)), diag(X_src_i(:,2)), diag(X_src_i(:,3))];
+        M3 = [SP_x_i; SP_y_i; SP_z_i] * [Dx, Dy, Dz];
 
         % Collect all of the results
-        M_cells = M1 - M2 + M3;
+        M_cells{i} = M1 - M2 + M3;
     end
 
     M = 0.5 * blkdiag(M_cells{:});
