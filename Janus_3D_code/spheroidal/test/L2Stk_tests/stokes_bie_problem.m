@@ -153,12 +153,14 @@ function [soln, truesoln, sigma_vec, condK] = stokes_bie_problem(p, eta, ns, u0,
             K = 0.5*eye(3*ns*np) + DM + S;
         end
     else % Neumann problem
-        error("not implemented.");
+        if interior
+            error("not implemented.");
+        else
+        end
     end
 
     condK = cond(K);
     
-    % truesolnSurf = reshape(truesolnSurf.', [], 1);
     truesolnSurf = [truesolnSurf(:,1) ; truesolnSurf(:,2) ; truesolnSurf(:,3)];
     sigma_vec = gmres(K, truesolnSurf, 1000, 1e-12);
     N = ns*np;
@@ -189,7 +191,6 @@ function [soln, truesoln, sigma_vec, condK] = stokes_bie_problem(p, eta, ns, u0,
     end
     
     %%% Now, compute the solution.
-    soln = zeros(np, 3);
     if ~neumann % Dirichlet problem
         if interior % Interior problem
             [Dterm_x, Dterm_y, Dterm_z] = L2StkMatVec(pars, 'DLP', sigma_x, sigma_y, sigma_z, Xeval);
