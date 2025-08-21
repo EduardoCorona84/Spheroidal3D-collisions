@@ -804,44 +804,6 @@ end
 
 end
 
-function y = Lapp(A,x)
-if isnumeric(A)
-    y=A*x; 
-else
-    y=real(A(x)); 
-end
-end
-
-function x = Lslv(A,b,parslv)
-%global prec;
-prec = parslv.prec; 
-
-if nargin<6
-   if ~isempty(prec) 
-       pr=prec;  
-   else
-       pr=[]; 
-   end
-end
-
-if isnumeric(A)
-    x=A\b; 
-else
-    x = zeros(size(b)); 
-    %b = parslv.Pr(b); 
-    %A = @(x) parslv.Pr(A(x)) + 0.5*(x-parslv.Pr(x)); 
-    
-    for i=1:size(b,2)
-    if nargin==2
-        [x(:,i),~,rs,it]=gmres(A,b(:,i),1,1e-6,200,pr);
-    else
-        [x(:,i),~,rs,it]=gmres(A,b(:,i),parslv.rst,parslv.tol,parslv.maxit,pr);
-    end
-       fprintf('\n gmres %d iters=%d, res=%1.4g \n',i,prod(it),rs); 
-    end
-end
-end
-
 function den = LOCAL_CenterDistance(C)
 
 [Y_g1,  X_g1  ] = meshgrid(C(:,1), C(:,1));
@@ -923,12 +885,12 @@ Bk = Nullsp.B; Ck = Nullsp.C; Lk = Nullsp.L;
 numF = length(ip); 
 
 % Compute vectors and normal vectors for pairs
-R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3
-NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 
-Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj|
+R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3 (NIC: vector between particle pair centers)
+NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 (NIC: distance between particle pairs centers)
+Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj| (NIC: unit vectors between particle pairs)
 
 %% Build A 
-F = zeros(6*n3,numF+numFS); 
+F = zeros(6*n3,numF+numFS); % NIC: F maps contact to direction of force applied to a particular particle
 
 for k=1:numF
     indi = (1:3)+6*(ip(k)-1);
@@ -955,7 +917,7 @@ if Fparams.denseMV
     A = @(x) Amat*x;
 else % matfree
     Bf = @(x) (Bk.')*(F*x);
-    if ~isempty(parslv.prec) && parslv.prec
+    if parslv.prLCP
         switch lower(parslv.prtype)
             case 'bkdiag' % this is just preconditioner on the solve 
                 S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
@@ -1008,25 +970,35 @@ switch lower(lcpOpts.solver)
 end
 
 if saveLCPs
-    if length(A_list) >= 100 || endFlag 
-        save([LCP_file_path '.prt_' num2str(save_iter) '.mat'], ...
-            'A_list', 'b_list')
-        A_list = {};
-        b_list = {};
+    %% Save out components for mat-vec
+    if ~Fparams.denseMV
+        this_A = struct('F',F,'Ck',Ck, ...
+            'SD',SD,'TD',TD,'Bk',Bk,'Lk',Lk);
+    else
+        % in the dense case just save the mat
+        this_A = Amat;
+    end 
+    this_b = bvec;
+    %% Check if the file is getting very large
+    tAvar = whos('this_A');
+    tbBvar = whos('this_b');
+    Avar = whos('A_list');
+    bvar = whos('b_list');
+    pvar = whos('parslv');
+    total_bytes = tAvar.bytes+tbBvar.bytes+Avar.bytes+bvar.bytes+pvar.bytes;
+    if total_bytes > 2e9 
         save_iter = save_iter + 1;
         if endFlag 
             save_iter = 1;
         end
-    end
-    if ~denseMV
-        n = numel(lam);
-        Amat = eye(n) 
-        for i = 1:n 
-            Amat(:,i) = A(Amat(:,i)); 
-        end
-    end
-    A_list{end+1} = Amat; 
-    b_list{end+1} = bvec;
+        A_list = {};
+        b_list = {};
+    end 
+    %% add to the save
+    A_list{end+1} = this_A;
+    b_list{end+1} = this_b;
+    save([LCP_file_path '.prt_' num2str(save_iter) '.mat'], '-v7.3', ...
+            'A_list', 'b_list', 'parslv');
 end
 fprintf(['\n minmap ' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

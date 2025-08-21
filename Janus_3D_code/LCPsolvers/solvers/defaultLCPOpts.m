@@ -53,7 +53,7 @@ if ~isfield(opts, 'stepSize')
 end
 
 if ~isfield(opts, 'r')
-    opts.r = 1;
+    opts.r = min(20, n);
 else 
     assert(opts.r > 0, 'Memory/effective-rank or hessian must by positive');
     opts.r = min(opts.r, n);

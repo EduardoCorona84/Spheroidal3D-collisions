@@ -60,7 +60,7 @@ S = S_(:, 1:r);
 Y = Y_(:, 1:r);
 % Set h0
 tau_bb2 = 1 / rho(r) / dot(Y(:, r),Y(:, r)); % dot(s_k,y_k) / norm(y_k,2)^2
-tau_bb2 = clip(tau_bb2, opts.tau_min, opts.tau_max);
+tau_bb2 = min(max(tau_bb2, opts.tau_min), opts.tau_max);
 if tau_bb2 == opts.tau_min
     warning('Convexity of cost function is stagnating'); 
 end

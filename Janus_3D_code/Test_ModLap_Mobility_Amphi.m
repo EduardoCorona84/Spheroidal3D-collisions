@@ -93,10 +93,10 @@ end
 parbd = struct('Shape','','n3',n3,'rd',rd,'p',p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
 
 % LCP solver parameters
-lcpOpts = struct('solver','bbpgd','max_iter',100,'tol_rel',1e-12,'tol_abs',1e-12);
+lcpOpts = struct('solver','bbpgd','max_iter',100,'tol_rel',1e-6,'tol_abs',1e-5);
 
 % linear solver parameters
-parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[]);  
+parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false);  
 
 %Create Fparams struct 
 Fparams = struct('parbd',parbd,'parslv',parslv,'lcpOpts',lcpOpts,...

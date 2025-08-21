@@ -11,6 +11,7 @@ Aq = [];
 k = 0;
 while true
     [f_k, grad_k, Ax_k] = fg(x_k, Ax_km1, Aq, eta);
+    f_k
     [converged, info] = checkConvergence(k, f_k, x_k, ...
         grad_k, eta, info, opts);
     if converged
