@@ -8,7 +8,6 @@ A = (A + A')/2;
 Ahat = A_diag_list{200};
 Ahat = (Ahat + Ahat')/2;
 
-spy(A - Ahat);
 b = b_list{200};
 
 A_func = @(x) A * x;

@@ -23,7 +23,7 @@ function [opts, info] = set_default_opts(x0, opts)
 
     %first step of the high fidelity solver
     if ~isfield(opts.outer, 'step_init')
-        opts.outer.step_init = 0.1;
+        opts.outer.step_init = 1;
     end
 
     if ~isfield(opts.outer, 'correction')
@@ -82,7 +82,7 @@ function [opts, info] = set_default_opts(x0, opts)
         end
 
         if ~isfield(opts.outer.prox, 'qnUpdate')
-            opts.outer.prox.qnUpdate = 'BFGS';
+            opts.outer.prox.qnUpdate = 'bfgs';
         end
     end
 
@@ -103,7 +103,7 @@ function [opts, info] = set_default_opts(x0, opts)
 
     %set default max for inner solver. This is really max number of steps with corrected gradient.
     if ~isfield(opts.inner, 'max_iter')
-        opts.inner.max_iter = 5;
+        opts.inner.max_iter = 1;
     end
 
     %history for outer solver

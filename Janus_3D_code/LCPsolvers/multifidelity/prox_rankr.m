@@ -68,6 +68,7 @@ function xstar = prox_rankr(y, d, U, V, opts)
         ) + eye(r);
     % 
     a0 = zeros(r,1);
+    ak = a0;
     akp1 = a0;
     for iter = 1:maxiter
         ak = akp1; 

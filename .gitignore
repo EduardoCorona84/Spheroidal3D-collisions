@@ -1,6 +1,9 @@
 *.DS_Store*
 *.mat
 *.asv
+*.svg
+*.png
+*.pdf
 data/*
 Janus_3D_code/LCPsolvers/data/*
 docs/*

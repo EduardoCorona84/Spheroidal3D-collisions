@@ -19,34 +19,28 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
     %Compute high and low fidelity operators at the initial point 
 
     outer_iter = 1;
-    if strcmp(opts.outer.step_init, 'zero')
-        A_true_0 = x0;
-        grad_outer_0 = b;
-        Ab = A(b);
-        step_size = ((b'*b)/(b'*Ab));
-        x_outer_1 = -step_size * grad_outer_0;
-        
-        A_true_1 = step_size * Ab;
-        grad_outer_1 = A_true_1 + b;
-        info = update_info('outer', info, outer_iter, x_outer_1, A_true_1, b, opts);
-    else
-        A_true_0 = A(x_outer_0);
-        grad_outer_0 = A_true_0 + b;
-        f_0 = 1/2*x_outer_0'*A_true_0 + b'*x_outer_0;
-        info = update_info('outer', info, outer_iter, x_outer_0, A_true_0, b, opts);
 
-        %Take a step with the high fidelity model 
-        x_outer_1 = x_outer_0 - opts.outer.step_init*grad_outer_0;
+    A_true_0 = A(x_outer_0);
+    grad_outer_0 = A_true_0 + b;
+    f_0 = 1/2*x_outer_0'*A_true_0 + b'*x_outer_0;
+    info = update_info('outer', info, outer_iter, x_outer_0, A_true_0, b, opts);
+
+    %Take a gradient descent step with the high fidelity model 
+    x_outer_1 = x_outer_0 - opts.outer.step_init*grad_outer_0;
+    if opts.outer.projected == true
         x_outer_1 = max(x_outer_1, 0);
-
-        outer_iter = outer_iter + 1;
-        A_true_1 = A(x_outer_1);
-        f_1 = 1/2*x_outer_1'*A_true_1 + b'*x_outer_1;
-        grad_outer_1 = A_true_1 + b;
-        info = update_info('outer', info, outer_iter, x_outer_1, A_true_1, b, opts);
     end
 
+    outer_iter = outer_iter + 1;
+    %Now go to the loop
+
     while outer_iter <= opts.outer.max_iter
+
+        %evaluate full fidelity operator
+        A_true_1 = A(x_outer_1);    
+        grad_outer_1 = A_true_1 + b;
+        f_1 = 1/2*x_outer_1'*A_true_1 + b'*x_outer_1;
+        info = update_info('outer', info, outer_iter, x_outer_1, A_true_1, b, opts);
 
         %check the sufficient decrease
         if ~strcmp(opts.outer.adaptive, 'none') && outer_iter > 2 %the first step can suck, so just ignore the sufficient decrease
@@ -67,25 +61,29 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
         %Update the low fidelity operator to satisfy the secant equation of the high fidelity operator. If there is no correction, the matrix is just zeros.
         grad_inner = @(x) Ahat(x) + opts.outer.update_matrix*x + b;
 
+        %Go to the outer solve.
+        %In the prox case this updates the approximate inverse Hesssian and takes a step. 
+        %This approximation is used with as the preconditioner and metric of the low fidelity steps. 
+
+        [x_inner_0, opts] = outer_solver(x_outer_1, grad_outer_1, s_1, y_1, outer_iter, opts);
+        %This x_inner_0 will be stored as the first iterate info_inner
+
         %We now go to the inner_solver
-        [x_inner_1, info_inner] = inner_solver(x_outer_1, grad_outer_1, grad_inner, s_1, y_1, outer_iter, opts);
+        if opts.inner.enabled
+            [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, grad_inner, opts);
+        else
+            x_inner_1 = x_inner_0;
+            info_inner = [];
+        end
 
         %update the low fidelity info
         info.inner{outer_iter} = info_inner;
 
         %update variables
-        outer_iter = outer_iter + 1;
         x_outer_0 = x_outer_1;
         x_outer_1 = x_inner_1;
         A_true_0 = A_true_1;
-        %this is here for the code to not break, I think I should really move this stuff up to the beggining of the loop instead.
-        if outer_iter > opts.outer.max_iter
-            break
-        end
-        A_true_1 = A(x_outer_1);    
-        grad_outer_1 = A_true_1 + b;
-        f_1 = 1/2*x_outer_1'*A_true_1 + b'*x_outer_1;
-        info = update_info('outer', info, outer_iter, x_outer_1, A_true_1, b, opts);
+        outer_iter = outer_iter + 1;
 
     end
 
