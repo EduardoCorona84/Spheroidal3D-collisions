@@ -1,6 +1,6 @@
 clear;clc;
 %% Hyperparameters that will change depending on the simulation
-p=2; % Nic: Change back to 4
+p=4; % Nic: Change back to 4
 lambda=0.1;
 rd=1;
 n=3;

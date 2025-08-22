@@ -931,6 +931,30 @@ else % matfree
     end
 end
 
+if isfield(Fparams, 'lofi')
+    lofi_Ck = Nullsp.lofi_C;
+    lofi_Bk = Nullsp.lofi_B;
+    lofi_Lk = Nullsp.lofi_L;
+    lofi_SD = Kernels.lofi_SD;
+    lofi_TD = Kernels.lofi_TD;
+    lofi_Bf = @(x) (lofi_Bk') * F*x;
+    lofi_parslv = parslv; 
+    lofi_parslv.prec = [];
+    lofi_A = @(x) real(F.'*(lofi_Ck*Lapp(lofi_SD,Lslv(lofi_TD,...
+        -Lapp(lofi_TD, lofi_Bf(x))+lofi_Lk*lofi_Bf(x),lofi_parslv)+lofi_Bf(x))));
+    xrand = rand(numF,1);
+    tic
+        lofi_Ax = lofi_A(xrand);
+    disp("LoFi Mat-Vec Time")
+    toc
+    tic
+        Ax = A(xrand);
+    disp("HiFi Mat-Vec Time")
+    toc
+    disp(['Abs Error hifi - lofi: ' num2str(norm(Ax - lofi_Ax))]);
+    disp(['Rel Error hifi - lofi: ' num2str(norm(Ax - lofi_Ax) / norm(Ax))]);
+end
+
 %% Build constant vector b: 
 % Compute (1/dt)*phi
 phib = zeros(numF+numFS,1); 

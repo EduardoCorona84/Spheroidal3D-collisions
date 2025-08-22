@@ -22,6 +22,12 @@ Sc = cell(p,1);
 Sc{p} = SurfaceSph(shape_gallery(p,Shape));
 
 Fparams.parbd = RBS_set_params(p,C,rd,'SL_Stk_3D',Shape,Sc,kerd,Fparams.denseMV,doAna,mdist,Fparams.parbd.eps,out); 
+if isfield(Fparams, 'lofi')
+    lofi_p = Fparams.lofi.p;
+    lofi_Sc = cell(lofi_p,1); 
+    lofi_Sc{lofi_p} = SurfaceSph(shape_gallery(lofi_p,Shape));
+    Fparams.lofi = RBS_set_params(lofi_p,C,rd,'SL_Stk_3D',Shape,lofi_Sc,kerd,Fparams.denseMV,doAna,mdist,Fparams.lofi.eps,out); 
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Initialize shell boundary (if it exists)

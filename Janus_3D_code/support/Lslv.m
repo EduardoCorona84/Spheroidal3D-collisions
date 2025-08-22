@@ -1,14 +1,9 @@
-
 function x = Lslv(A,b,parslv)
-%global prec;
-prec = parslv.prec; 
 
-if nargin<6
-   if ~isempty(prec) 
-       pr=prec;  
-   else
-       pr=[]; 
-   end
+if nargin < 3 && ~isfield(parslv, 'prec')
+    pr=[];
+else
+    pr=parslv.prec;
 end
 
 if isnumeric(A)

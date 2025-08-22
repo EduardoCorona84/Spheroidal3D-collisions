@@ -30,8 +30,6 @@ params - parameter struct with fields such as:
 V - (double n_c*N_deg x 1) array of density or densities 
 L - (sparse array) Extra matrix for completion flow / nullspace correction
 %}
-persistent ShTg ShTr ShY Sc
-
 p  = params.p;      % Spharm degree p
 n3 = params.n3;     % Number of objects
 kerd = params.kerd; % Kernel dimension
@@ -94,12 +92,6 @@ switch pot(1:3)
         pMat = 'SpMat';
     case 'TSL'
         pMat='TSMat';
-        %Coefficient matrices (add option to load only once)
-        if isempty(ShTg) || size(ShTg{1},1)/3 ~= (p+1)^2
-            fprintf('\n Computing Coeff matrices for T \n')
-            [ShTg,ShTr,ShY] = get_Surfgrad_coeffs(1.5*p,p,1);
-            %[ShTg,ShTr,ShY] = Surfgrad_coeffs(ceil(1.5*p),p,1,'VW','VW',0);
-        end
     case 'DL_'
         pMat='DMat';
         nortrg=false;
@@ -108,12 +100,6 @@ switch pot(1:3)
         nortrg=false;
     case 'TDL'
         pMat='TDMat';
-        %Coefficient matrices (add option to load only once)
-        if isempty(ShTg) || size(ShTg{1},1)/3 ~= (p+1)^2
-            fprintf('\n Computing Coeff matrices for T \n')
-            [ShTg,ShTr,ShY] = get_Surfgrad_coeffs(1.5*p,p,1);
-            %[ShTg,ShTr,ShY] = Surfgrad_coeffs(ceil(1.5*p),p,1,'VW','VW',0);
-        end
         nortrg=false;
 end
 
