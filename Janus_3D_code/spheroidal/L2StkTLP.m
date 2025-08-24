@@ -12,6 +12,7 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
             ns          -   number of spheroidal bodies
     %}
     pars.sigma = sigma_x; p = pars.p;
+    DEBUG_FLAG = true;
 
     % Flag to enable alternative calculation and avoid the use of the
     % second derivative.
@@ -66,7 +67,7 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
         end
     end
 
-    if ~ALTERNATE_TO_SPP_FLAG
+    if ~ALTERNATE_TO_SPP_FLAG % S''
         [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(pars, sigma_x, sigma_y, sigma_z, X_eval);
     
         sigma = struct();
@@ -103,45 +104,29 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
         [graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x2, y_times_sig.y2, y_times_sig.z2, X_eval);
         [graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x3, y_times_sig.y3, y_times_sig.z3, X_eval);
 
-        graddivSL_sph = {
-            {graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI},
-            {graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI},
-            {graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI},
-        };
-
         % Now, need to handle the normal derivatives (this is necessary since the code for S''
         % is for the gradient, and not for the normal derivative).
         for k=1:ns
-            if ~pars.oblate(k)
-                Xloc = prolate_spheroid_shape(pars.p, pars.u0(k), pars.a(k));
-            else
-                Xloc = oblate_spheroid_shape(pars.p, pars.u0(k), pars.a(k));
-            end
-            S_eval_k = cart2spheroidal(Xloc, pars.a(k), pars.oblate(k));
-
+            S_eval_k = cart2spheroidal(X_eval{k}, pars.a(k), pars.oblate(k));
             [nu_x_sph, ~] = cartNu2spheroidal(nu_x_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
             [nu_y_sph, ~] = cartNu2spheroidal(nu_y_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
             [nu_z_sph, ~] = cartNu2spheroidal(nu_z_spectral{k}, S_eval_k, pars.a(k), pars.oblate(k));
-            nu_sph_vecs = { nu_x_sph, nu_y_sph, nu_z_sph };
 
-            for j = 1:3
-                for m = 1:3 % X,Y,Z index
-                    nu_sph = nu_sph_vecs{m};
-                    density_field = sprintf('y%dsig', j);
+            graddivSL.y1sig.x = nu_x_sph(:,1).*graddivSL_y1timessig_U{k} + nu_x_sph(:,2).*graddivSL_y1timessig_V{k} + nu_x_sph(:,3).*graddivSL_y1timessig_PHI{k};
+            graddivSL.y1sig.y = nu_y_sph(:,1).*graddivSL_y1timessig_U{k} + nu_y_sph(:,2).*graddivSL_y1timessig_V{k} + nu_y_sph(:,3).*graddivSL_y1timessig_PHI{k};
+            graddivSL.y1sig.z = nu_z_sph(:,1).*graddivSL_y1timessig_U{k} + nu_z_sph(:,2).*graddivSL_y1timessig_V{k} + nu_z_sph(:,3).*graddivSL_y1timessig_PHI{k};
 
-                    % etc. graddivSL.y#sig.x
-                    % Converts (U, V, PHI) to (X, Y, Z)
-                    % The notation graddivSL_sph{j}{1}{k} means the j-th
-                    % spheroidal coordinate of graddivSL_y1timessigma for the 
-                    % k-th particle.
-                    graddivSL.(density_field).(xyz_fields{m}) = nu_sph(:,1).*graddivSL_sph{j}{1}{k} + nu_sph(:,2).*graddivSL_sph{j}{2}{k} + nu_sph(:,3).*graddivSL_sph{j}{3}{k};
-                end
-            end
+            graddivSL.y2sig.x = nu_x_sph(:,1).*graddivSL_y2timessig_U{k} + nu_x_sph(:,2).*graddivSL_y2timessig_V{k} + nu_x_sph(:,3).*graddivSL_y2timessig_PHI{k};
+            graddivSL.y2sig.y = nu_y_sph(:,1).*graddivSL_y2timessig_U{k} + nu_y_sph(:,2).*graddivSL_y2timessig_V{k} + nu_y_sph(:,3).*graddivSL_y2timessig_PHI{k};
+            graddivSL.y2sig.z = nu_z_sph(:,1).*graddivSL_y2timessig_U{k} + nu_z_sph(:,2).*graddivSL_y2timessig_V{k} + nu_z_sph(:,3).*graddivSL_y2timessig_PHI{k};
 
-            for m=1:3
-                nu_sph = nu_sph_vecs{m}; 
-                graddivSL.sig.(xyz_fields{m}) = nu_sph(:,1).*graddivSL_sig_U{k} + nu_sph(:,2).*graddivSL_sig_V{k} + nu_sph(:,3).*graddivSL_sig_PHI{k};
-            end
+            graddivSL.y3sig.x = nu_x_sph(:,1).*graddivSL_y3timessig_U{k} + nu_x_sph(:,2).*graddivSL_y3timessig_V{k} + nu_x_sph(:,3).*graddivSL_y3timessig_PHI{k};
+            graddivSL.y3sig.y = nu_y_sph(:,1).*graddivSL_y3timessig_U{k} + nu_y_sph(:,2).*graddivSL_y3timessig_V{k} + nu_y_sph(:,3).*graddivSL_y3timessig_PHI{k};
+            graddivSL.y3sig.z = nu_z_sph(:,1).*graddivSL_y3timessig_U{k} + nu_z_sph(:,2).*graddivSL_y3timessig_V{k} + nu_z_sph(:,3).*graddivSL_y3timessig_PHI{k};
+
+            graddivSL.sig.x = nu_x_sph(:,1).*graddivSL_sig_U{k} + nu_x_sph(:,2).*graddivSL_sig_V{k} + nu_x_sph(:,3).*graddivSL_sig_PHI{k};
+            graddivSL.sig.y = nu_y_sph(:,1).*graddivSL_sig_U{k} + nu_y_sph(:,2).*graddivSL_sig_V{k} + nu_y_sph(:,3).*graddivSL_sig_PHI{k};
+            graddivSL.sig.z = nu_z_sph(:,1).*graddivSL_sig_U{k} + nu_z_sph(:,2).*graddivSL_sig_V{k} + nu_z_sph(:,3).*graddivSL_sig_PHI{k};
         end
     else % Only first-order derivatives
         % Some repeat code. Will need to trim later.
