@@ -79,6 +79,13 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
         %update the low fidelity info
         info.inner{outer_iter} = info_inner;
 
+        %check if using optimal step size (I should steal nic's logic here)
+        if opts.outer.optimal_step == true
+            q = x_inner_1 - x_outer_1;
+
+
+        end
+
         %update variables
         x_outer_0 = x_outer_1;
         x_outer_1 = x_inner_1;
@@ -96,8 +103,15 @@ function [opts, info] = update_low(Ahat, s_1, y_1, info, outer_iter, opts)
 
     switch lower(opts.outer.low_update)
         case 'sr1'
-            %compute quantity of the needed matrix
             quantity = y_1 - (Ahat(s_1) + opts.outer.update_matrix*s_1);
+            if opts.outer.low_skips == true
+                %check skip condition and skip if so
+                if abs(s_1'*quantity) < 1e-8*norm(s_1)*norm(quantity)
+                    %return and do not update opts.outer.update_matrix
+                    return
+                end
+            end
+            %If no skip, compute quantity of the needed matrix
             opts.outer.update_matrix = opts.outer.update_matrix + ((quantity) * (quantity)' / (s_1' * quantity));
 
         case 'bfgs'
