@@ -147,8 +147,10 @@ In the constrained case, the following iteration could be used
     \kappa_k &= 1 &\text{(Unconstrained Step Size)}\\
     \bar{\x}_k &= \prox_{\x\geq 0}^{\B_k}(\x_k +\kappa_k \p_k) &\text{(Apply Proximal Operator)}\\
     \q_k &= \bar{\x}_k - \x_k &\text{(Feasible Step Direction)}\\
-    \eta_k &= \min\left(1,  h(\q_k)\right) &\text{(\emph{Semi}-Optimal Feasible Step Size)} \\
-    \x_{k+1} &= \x_k + \eta_k \q_k &\text{(Next Iterate)} 
+    \eta^* &= \frac{\langle \nabla f_k, \q_k\rangle }{\langle \q_k,\A\q_k\rangle} &(\text{Unconstrained Optimal Step Size}) \\
+    \hat{\boldsymbol{\eta}} &= - \frac{\x[\q<0]}{\q[\q<0]} &(\text{Possible Break Points}) \\
+    \eta_k &= \min(\eta^*, \hat{\boldsymbol{\eta}}) &(\text{Constrained Optimal  Step Size}) \\
+    \x_{k+1} &= \x_k + \eta_k \q_k &\text{(Next Iterate)}
 \end{align*}
 
 In the literature it has been shown for quasi-Newton methods (without limited memory) that $\kappa^* \rightarrow 1$. In the limited memory and constrained case, there is not clear theory on the optimal step size here, but experimentally a choice of 1 is competitive.
@@ -342,14 +344,14 @@ This does not solve the same problem as the LCP, but it is close, and mathematic
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{randProblems_noStructure_n_100_150_boxPlot.pdf}
-    \caption{\protect \input{fig/randProblems_noStructure_n_100_150_caption.tex}}
+    \includegraphics[width=\textwidth]{randProblems_noStructure_updateStepSize_n_100_150_boxPlot.pdf}
+    \caption{\protect \input{fig/randProblems_noStructure_updateStepSize_n_100_150_caption.tex}}
     \label{fig:ammphi-med}
 \end{figure} 
 
 \begin{table}[ht]
     \resizebox{\textwidth}{!}{
-    \input{fig/randProblems_noStructure_n_100_150_table.tex}
+    \input{fig/randProblems_noStructure_updateStepSize_n_100_150_table.tex}
     }
     \caption{Table for $n\in[150, 200]$}
 \end{table}
