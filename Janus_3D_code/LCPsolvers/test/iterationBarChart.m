@@ -1,41 +1,45 @@
 f = figure();
-abs_kkt = 1e-6; 
-rel_kkt = 1e-6; 
-metric = 'matVec';
+abs_kkt = 1e-8; 
+rel_kkt = 1e-8; 
+metric = 'iters';
 hold on
-edges = [1:1:14 15:5:50, 100];
+edges = [1:1:14 15:5:50, opts.max_iter];
 Ns = [];
 MC = length(results(1).iters);
-for i = 2:length(results)
+for i = 1:length(results)
     iters = zeros(MC,1);
     matVecs = zeros(MC,1);
-    for mc = 50:100
+    for mc = mcGood
         errHist = results(i).errHist{mc};
         errHist(1,2) = NaN;
-        iters(mc) = find(errHist(:,1) < abs_kkt | ...
-            errHist(:,2) < rel_kkt, 1, 'first');
-        matVecs(mc) = errHist(iters(mc),3);
+        try
+            iters(mc) = find(errHist(:,1) < abs_kkt | ...
+                errHist(:,2) < rel_kkt, 1, 'first');
+            matVecs(mc) = errHist(iters(mc),3);
+        catch 
+             iters(mc) = opts.max_iter;
+             matVecs(mc) = opts.max_iter;
+        end
     end
     switch metric
         case 'iters'
             [N,edges] = histcounts(iters, edges);
-            xlabel('Number of Iterations');
+            xaxis_name = 'Number of Iterations';
         case 'matVec'
             [N,edges] = histcounts(matVecs, edges);
-            xlabel('Number of matVecs');
+            xaxis_name = 'Number of matVecs';
         otherwise
             error([metric ' is not a recognized metric'])
     end
     Ns = [Ns;N]; %#ok<AGROW>
 end
 bar(Ns');
-
-
+xlabel(xaxis_name)
 ylabel('Occurance');
-tt = join(split(fname, '_'), ' '); 
-tt = tt{1};
-title(['Comparing LCP solvers for ' tt])
+title('Comparing LCP Solvers')
+subtitle(['n \in [' num2str(minSz) ',' num2str(maxSz) '], reltol_{kkt} = ' num2str(rel_kkt) ', abstol_{kkt} = ' num2str(abs_kkt)] )
 xticks(1:length(edges))
 xticklabels([string(edges(1:14)), (string(edges(15:end-1)) + "-" +string(edges(16:end)))])
-legend(algoNames{2:end})
-% saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/' fname '.pdf'])
+legend({results.name})
+fname = ['barChart_' xaxis_name '_n_' num2str(minSz) '_' num2str(maxSz)];
+saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig/' fname '.pdf'])

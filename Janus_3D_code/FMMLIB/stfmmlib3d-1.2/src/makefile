@@ -33,7 +33,8 @@ HOST=linux-gfortran
 OBJSUF=o
 MODSUF=mod
 FC=gfortran -c 
-FFLAGS=-O2 -fallow-argument-mismatch
+FFLAGS=-O2
+#-fallow-argument-mismatch
 FLINK=gfortran -o $(PROJECT)
 
 # else

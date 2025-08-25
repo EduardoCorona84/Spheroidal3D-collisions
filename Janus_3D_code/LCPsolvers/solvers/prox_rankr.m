@@ -1,4 +1,5 @@
-function xstar = prox_rankr(y, d, U, V, opts)
+function xstar = prox_rankr(y, h0, U, V, opts)
+%% Return simple answer in the trivial cases
 if all(y >= 0) 
     xstar = y;
     return
@@ -6,111 +7,87 @@ elseif isempty(U) && isempty(V)
     xstar = max(y,0);
     return 
 end
-% TODO better handling of defaults    
-if ~exist('opts','var') || isempty(opts) || ~isfield(opts, 'prox')
-    opts = struct('prox', struct( ...
-        'maxiter', 100, ...
-        'tol', 1e-12, ...
-        'newton', true, ...
-        'gradDescentWarmStartIter', 0, ...
-        'c1', 1e-4, ...
-        'c2', .9, ...
-        'debug', false));
-end
-% parameters
+%% Unpack parameters
 maxiter = opts.prox.maxiter;
-tol = opts.prox.tol;
-newton = opts.prox.newton;
-gradDescentWarmStartIter = opts.prox.gradDescentWarmStartIter;
-c1 = opts.prox.c1;
-c2 = opts.prox.c2;
-debug = opts.prox.debug;
+res_abstol = opts.prox.res_abstol;
+res_reltol = opts.prox.res_reltol;
+alp_abstol = opts.prox.alp_abstol;
+alp_reltol = opts.prox.alp_reltol;
+verbose = opts.prox.verbose;
+runCVX = opts.prox.runCVX;
 n = length(y);
 r1 = size(U,2);
 r2 = size(V,2);
 r = r1 + r2;
-% 
-B0 = @(x) x ./ d;
-H0 = @(x) x .* d;
-Dsqrt = @(x) sqrt(d) .* x ;
-% Disqrt = @(x) x ./ sqrt(d);
-B1 = @(x) B0(x) + U*(U'*x);
-B1_ = B0(eye(n,n)) + U*U';
-% assert(min(eig(B1_)) > 0);
-% B = B1_ - V*V'; 
-% eigVals = eig(B);
-% assert(min(eigVals) > 0);
-R = chol(B1_);
+%% Make as efficient as possible by using matrix free implementations where
+% we can
+B0 = @(x) x ./ h0;
+H0 = @(x) x .* h0;
+C = B0(eye(n,n)) + U*U';
+R = chol(C);
 B1inv = @(x) R\(R'\x);
-B1sqrt = @(x) (R'*x);
-% B1sqrti = @(x) (R'\x);
-% Dtilde = @(x) cat(1, B0(x(1:r1,:)), B1(x(r1+1:end,:)));
-% Dtildei = @(x) cat(1, H0(x(1:r1,:)), B1inv(x(r1+1:end,:)));
-% Dtildesqrt = @(x) cat(1, Dsqrt(x(1:r1,:)), B1sqrt(x(r1+1:end,:)));
-% Dtildesqrti = @(x) cat(1, Dsqrti(x(1:r1,:)), B1sqrti(x(r1+1:end,:)));
-Atilde = @(a) cat(1, U' *B0(U*a(1:r1,:)), V'*B1(V*a(r1+1:end,:)));
-
-%% Define functions
 Utilde = cat(2, -H0(U) , B1inv(V));
 xa = @(a) max(0, y + Utilde * a);
-g = @(a) 1/2*dot(a, a + Atilde(a)) ...
-    - 1/2*sum(cat(1, ...
-    Dsqrt(xa(a)) - y - B1inv(V*a(r1+1:end,:)), ...
-    B1sqrt(xa(a)) - y).^2);
-grad_g = @(a) cat(1, ...
+L = @(a) cat(1, ...
     U' * (y + B1inv(V*a(r1+1:end,:)) - xa(a)), ...
     V' * (y - xa(a))...
     ) + a;
 Lambda = @(a) diag(sign(xa(a)));
-hess_g = @(a) cat(1, ...
+J_L = @(a) cat(1, ...
     cat(2, U'*Lambda(a)*H0(U), U'*(eye(n) - Lambda(a))*B1inv(V)), ...
     cat(2, V'*Lambda(a)*H0(U), -V'*Lambda(a)*B1inv(V)) ...
     ) + eye(r);
-% 
-a0 = zeros(r,1);
-ak = a0;
-akp1 = a0;
-for iter = 1:maxiter
-    ak = akp1; 
-    gradk = grad_g(ak);
-    hessk = hess_g(ak);
-    if newton && iter >= gradDescentWarmStartIter
-        eta = 1;
-        pk = -hessk\gradk;
-    else
-        pk = -gradk;
-        eta = 1;%pk'*gradk / (pk'*hessk*pk);
-    end
-    akp1 = ak + eta*pk;
-    gradkp1 = grad_g(akp1);
-    while ( g(akp1) > g(ak) + c1 * eta * dot(pk, gradk)... % sufficient decrease 
-        && dot(gradkp1,pk) < c2*dot(gradk, pk) )
-        eta = eta*.5;
-        akp1 = ak + eta*pk;
-        gradkp1 = grad_g(akp1);
-    end
-    relErr = norm(ak - akp1) / norm(ak);
-    if relErr < tol 
-        if debug 
-            disp('Converged')
+%% Start semi-smooth newton iterations
+k = 0;
+a_km1 = zeros(r,1); % a0
+L_km1 = L(a_km1);
+while true
+    k = k + 1;
+    J_L_km1 = J_L(a_km1);
+    p = -J_L_km1\L_km1;
+    a_k = a_km1 + p;
+    alp_abserr = norm(a_k - a_km1);
+    alp_relerr = alp_abserr / norm(a_k);
+    if alp_abserr < alp_abstol 
+        if verbose 
+            disp('Iterate absolute error is below tolerence')
         end
-        xstar = xa(akp1);
         break
-    end 
-end
-
-if iter == maxiter
-    if debug 
-        disp('Maximum Iterations hit... did not converge')
-        disp(['  Relative Error is ' relErr])
+    elseif alp_relerr < alp_reltol 
+        if verbose 
+            disp('Iterate relative error is below tolerence')
+        end
+        break 
     end
-    xstar = xa(akp1);
+    L_k = L(a_k);
+    res_abserr = norm(L_k);
+    res_relerr =  norm(L_k - L_km1) / norm(L_k);
+    if res_abserr < res_abstol 
+        if verbose 
+            disp('Residiual absolute error is below tolerence')
+        end
+        break 
+    elseif res_relerr < res_reltol 
+        if verbose 
+            disp('Residiual relative error is below tolerence')
+        end
+        break 
+    elseif k == maxiter
+        if verbose 
+            disp('Maximum Iterations hit... did not converge')
+            disp(['  Iterate Relative error : ' alp_relerr])
+        end
+        break
+    end
+    a_km1 = a_k;
+    L_km1 = L_k;
 end
+%% Now that we have the root of L, we apply use it to obtain x(alphastar)
+xstar = xa(a_k);
 
-
-
-if debug 
-    B = diag(1./d) + U*U' - V*V';
+if runCVX 
+    %% Debug with CVX if necessary
+    B = 1/h0 * eye(n) + U*U' - V*V';
     % cvx
     tic
     f = @(x)1/2*dot(x-y, B*(x-y)) ;
@@ -120,8 +97,8 @@ if debug
             subject to 
             0 <= xRef
     cvx_end 
-    err = norm(xRef - xstar) / norm(xRef);
-    assert(err < 1e-4)
+    cvxErr = norm(xRef - xstar) / norm(xRef);
+    assert(cvxErr < 1e-4, 'Compared to CVX we have a bad answer')
 end
 
 end % prox

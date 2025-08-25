@@ -44,20 +44,21 @@ alphastar = (dot(w,y) - dot(w(mask), y(mask))) ...
 
 xstar = max(y + sigma * alphastar*h0.*w, 0);
 
-if opts.prox.debug 
+if opts.prox.runCVX 
     %% idiot check
     % H = h0 + sigma * u * u'
     % B = 1 / h0 * I - sigma * w * w';
     n = length(y);
     B = eye(n) ./ h0 - sigma * w * w';
     try %#ok<TRYNC>
-        cvx_begin
+        cvx_begin quiet
             variable z(N)
             minimize( dot(y-z,B*(y-z)) )
             subject to 
                 z >= 0
         cvx_end
-        err = norm(z - xstar) / norm(xstar)
+        cvxErr = norm(z - xstar) / norm(xstar);
+        assert(cvxErr < 1e-4, 'Our solution does not match CVX')
     end 
 end 
 

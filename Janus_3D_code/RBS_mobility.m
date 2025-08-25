@@ -50,7 +50,8 @@ recorded timestep
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 addpath('LCPsolvers/solvers/');
 global timings;
- 
+diaryFile = [fname '.diary.log'];
+diary(diaryFile);
 %(0.1) (optional) Load data in init, initialize output arrays
 Nt = Fparams.Nt; n3=Fparams.parbd.n3; 
 tt = zeros(Nt+1,1); 
@@ -141,7 +142,6 @@ end
 MRot = @(wh,t) RotationMat(wh,t);
 
 Xt{1}=Xrp; Ct{1}=Fparams.parbd.C;
-Fparams.saveLCPs = true; % TODO: change this to false
 for i=1:Nt
     if i == Nt 
         Fparams.endFlag = true; 
@@ -281,12 +281,18 @@ fprintf('\n -------------------------------------------------------------\n');
 t = t+dt;
 tt(i+1)=t;
 fprintf('\n dt: %2.2f ',dt)
-if mod(i,2)==1                                                                                                                                              
-save(fname,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
-else                                                                                                                                                        
-save([fname '2'],'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                   
+if mod(i,2)==1    
+    saveFile = [fname '.mat'];
+    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
+else    
+    saveFile = [fname '.2.mat'];
+    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                   
 end  
-save([fname '_profile'],'timings'); 
+
+saveFile = [fname '.profile.mat'];
+save(saveFile,'timings'); 
+diary off;
+
 end
 
 
@@ -798,44 +804,6 @@ end
 
 end
 
-function y = Lapp(A,x)
-if isnumeric(A)
-    y=A*x; 
-else
-    y=real(A(x)); 
-end
-end
-
-function x = Lslv(A,b,parslv)
-%global prec;
-prec = parslv.prec; 
-
-if nargin<6
-   if ~isempty(prec) 
-       pr=prec;  
-   else
-       pr=[]; 
-   end
-end
-
-if isnumeric(A)
-    x=A\b; 
-else
-    x = zeros(size(b)); 
-    %b = parslv.Pr(b); 
-    %A = @(x) parslv.Pr(A(x)) + 0.5*(x-parslv.Pr(x)); 
-    
-    for i=1:size(b,2)
-    if nargin==2
-        [x(:,i),~,rs,it]=gmres(A,b(:,i),1,1e-6,200,pr);
-    else
-        [x(:,i),~,rs,it]=gmres(A,b(:,i),parslv.rst,parslv.tol,parslv.maxit,pr);
-    end
-       fprintf('\n gmres %d iters=%d, res=%1.4g \n',i,prod(it),rs); 
-    end
-end
-end
-
 function den = LOCAL_CenterDistance(C)
 
 [Y_g1,  X_g1  ] = meshgrid(C(:,1), C(:,1));
@@ -858,17 +826,6 @@ den = 10000*(den==0)+den;
 
 end
 
-function [f,g] = objGrad(x,A,b)
-
-Ax = A(x);
-f = 1/2 * dot(x, Ax) + dot(x, b);
-if nargout == 1
-    g = [];
-    return 
-end
-g = Ax + b;
-end
-
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
 persistent A_list A_diag_list b_list save_iter
@@ -878,6 +835,18 @@ if ~isfield(Fparams, 'saveLCPs')
 else 
     saveLCPs = Fparams.saveLCPs;
 end
+
+if ~isfield(Fparams, 'LCP_file_path') 
+    mfilePath = mfilename('fullpath');
+    if contains(mfilePath,'LiveEditorEvaluationHelper')
+        mfilePath = matlab.desktop.editor.getActiveFilename;
+    end
+    [mfilePath,~,~] = fileparts(mfilePath);
+    LCP_file_path = fullfile(mfilePath, 'LCPsolvers/data/lcpProblems');
+else 
+    LCP_file_path = Fparams.LCP_file_path;
+end
+
 if ~isfield(Fparams, 'endFlag') 
     endFlag = false; 
 else 
@@ -898,11 +867,8 @@ diam = Fparams.parbd.diam; %diam(i,j) = r_i + r_j
 mxrd = Fparams.parbd.mxrd; %max(r_i,r_j)
 eps = Fparams.parbd.eps;
 Nb = Fparams.parbd.Nb; 
-tol = parslv.tol; 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%Setup (build A and b)
- 
+%% Setup (build A and b)
 shflg = isfield(Fparams,'parsh');
 ip = collist(:,1); jp = collist(:,2); 
 if shflg
@@ -920,14 +886,12 @@ Bk = Nullsp.B; Ck = Nullsp.C; Lk = Nullsp.L;
 numF = length(ip); 
 
 % Compute vectors and normal vectors for pairs
-R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3
-NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 
-Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj|
+R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3 (NIC: vector between particle pair centers)
+NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 (NIC: distance between particle pairs centers)
+Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj| (NIC: unit vectors between particle pairs)
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%Build A 
-
-F = zeros(6*n3,numF+numFS); 
+%% Build A 
+F = zeros(6*n3,numF+numFS); % NIC: F maps contact to direction of force applied to a particular particle
 
 for k=1:numF
     indi = (1:3)+6*(ip(k)-1);
@@ -943,20 +907,12 @@ end
 
 % A is built using the dense or matfree mobility matrix. Can be accelerated
 % by employing only self interaction (block-diagonal) for TD and SD. 
-
-% Different criteria can be added as needed
-% TODO nic change this back 
-denseMV = Fparams.denseMV; % || numF+numFS > 1; 
-bkdiag=false; 
-
-if denseMV
-    parslv.tol = tol; 
+if Fparams.denseMV
     Bf = (Bk.')*F; 
     %(3) (-0.5I-K)*rho_c
     MNS = -Lapp(TD,Bf)+Lk*Bf;
     %(4) 3x3 MNS=VNS*S(mu_c+rho_c)  
     MuNS = Lslv(TD,MNS,parslv); 
-
     % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
     Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
     A = @(x) Amat*x;
@@ -979,20 +935,46 @@ if denseMV
 
     end
 else % matfree
-    parslv.tol = parslv.coltol; 
     Bf = @(x) (Bk.')*(F*x);
-    if bkdiag % this is just preconditioner on the solve 
-        S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2));
-        IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-        A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+    if parslv.prLCP
+        switch lower(parslv.prtype)
+            case 'bkdiag' % this is just preconditioner on the solve 
+                S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
+                IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
+                A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+            otherwise 
+                error(['Preconditioner ' parslv.prtype 'not implement'])
+        end
     else 
         A = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
     end
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Build constant vector b: 
+if isfield(Fparams, 'lofi')
+    lofi_Ck = Nullsp.lofi_C;
+    lofi_Bk = Nullsp.lofi_B;
+    lofi_Lk = Nullsp.lofi_L;
+    lofi_SD = Kernels.lofi_SD;
+    lofi_TD = Kernels.lofi_TD;
+    lofi_Bf = @(x) (lofi_Bk') * F*x;
+    lofi_parslv = parslv; 
+    lofi_parslv.prec = [];
+    lofi_A = @(x) real(F.'*(lofi_Ck*Lapp(lofi_SD,Lslv(lofi_TD,...
+        -Lapp(lofi_TD, lofi_Bf(x))+lofi_Lk*lofi_Bf(x),lofi_parslv)+lofi_Bf(x))));
+    xrand = rand(numF,1);
+    tic
+        lofi_Ax = lofi_A(xrand);
+    disp("LoFi Mat-Vec Time")
+    toc
+    tic
+        Ax = A(xrand);
+    disp("HiFi Mat-Vec Time")
+    toc
+    disp(['Abs Error hifi - lofi: ' num2str(norm(Ax - lofi_Ax))]);
+    disp(['Rel Error hifi - lofi: ' num2str(norm(Ax - lofi_Ax) / norm(Ax))]);
+end
 
+%% Build constant vector b: 
 % Compute (1/dt)*phi
 phib = zeros(numF+numFS,1); 
 if numF>0
@@ -1009,59 +991,59 @@ end
 %b_k = (1/dt)*phi_k + F.'V_k
 bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%LCP solve
-%LCP params
-max_iter=parslv.colmaxit; 
-tol_rel=parslv.col_tolrel; %1e-6; 
-tol_abs=parslv.col_tolabs; %1e-9; 
-profile=1;
-
+%% LCP solve
+% TODO: warm start intelligently
 x0 = zeros(size(bvec));
-
-opts = struct( ...
-    'max_iter', max_iter, ...
-    'tol_rel', tol_rel, ...
-    'tol_abs', tol_abs ...
-);
-fg = @(x) objGrad(x, A, bvec);
-switch parslv.colsolver  
-    case 'BBPGD'
-        [lam, info] = projectedGradientDescent(fg, x0, opts);    
-    case 'L-BFGS-B'
-        [lam, info] = L_BFGS_B(fg, x0, opts); 
-    case 'P-L-BFGS'
-        [lam, info] = projectedQuasiNewton(fg, x0, opts);    
-    case 'proxQuasiNewton'
-        [lam, info] = proxQuasiNewton(fg, x0, opts);
+lcpOpts = Fparams.lcpOpts;
+% Give the solvers access to the mat vec alone
+lcpOpts.A = A; 
+lcpOpts.b = bvec; 
+fg = @(x, Ax, Aq, eta) quadraticLoss(x, A, bvec, Ax, Aq, eta);
+switch lower(lcpOpts.solver)  
+    case 'bbpgd'
+        [lam, info] = projectedGradientDescent(fg, x0, lcpOpts);    
+    case 'l-bfgs-b'
+        [lam, info] = L_BFGS_B(fg, x0, lcpOpts); 
+    case 'p-l-bfgs'
+        [lam, info] = projectedQuasiNewton(fg, x0, lcpOpts);    
+    case 'proxquasinewton'
+        [lam, info] = proxQuasiNewton(fg, x0, lcpOpts);
     otherwise
-        [lam, info] = projectedGradientDescent(fg, x0, opts); 
+        [lam, info] = projectedGradientDescent(fg, x0, lcpOpts); 
 end
 
 if saveLCPs
-    if  endFlag
-        mfilePath = mfilename('fullpath');
-        if contains(mfilePath,'LiveEditorEvaluationHelper')
-            mfilePath = matlab.desktop.editor.getActiveFilename;
-        end
-        [mfilePath,~,~] = fileparts(mfilePath);
-        save([mfilePath '/LCPsolvers/test_data/3x3x3_amphi_data_' num2str(save_iter) '.mat'], ...
-            'A_list', 'A_diag_list', 'b_list')
-        A_list = {};
-        A_diag_list = {};
-        b_list = {};
+    %% Save out components for mat-vec
+    if ~Fparams.denseMV
+        this_A = struct('F',F,'Ck',Ck, ...
+            'SD',SD,'TD',TD,'Bk',Bk,'Lk',Lk);
+    else
+        % in the dense case just save the mat
+        this_A = Amat;
+    end 
+    this_b = bvec;
+    %% Check if the file is getting very large
+    tAvar = whos('this_A');
+    tbBvar = whos('this_b');
+    Avar = whos('A_list');
+    bvar = whos('b_list');
+    pvar = whos('parslv');
+    total_bytes = tAvar.bytes+tbBvar.bytes+Avar.bytes+bvar.bytes+pvar.bytes;
+    if total_bytes > 2e9 
         save_iter = save_iter + 1;
         if endFlag 
             save_iter = 1;
         end
-    end
-    
-    A_list{end+1} = Amat; 
-    A_diag_list{end+1} = Amat_diag;
-    b_list{end+1} = bvec;
+        A_list = {};
+        b_list = {};
+    end 
+    %% add to the save
+    A_list{end+1} = this_A;
+    b_list{end+1} = this_b;
+    save([LCP_file_path '.prt_' num2str(save_iter) '.mat'], '-v7.3', ...
+            'A_list', 'b_list', 'parslv');
 end
-fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
+fprintf(['\n minmap ' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
 

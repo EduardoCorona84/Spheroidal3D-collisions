@@ -1,16 +1,18 @@
 function [x, info] = zeroSr1_nic(fcnGrad, x0, opts)
-[opts, info] = defaultOpts(opts, x0);
+[opts, info] = defaultLCPOpts(opts, x0);
 checkOpts(opts)
 n = numel(x0);
-kappa = 1;
+eta = 1;
 x_k = x0;
 x_km1 = NaN*ones(n,1);
 grad_km1 = NaN*ones(n,1);
+Ax_km1 = [];
+Aq = [];
 k = 0;
 while true
-    [f_k, grad_k] = fcnGrad(x_k);
+    [f_k, grad_k, Ax_k] = fcnGrad(x_k, Ax_km1, Aq, eta);
     [converged, info] = checkConvergence(k, f_k, x_k, ...
-        grad_k, kappa, info, opts);
+        grad_k, eta, info, opts);
     if converged
         x = x_k;
         break
@@ -20,6 +22,7 @@ while true
     y_k = grad_k - grad_km1;
     x_km1 = x_k;
     grad_km1 = grad_k;
+    Ax_km1 = Ax_k;
     [h0, u, sigma, opts] = updateHk(k, s_k, y_k, opts);
     % quasi-newton step direction
     p = - h0 * grad_km1;
@@ -27,11 +30,11 @@ while true
         p = p - u * dot(u, grad_k);
     end
     % step size direction
-    kappa = stepSize(k, p, grad_k, opts); 
+    kappa = stepSize(k, p, x_km1, Ax_km1, opts); 
     x_k = prox(x_km1 + kappa * p, h0, u, sigma, opts);
     % Possibly a step length update after the projection
     q = x_k - x_km1;
-    eta = min(1, stepSize(-1, q, grad_k, opts));
+    [eta, Aq] = stepSize(-1, q, x_km1, Ax_km1, opts);
     x_k = x_km1 + eta*q;
     % Increment the number of iterations
     k = k + 1;
@@ -102,8 +105,8 @@ end
 end % prox
 
 function checkOpts(opts)
-assert(strcmpi(opts.kappa.fwd, 'opt') ...
-    || strcmpi(opts.kappa.fwd, 'uniform'),...
+assert(strcmpi(opts.stepSize.kappa, 'opt') ...
+    || strcmpi(opts.stepSize.kappa, 'uniform'),...
     ['Quasi Newtwon method should use a uniform step size of 1 because the '...
     'BB step size is baked into the hessian approximation (unconstrained) optimal size']);
 end

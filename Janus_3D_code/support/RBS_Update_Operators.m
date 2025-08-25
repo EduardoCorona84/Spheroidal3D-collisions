@@ -34,6 +34,16 @@ if(isfield(Fparams,'lambda'))
         'SL_LMOD_3D',Shape,Sc,ldim,Fparams.denseMV,Fparams.parbd.doAna,mdist,Fparams.parbd.eps,out);
     Fparams.parmod.lambda=Fparams.lambda;
 end
+
+if isfield(Fparams, 'lofi')
+    lofi_p = Fparams.lofi.p;
+    lofi_Sc = Fparams.lofi.Sc;
+    lofi_rd = Fparams.lofi.rd;
+    Fparams.lofi = RBS_set_params(lofi_p,Ct,lofi_rd,...
+        'TSL_Stk_3D',Shape,lofi_Sc,sdim,Fparams.denseMV,...
+        Fparams.lofi.doAna,mdist,Fparams.lofi.eps,out); 
+end
+
 Xt = Fparams.parbd.Xrp;
 
 fprintf('\n Time for surface update: %e',toc) 
@@ -45,6 +55,11 @@ end
 
 [Ck,Bk,Dk,Lk] = Build_AuxMats(Fparams.parbd.Wg,Xt,[],np,n3); 
 Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.L = Lk;
+if isfield(Fparams, 'lofi')
+    lofi_Xt = Fparams.lofi.Xrp;
+    [lofi_Ck,lofi_Bk,lofi_Dk,lofi_Lk] = Build_AuxMats(Fparams.lofi.Wg,lofi_Xt,[],Fparams.lofi.np,n3); 
+    Nullsp.lofi_C = lofi_Ck; Nullsp.lofi_B = lofi_Bk; Nullsp.lofi_D = lofi_Dk; Nullsp.lofi_L = lofi_Lk;
+end
 
 % Initial block diag build
 if i==0
@@ -136,7 +151,13 @@ tic;
 % Stokes kernels 
 Kernels.TD = RBS_MatVec([],Lk,typeMV,Fparams.parbd,sdim,0.5,'TSL_Stk_3D',Kernels.TSSDd);
 Kernels.SD = RBS_MatVec([],[],typeMV,Fparams.parbd,sdim,0,'SL_Stk_3D',Kernels.SSDd); 
-
+if isfield(Fparams, 'lofi')
+    if ~strcmpi(typeMV, 'vsh')
+        warning('Lofi implementation expects no use of the DMV possible failure');
+    end
+    Kernels.lofi_TD = RBS_MatVec([],lofi_Lk,typeMV,Fparams.lofi,sdim,0.5,'TSL_Stk_3D',[]);
+    Kernels.lofi_SD = RBS_MatVec([],[],typeMV,Fparams.lofi,sdim,0,'SL_Stk_3D',[]); 
+end
 Fparams.parmod.dense = 1;
 if strcmp(Fparams.type,'MHD')
     % Laplace kernels

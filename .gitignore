@@ -8,4 +8,14 @@ data/*
 Janus_3D_code/LCPsolvers/data/*
 docs/*
 docs_old/*
+*.o
+*.log
+*.dvi
+*._*
+Janus_3D_code/FMMLIB/mwrap
+*.mex*
+*.a
+Janus_3D_code/results
+Janus_3D_code/data
+
 Janus_3D_code/FMMLIB/

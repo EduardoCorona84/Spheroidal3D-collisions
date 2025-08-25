@@ -1,44 +1,14 @@
+all: linux clean
 
-all: macosx clean
+linux: linux-openmp
 
-# linux: linux-matlab-64bit linux-matlab-64bit
+linux:
+	$(MAKE) -f makefile.mwrap TARGET=matlab-linux-a64 clean
+	$(MAKE) -f makefile.mwrap TARGET=matlab-linux-a64 -j
 
-macosx: macosx-matlab-64bit
-
-# windows: windows-matlab-32bit windows-matlab-64bit
-
-# linux-octave-64bit:
-# 	$(MAKE) -f makefile.mwrap TARGET=octave-linux-openmp clean
-# 	$(MAKE) -f makefile.mwrap TARGET=octave-linux-openmp -j
-
-# linux-matlab-64bit:
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-linux-a64-openmp clean
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-linux-a64-openmp -j
-
-# macosx-matlab-32bit:
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-maci-openmp clean
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-maci-openmp -j
-
-macosx-matlab-64bit:
-	$(MAKE) -f makefile.mwrap 
-# TARGET=matlab-maca64-openmp clean
-# $(MAKE) -f makefile.mwrap TARGET=matlab-maca64-openmp -j
-
-# windows-matlab-32bit:
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w32 clean
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w32 -j
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w32-openmp clean 
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w32-openmp -j
-
-# windows-matlab-64bit:
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w64 clean
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w64 -j
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w64-openmp clean 
-# 	$(MAKE) -f makefile.mwrap TARGET=matlab-windows-w64-openmp -j
+linux-openmp:
+	$(MAKE) -f makefile.mwrap TARGET=matlab-linux-a64-openmp clean
+	$(MAKE) -f makefile.mwrap TARGET=matlab-linux-a64-openmp -j
 
 clean:
 	rm -f *.o
-
-# distclean:
-# 	rm -f *.o
-

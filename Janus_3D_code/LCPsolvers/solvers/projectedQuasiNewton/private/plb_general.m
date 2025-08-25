@@ -73,7 +73,7 @@ if isfield(options, 'errFcn')
             out.errHist(2,i) = fcn(out.x);
         end
     else 
-        assert(false, 'errFcn must be empty, a function handle or a cell array full of function handles');
+        assert(isempty(options.errFcn), 'errFcn must be empty, a function handle or a cell array full of function handles');
     end
 end
 %% -----------------------------------------------------
@@ -156,7 +156,7 @@ if (options.verbose)
     if (options.asgui) delete(h); else fprintf('Done\n'); end
 end
 
-if isfield(options, 'errFcn')
+if isfield(options, 'errFcn') && ~isempty(options.errFcn)
     out.errHist= out.errHist(1:out.iter+1,:);
 end
 

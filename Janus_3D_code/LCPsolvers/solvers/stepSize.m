@@ -1,18 +1,18 @@
-function kappa = stepSize(k, p, grad_k, opts, s_k, y_k)
+function [kappa, Ap] = stepSize(k, p, x, Ax, opts, s_k, y_k)
 
 if k == 0
-    mode = opts.kappa.init;
-elseif k < 0
-    mode = opts.kappa.bwd;
-else
-    mode = opts.kappa.fwd;
+    mode = opts.stepSize.init;
+elseif k > 0 %  fwd
+    mode = opts.stepSize.kappa;
+else % bwd
+    mode = opts.stepSize.eta;
 end
 
 if k > 0 && (~exist('s_k','var') || ~exist('y_k','var'))
     assert(~contains(lower(mode),'bb'), ['BB steps require s_k and y_k '...
         'which are not available when k == 0']);
 end
-
+Ap = [];
 switch lower(mode)
     case 'bb1'
         kappa = (s_k'*s_k)/(s_k'*y_k);
@@ -20,7 +20,10 @@ switch lower(mode)
         kappa = (s_k'*y_k)/(y_k'*y_k);
     case 'opt'
         % For QP, this is the optsimal step length (see page 56 of n&W)
-        kappa = -dot(p, grad_k) / dot(p, opts.A(p));
+        % Notice that is A is not perfectly symmetric, then we do not have
+        % kappa = -(Ax+b)'p/(p'Ap)
+        Ap = opts.A(p);
+        kappa = -(1/2*(dot(p, Ax) +  dot(x, Ap)) + dot(p,opts.b)) / dot(p, Ap);
     case 'uniform' 
         kappa = 1;
     otherwise 
@@ -30,4 +33,9 @@ switch lower(mode)
         % NIC: In general for the first iteration without Lipschitz info, we just
         % use 1?
         error([mode ' is not a valid step size rule'])
+end
+% In the bwd case, we need to stay in the feasible set, so kappa \in (0,1]
+if k < 0
+    kappa = min(1, kappa);
+end
 end
