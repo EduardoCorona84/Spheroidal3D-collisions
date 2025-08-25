@@ -1,105 +1,267 @@
-% ----------------------
-% Test L2StkMatVec
-% ----------------------------------------
+%{
+    This is to verify that the code for L2StkMatVecKernel meets the very 
+    basic properties associated with their respective operators. For a more
+    rigorous test, see TEST_stokes_bie.m.
+%}
 
-pstart=2; pend=16;
-parr=(pstart:2:pend)';
+classdef TEST_L2StkMatVecKernel < matlab.unittest.TestCase
+    properties
+        params=SpheroidalParameters;
+        p = 16;
 
-% For one spheroid, compare SL matrix made by L2StkMatVecKernel
-% with Kernel_Eval;
-% Only self-eval necessary.
-% Current code capacity: self-eval on one spheroid available; no self to
-% all or interactions. Test code for one spheroid only, interchanging N-D
-% array and 2D vectors sometimes.
-
-eta=0.1; 
-    
-ns_test=1;
-pars_test=SpheroidalParameters;
-pars_test.u0=1.1; 
-% pars_test.a=1/1.1;
-% pars_test.oblate=0;
-pars_test.a=1/sqrt(1.1^2+1);
-pars_test.oblate=1;
-pars_test.centers = [0 0 0];
-pars_test.Rmat=eye(3);
-pars_test.matvec_eta=eta;
-
-err=zeros(1,length(parr));
-for pind=1:length(parr)
-    p_test=parr(pind); 
-    fprintf("\n Current p: %d\n",p_test);
-    np_test=2*p_test*(p_test+1);
-
-    pars_test.sigma=zeros(np_test,1,ns_test); pars_test.get_shc();
-
-    % E field from randomly placed point charges. 
-    % Point charges
-    rng(10.5);
-    nc = 2;
-    c=pars_test.centers;
-    Xptch = reshape(repmat(reshape(c',3,1,[]),1,nc),3,[],1)';
-    % (pseudo)random point charges
-    scale = repmat(.5.*pars_test.a .*sqrt(pars_test.u0.^2-1),nc,1);
-    scale = scale(:);
-    d = repmat(scale,1,3).*(rand(size(Xptch))-.5);
-
-    Xptch = Xptch + d; %point charge locations, near centers of spheroids
-    ptch = (2.*rand(ns_test*nc,1)-1); %charge value, between -1 and 1
-
-    % E field from point charges on surface of each spheroid
-    sigma1=zeros(np_test,1,ns_test); sigma2=sigma1; sigma3=sigma1;
-    [Xsrc,~]=pars_test.get_X();
-    for ii=1:ns_test
-        Xsrci=Xsrc((ii-1)*np_test+1:ii*np_test,:);
-        E=PtChargeE(ptch,Xptch,Xsrci); % nt x 3
-        sigma1(:,:,ii)=E(:,1);
-        sigma2(:,:,ii)=E(:,2);
-        sigma3(:,:,ii)=E(:,3);
+        u0_prolate = 4/sqrt(3);
+        u0_oblate = 4/sqrt(3);
+        a_prolate;
+        a_oblate;
     end
-    
-    % target points on surface.
-    % tic;
-    [LSLx,LSLy,LSLz]=L2StkMatVec(pars_test,sigma1,sigma2,sigma3);
-    % toc;
-    LSLx=sum(LSLx,3);
-    LSLy=sum(LSLy,3);
-    LSLz=sum(LSLz,3);
 
-    % Form kernel and solve for density
-    % tic;
-    StkKernel = L2StkMatVecKernel(pars_test,p_test);
-    % toc;
-    u_kernel=StkKernel*[sigma1;sigma2;sigma3];
+    methods (TestClassSetup)
+        function setup(testCase)
+            clc();
 
-    % TODO: because of kernel space, solution incorrect.
-    %       turning to real does not solve the issue.
-    % mu = StkKernel \ [LSLx;LSLy;LSLz];
-
-    err(pind)=norm(abs(u_kernel-[LSLx;LSLy;LSLz]));
-    % err(pind)=norm(abs(mu-[sigma1;sigma2;sigma3]));
-end
-
-display(err)
-
-
-function E=PtChargeE(ptch,Xptch,Y)
-    M=length(ptch);
-    if size(Y,2)~=3
-        if size(Y,1)~=3
-            error("one of target point's dimention should be 3")
+            testCase.a_prolate = 1/testCase.u0_prolate;
+            testCase.a_oblate = 1/sqrt(1 + testCase.u0_oblate^2);
         end
-        Y = Y';
     end
-    n=size(Y,1);
-    Etemp=zeros(3*n,M);
-    for ii=1:M
-        r=Xptch(ii,:)-Y; % n x 3
-        R=sqrt(sum(r.^2,2)); % n x 1
-        Etemp(1:n,ii)=r(:,1)./(R.^3); % n x 1
-        Etemp(n+1:2*n,ii)=r(:,2)./(R.^3);
-        Etemp(2*n+1:3*n,ii)=r(:,3)./(R.^3);
+
+    methods (Test)
+        %% SLP tests
+        function testSLPAction(testCase)
+            %{
+                The action of the SLP matrix should be the same as the
+                matvec.
+            %}
+        end
+
+        %% DLP tests
+        function testProlateDLPRigidBodyMotion(testCase)
+            %{
+                Replicates the rigid body motion test for L2StkDLP. Note
+                that this test is a bit different due to the formatting of
+                the result we get from the matvec (see the comment in the
+                L2StkMatVecKernel about the structure of the matrix).
+            %}
+            tol = 9e-6;
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.p = 16;
+            params.matvec_eta = 10;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.thetas = 0;
+            params.phis = 0;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+
+            %%% Matvec computation
+            DP = L2StkMatVecKernel(params, 'DLP', p);
+
+            %%%
+            %%% Translational motion
+            %%%
+            sigma_x = 3*ones(np, 1);
+            sigma_y = 2*ones(np, 1);
+            sigma_z = 1*ones(np, 1);
+            sig = [sigma_x ; sigma_y; sigma_z];
+
+            DP_res_vec = DP * sig;
+            DP_res_x = DP_res_vec(1:np);
+            DP_res_y = DP_res_vec(np+1:2*np);
+            DP_res_z = DP_res_vec(2*np+1:3*np);
+
+            rel_errs = [
+              norm(DP_res_x + 0.5*sigma_x) / norm(DP_res_x);
+              norm(DP_res_y + 0.5*sigma_y) / norm(DP_res_y);
+              norm(DP_res_z + 0.5*sigma_z) / norm(DP_res_z);
+            ];
+
+            testCase.verifyLessThan(rel_errs, tol, 'Rigid body motion test fails for translational motion.');
+
+            %%%
+            %%% Rotational motion
+            %%%
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
+            omega = rand(1, 3) - 0.5;
+            sigma_rot = cross(repmat(omega, np, 1), X_src);
+            sigma_x = sigma_rot(:, 1);
+            sigma_y = sigma_rot(:, 2);
+            sigma_z = sigma_rot(:, 3);
+            sig = [sigma_x ; sigma_y; sigma_z];
+
+            DP_res_vec = DP * sig;
+            DP_res_x = DP_res_vec(1:np);
+            DP_res_y = DP_res_vec(np+1:2*np);
+            DP_res_z = DP_res_vec(2*np+1:3*np);
+
+            rel_errs = [
+              norm(DP_res_x + 0.5*sigma_x) / norm(DP_res_x);
+              norm(DP_res_y + 0.5*sigma_y) / norm(DP_res_y);
+              norm(DP_res_z + 0.5*sigma_z) / norm(DP_res_z);
+            ];
+
+            testCase.verifyLessThan(rel_errs, tol, 'Rigid body motion test fails for rotational motion.');
+        end
+
+        function testOblateDLPRigidBodyMotion(testCase)
+            %{
+                Replicates the rigid body motion test for L2StkDLP. Note
+                that this test is a bit different due to the formatting of
+                the result we get from the matvec (see the comment in the
+                L2StkMatVecKernel about the structure of the matrix).
+            %}
+            tol = 9e-6;
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 10;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.thetas = 0;
+            params.phis = 0;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+
+            %%% Matvec computation
+            DP = L2StkMatVecKernel(params, 'DLP', p);
+
+            %%%
+            %%% Translational motion
+            %%%
+            sigma_x = 3*ones(np, 1);
+            sigma_y = 2*ones(np, 1);
+            sigma_z = 1*ones(np, 1);
+            sig = [sigma_x ; sigma_y; sigma_z];
+
+            DP_res_vec = DP * sig;
+            DP_res_x = DP_res_vec(1:np);
+            DP_res_y = DP_res_vec(np+1:2*np);
+            DP_res_z = DP_res_vec(2*np+1:3*np);
+
+            rel_errs = [
+              norm(DP_res_x + 0.5*sigma_x) / norm(DP_res_x);
+              norm(DP_res_y + 0.5*sigma_y) / norm(DP_res_y);
+              norm(DP_res_z + 0.5*sigma_z) / norm(DP_res_z);
+            ];
+
+            testCase.verifyLessThan(rel_errs, tol, 'Rigid body motion test fails for translational motion.');
+
+            %%%
+            %%% Rotational motion
+            %%%
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
+            omega = rand(1, 3) - 0.5;
+            sigma_rot = cross(repmat(omega, np, 1), X_src);
+            sigma_x = sigma_rot(:, 1);
+            sigma_y = sigma_rot(:, 2);
+            sigma_z = sigma_rot(:, 3);
+            sig = [sigma_x ; sigma_y; sigma_z];
+
+            DP_res_vec = DP * sig;
+            DP_res_x = DP_res_vec(1:np);
+            DP_res_y = DP_res_vec(np+1:2*np);
+            DP_res_z = DP_res_vec(2*np+1:3*np);
+
+            rel_errs = [
+              norm(DP_res_x + 0.5*sigma_x) / norm(DP_res_x);
+              norm(DP_res_y + 0.5*sigma_y) / norm(DP_res_y);
+              norm(DP_res_z + 0.5*sigma_z) / norm(DP_res_z);
+            ];
+
+            testCase.verifyLessThan(rel_errs, tol, 'Rigid body motion test fails for rotational motion.');
+        end
+
+        %% TLP tests
+        function testTLPisAdjointOfDLP(testCase)
+            %{
+                The traction of the Stokes SLP is the adjoint of the Stokes 
+                DLP. We verify this fact.
+            %}
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 10;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.thetas = 0;
+            params.phis = 0;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+
+            %%% Matrix computation
+            DP = L2StkMatVecKernel(params, 'DLP', p);
+
+            sigma_x = 3*ones(np, 1);
+            sigma_y = 2*ones(np, 1);
+            sigma_z = 1*ones(np, 1);
+            sig = [sigma_x ; sigma_y; sigma_z];
+
+            %%% Matvec computation
+            DPmatvec_res = L2StkMatVec(params, 'DLP', sigma_x, sigma_y, sigma_z, X_trg)
+        end
+
+        function testTLPRigidBodyMotion(testCase)
+            %{
+                In rigid body motion, the traction of the SLP should be
+                zero.
+            %}
+            tol = 9e-6;
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.p = 16;
+            params.matvec_eta = 10;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.thetas = 0;
+            params.phis = 0;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+
+            %%% Matvec computation
+            TLP = L2StkMatVecKernel(params, 'TLP', p, 0);
+
+            %%%
+            %%% Translational motion
+            %%%
+            u = [ones(np, 1); zeros(2*np, 1)];
+
+            TLP_res_vec = TLP * u;
+            TLP_res_x = TLP_res_vec(1:np);
+            TLP_res_y = TLP_res_vec(np+1:2*np);
+            TLP_res_z = TLP_res_vec(2*np+1:3*np);
+
+            errs = [
+                norm(TLP_res_x);
+                norm(TLP_res_y);
+                norm(TLP_res_z);
+            ]
+
+            testCase.verifyLessThan(errs, tol, 'Rigid body motion test fails for translational motion.');
+
+            %%%
+            %%% Rotational motion
+            %%%
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
+            omega = rand(1, 3) - 0.5;
+            sigma_rot = cross(repmat(omega, np, 1), X_src);
+            sigma_x = sigma_rot(:, 1);
+            sigma_y = sigma_rot(:, 2);
+            sigma_z = sigma_rot(:, 3);
+            sig = [sigma_x ; sigma_y; sigma_z];
+
+            TLP_res_vec = TLP * sig;
+            TLP_res_x = TLP_res_vec(1:np);
+            TLP_res_y = TLP_res_vec(np+1:2*np);
+            TLP_res_z = TLP_res_vec(2*np+1:3*np);
+
+            rel_errs = [
+              norm(TLP_res_x + 0.5*sigma_x) / norm(TLP_res_x);
+              norm(TLP_res_y + 0.5*sigma_y) / norm(TLP_res_y);
+              norm(TLP_res_z + 0.5*sigma_z) / norm(TLP_res_z);
+            ];
+
+            testCase.verifyLessThan(rel_errs, tol, 'Rigid body motion test fails for rotational motion.');
+        end
     end
-    E=Etemp./(4*pi)*ptch;
-    E=reshape(E,n,3);
 end

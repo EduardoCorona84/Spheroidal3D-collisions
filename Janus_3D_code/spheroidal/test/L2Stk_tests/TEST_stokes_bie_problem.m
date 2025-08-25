@@ -3,7 +3,7 @@ classdef TEST_stokes_bie_problem < matlab.unittest.TestCase
         params=SpheroidalParameters;
         p = 16;
 
-        u0_prolate = 4/sqrt(3);
+        u0_prolate = 100001/sqrt(200001);
         u0_oblate = 8/sqrt(3);
         a_prolate;
         a_oblate;
@@ -32,15 +32,12 @@ classdef TEST_stokes_bie_problem < matlab.unittest.TestCase
             [soln, truesoln, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
         end
 
-        function testInteriorDirichletProblemMultipleSpheroids(testCase)
-        end
-
         function testExteriorDirichletProblemOneSpheroid(testCase)
             rng(42);
             p = 16;
             eta = 10;
             ns = 1;
-            u0 = 13/sqrt(69);
+            u0 = 100001/sqrt(200001);
             target_distances = 3; % Distance from the surface to evaluate the potential
             plt = false;
             neumann = false;
@@ -50,6 +47,9 @@ classdef TEST_stokes_bie_problem < matlab.unittest.TestCase
         end
 
         function testExteriorDirichletProblemMultipleSpheroid(testCase)
+        end
+
+        function testExteriorNeumannProblemOneSpheroid(testCase)
         end
     end
 end
