@@ -35,12 +35,11 @@ FSRCS = \
 
 # object files list
 OBJS    = $(FSRCS:.f=.$(OBJSUF)) 
-MATLABROOT=/Applications/MATLAB_R2024b.app
 all: $(OBJS) 
 	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -mb $(PROJECT).mw
 	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -c $(MEX_GATEWAY).c $(PROJECT).mw
-# 	$(MEX) -v $(MEX_FLAGS) $(MEX_LINK) $(MEX_GATEWAY).c $(OBJS) $(MEX_LIBS)
-	gcc -o stfmmlib3d-1.2.mexmaca64 -fexceptions -shared -fPIC -fno-omit-frame-pointer -pthread -I$(MATLABROOT)/extern/include -DMATLAB_MEX_FILE -DMATLAB_DEFAULT_RELEASE=R2018b $(MEX_GATEWAY).c $(OBJS) -L$(MATLABROOT)/bin/maca64 -lmx -lmex -lmat -lm 
+	$(MEX) -v $(MEX_FLAGS) $(MEX_LINK) $(MEX_GATEWAY).c $(OBJS) $(MEX_LIBS)
+
 doc:
 	$(MW) $(MWFLAGS) $(MEX_GATEWAY) -mb $(PROJECT).mw
 
