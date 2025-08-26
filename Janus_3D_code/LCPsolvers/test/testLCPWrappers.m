@@ -37,27 +37,28 @@ opts = struct( ...
 algoNames = {
     'PGD (\kappa = \tau_{bb_1}, \eta = 1)'; 
     'PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)'; 
-    'Optimal Diagonal Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
+    % 'Optimal Diagonal Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
     % 'Online Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
     'zeroSR1 (\kappa = 1, \eta = \eta^*)';
     'L-BFGS-B';
     'Projected QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)';
     'Proximal QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)';
-    'Binding Proximal QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)'
+    % 'Binding Proximal QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)'
 };
 algoHndls = {
     @projectedGradientDescent; @projectedGradientDescent; 
-    @optDiagPrecond;
+    % @optDiagPrecond;
     % @onlineScaledGradient;
     @zeroSr1_nic; 
     @L_BFGS_B; 
     @projectQuasiNewton_nic;  
     @proxQuasiNewton;%
-    @bindingProxQuasiNewton
+    % @bindingProxQuasiNewton
 };
 numAlgo = numel(algoNames);
 assert(numel(algoNames) == numel(algoHndls));
 fromFile = false;
+diagDom = false;
 if fromFile 
     MC = length(A_list);
 else 
@@ -91,9 +92,12 @@ for mc = 1:MC
         n = minSz + int64(round((maxSz-minSz)*rand(1)));
         B = randn(n,n);
         vv = 1 + condNum * rand(n,1);
-        % [Q, ~] = qr(B);
-        % A = Q*diag(vv)*Q';
-        A = (B+B') + diag(vv);
+        if diagDom
+            A = (B+B') + diag(vv);
+        else
+            [Q, ~] = qr(B);
+            A = Q*diag(vv)*Q';
+        end
         [vecs,vals] = eig(A);
         vals = max(1,diag(vals));
         A = vecs*diag(vals)*vecs';
@@ -168,34 +172,39 @@ for mc = 1:MC
     if mcGoodFlag
         mcGood = [mcGood mc]; %#ok<AGROW>
         disp(['mc ' num2str(mc)])
-        % figure() 
-        % for ixAlgo = 1:numAlgo
-        %     name = algoNames{ixAlgo};
-        %     subplot(3,1,1)
-        %     iterHist = results(ixAlgo).iterHist{mc};
-        %     errHist = results(ixAlgo).errHist{mc};
-        %     numIter = size(errHist,1);
-        %     try
-        %         objVal = arrayfun(@(i) fg(iterHist(i,:)',[],[],[]), 1:numIter);
-        %     catch 
-        %         objVal = errHist(:,end);
-        %     end
-        %     semilogy(1:numIter, objVal - min(objVal) + 1e-12, 'LineWidth',4) % abs(objVal - cvxObjVal) / abs(cvxObjVal))
-        %     hold on 
-        %     ylabel('$f(x_k)$','interpreter', 'latex', 'FontSize', 25)
-        %     subplot(3,1,2)
-        %     semilogy(1:numIter, errHist(:,4), 'LineWidth',4);
-        %     hold on
-        %     ylabel('$\frac{\|x_k - x^*\|}{\|x^*\|}$', 'interpreter', 'latex', 'FontSize', 30)
-        %     subplot(3,1,3)
-        %     semilogy(1:numIter, errHist(:,1), 'LineWidth',4);
-        %     hold on 
-        %     xlabel('Iteration','FontSize', 20)
-        %     ylabel('$\varphi(x_k)$','interpreter', 'latex','FontSize', 25)
-        % end
-        % subplot(3,1,1)
-        % legend(algoNames,'FontSize', 20,'Location','northeastoutside')
-        % sgtitle(['Iteration Metrics for MC = ' num2str(mc)],'FontSize', 30)
+        linespec = {"-", "--",":","-."};
+        figure() 
+        for ixAlgo = 1:numAlgo
+            name = algoNames{ixAlgo};
+            subplot(3,1,1)
+            iterHist = results(ixAlgo).iterHist{mc};
+            errHist = results(ixAlgo).errHist{mc};
+            numIter = size(errHist,1);
+            try
+                objVal = arrayfun(@(i) fg(iterHist(i,:)',[],[],[]), 1:numIter);
+            catch 
+                objVal = errHist(:,end);
+            end
+            matVecs = errHist(:,3);
+            kk = mod(ixAlgo-1, numel(linespec)) + 1;
+            semilogy(1:numIter, objVal - min(objVal) + 1e-12, linespec{kk}, 'LineWidth',4) % abs(objVal - cvxObjVal) / abs(cvxObjVal))
+            hold on 
+            xlabel('Iteration','FontSize', 20)
+            ylabel('$f(x_k)$','interpreter', 'latex', 'FontSize', 25)
+            subplot(3,1,2)
+            semilogy(1:numIter, errHist(:,4), linespec{kk},'LineWidth',4);
+            hold on
+            ylabel('$\frac{\|x_k - x^*\|}{\|x^*\|}$', 'interpreter', 'latex', 'FontSize', 30)
+             xlabel('Iteration','FontSize', 20)
+            subplot(3,1,3)
+            semilogy(1:numIter, errHist(:,1), linespec{kk}, 'LineWidth',4);
+            hold on 
+            xlabel('Iteration','FontSize', 20)
+            ylabel('$\varphi(x_k)$','interpreter', 'latex','FontSize', 25)
+        end
+        subplot(3,1,1)
+        legend(algoNames,'FontSize', 20,'Location','northeastoutside')
+        sgtitle(['Deep Dive for MC = ' num2str(mc)],'FontSize', 30)
     end
 end
 %%
@@ -215,8 +224,10 @@ end
 iterationBarChart
 if fromFile
     fname = ['results_n_' num2str(minSz) '_' num2str(maxSz)];
-else 
+elseif diagDom
     fname = ['results_randProblems_diagDom_n_' num2str(minSz) '_' num2str(maxSz)];
+else 
+        fname = ['results_randProblems_noStructure_updateStepSize_n_' num2str(minSz) '_' num2str(maxSz)];
 end
 save(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/' fname '.mat'], ...
     'results', 'mcGood', 'minSz', 'maxSz', 'opts');

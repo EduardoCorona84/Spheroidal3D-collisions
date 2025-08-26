@@ -34,8 +34,19 @@ switch lower(mode)
         % use 1?
         error([mode ' is not a valid step size rule'])
 end
-% In the bwd case, we need to stay in the feasible set, so kappa \in (0,1]
+% In the bwd case, we need to stay in the feasible set
+% - Because x>0 and x + p > 0, via convexity kappa \in (0,1] is good
+% - In the other case, we need to check when the ray intersects the
+%   positive orthant this is separable, and we can find when each element 
+%   of x + kappa p = 0 by taking -x / p elementwize. When -x / p < 0 then
+%   it is irrelevant. But if not then we need to make sure that we only
+%   travel to the closest feasible point.
 if k < 0
-    kappa = min(1, kappa);
+    if kappa <= 1 
+        return 
+    else
+        kappa_list = - x(p < 0) ./ p(p < 0);
+        kappa = min(kappa, min(kappa_list));
+    end
 end
 end
