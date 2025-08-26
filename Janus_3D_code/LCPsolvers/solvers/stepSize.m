@@ -24,6 +24,25 @@ switch lower(mode)
         % kappa = -(Ax+b)'p/(p'Ap)
         Ap = opts.A(p);
         kappa = -(1/2*(dot(p, Ax) +  dot(x, Ap)) + dot(p,opts.b)) / dot(p, Ap);
+        % In the bwd case, we need to stay in the feasible set
+        % - Because x>0 and x + p > 0, via convexity kappa \in (0,1] is good
+        % - In the other case, we need to check when the ray intersects the
+        %   positive orthant this is separable, and we can find when each element
+        %   of x + kappa p = 0 by taking -x / p elementwize. When -x / p < 0 then
+        %   it is irrelevant. But if not then we need to make sure that we only
+        %   travel to the closest feasible point.
+        if k < 0
+            if kappa <= 1
+                return
+            else
+                kappa_list = - x(p < 0) ./ p(p < 0);
+                if isempty(kappa_list)
+                    return;
+                end
+                kappa = min(kappa, min(kappa_list));
+            end
+            
+        end
     case 'uniform' 
         kappa = 1;
     otherwise 
@@ -33,20 +52,5 @@ switch lower(mode)
         % NIC: In general for the first iteration without Lipschitz info, we just
         % use 1?
         error([mode ' is not a valid step size rule'])
-end
-% In the bwd case, we need to stay in the feasible set
-% - Because x>0 and x + p > 0, via convexity kappa \in (0,1] is good
-% - In the other case, we need to check when the ray intersects the
-%   positive orthant this is separable, and we can find when each element 
-%   of x + kappa p = 0 by taking -x / p elementwize. When -x / p < 0 then
-%   it is irrelevant. But if not then we need to make sure that we only
-%   travel to the closest feasible point.
-if k < 0
-    if kappa <= 1 
-        return 
-    else
-        kappa_list = - x(p < 0) ./ p(p < 0);
-        kappa = min(kappa, min(kappa_list));
-    end
 end
 end
