@@ -349,9 +349,9 @@ elseif nargin > 1
             S=cart2spheroidal(Xtk,a(k),oblate(k));
             u_x=S(:,1);
 
-            indices_interior = (u_x < u0(k) - 1e-14);
-            indices_surface = (abs(u_x-u0(k)) <= 1e-14);
-            indices_exterior = (u_x > u0(k) + 1e-14);
+            indices_interior = (u_x < u0(k) - 9e-12);
+            indices_surface = (abs(u_x-u0(k)) <= 9e-12);
+            indices_exterior = (u_x > u0(k) + 9e-12);
             
             % split up interior/surface/exterior
             S_int=S(indices_interior,:);
@@ -543,7 +543,7 @@ function [lambda_nm_prime, lambda_nm,lambda_n1m] = SPspectrum_away(p,u0,u_x,v_x,
     nu_u = nu(:,1); nu_v = nu(:,2); nu_phi = nu(:,3);
     if ~oblate
         
-        if norm(abs(u_x)-u0)<1e-14 % on surface with arbitrary nu
+        if norm(abs(u_x)-u0)<9e-12 % on surface with arbitrary nu
             [lambda_nm_prime,lambda_nm,lambda_n1m]=SPspectrum(p,u0,oblate);
             lambda_nm_prime = lambda_nm_prime.'./sqrt(u_x.^2-v_x.^2).*nu_u;
             lambda_nm = lambda_nm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2-v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2-1).*(1-v_x.^2)));
@@ -563,7 +563,7 @@ function [lambda_nm_prime, lambda_nm,lambda_n1m] = SPspectrum_away(p,u0,u_x,v_x,
 
     else
         
-        if norm(abs(u_x)-u0)<1e-14
+        if norm(abs(u_x)-u0)<9e-12
             [lambda_nm_prime,lambda_nm,lambda_n1m]=SPspectrum(p,u0,oblate);
             lambda_nm_prime = lambda_nm_prime.'./sqrt(u_x.^2+v_x.^2).*nu_u;
             lambda_nm = lambda_nm.'.*((nn'+1).*v_x.*nu_v./sqrt((u_x.^2+v_x.^2).*(1-v_x.^2))+1j.*mm'.*nu_phi./sqrt((u_x.^2+1).*(1-v_x.^2)));
