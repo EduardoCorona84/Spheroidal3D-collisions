@@ -3,7 +3,7 @@ clear;clc;
 p=4; % Nic: Change back to 4
 lambda=0.1;
 rd=1;
-n=3;
+n=2;
 Cdst=2.3; % NIC: change back to 4
 ep=.3;
 Nt=500;

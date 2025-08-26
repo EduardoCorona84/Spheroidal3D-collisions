@@ -100,30 +100,30 @@ end
 % Diagonal block update (rotation) for typeMV=Rbs 
 tic; 
 if ~strcmp(typeMV,'Vsh') && i>0
-for k=1:n3
-   if n3>1
-   if nrmW(k)>1e-10
-       Kernels.TSSDd{k} = Rotate_Operator(Kernels.TSSD0,Mt{k},np); 
-       Kernels.SSDd{k} = Rotate_Operator(Kernels.SSD0,Mt{k},np);
-        
-       if Fparams.denseMV==0
-          Kernels.ITSSDd{k} = Rotate_Operator(Kernels.ITSSD0,Mt{k},np);  
-       end
-   elseif i==1
-       Kernels.TSSDd{k} = Kernels.TSSD0; 
-       Kernels.SSDd{k} = Kernels.SSD0;
-        
-       if Fparams.denseMV==0
-           Kernels.ITSSDd{k} = Kernels.ITSSD0;
-       end 
-   end
-   else
-       if nrmW(k)>1e-10 
-           Kernels.TSSDd = Rotate_Operator(Kernels.TSSD0,Mt{k},np); 
-           Kernels.SSDd = Rotate_Operator(Kernels.SSD0,Mt{k},np);   
-       end
-   end
-end
+    for k=1:n3
+        if n3>1
+            if nrmW(k)>1e-10
+                Kernels.TSSDd{k} = Rotate_Operator(Kernels.TSSD0,Mt{k},np); 
+                Kernels.SSDd{k} = Rotate_Operator(Kernels.SSD0,Mt{k},np);
+                    
+                if Fparams.denseMV==0
+                    Kernels.ITSSDd{k} = Rotate_Operator(Kernels.ITSSD0,Mt{k},np);  
+                end
+            elseif i==1
+                Kernels.TSSDd{k} = Kernels.TSSD0; 
+                Kernels.SSDd{k} = Kernels.SSD0;
+                    
+                if Fparams.denseMV==0
+                    Kernels.ITSSDd{k} = Kernels.ITSSD0;
+                end 
+            end
+        else
+            if nrmW(k)>1e-10 
+                Kernels.TSSDd = Rotate_Operator(Kernels.TSSD0,Mt{k},np); 
+                Kernels.SSDd = Rotate_Operator(Kernels.SSD0,Mt{k},np);   
+            end
+        end
+    end
 end 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

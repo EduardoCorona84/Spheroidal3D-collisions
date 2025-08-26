@@ -28,11 +28,11 @@ if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;
 end
 [mfilePath,~,~] = fileparts(mfilePath);
-resultsDir = fullfile(mfilePath, 'results');
-mkdir(resultsDir)
+lcpDataDir = fullfile(mfilePath, 'data');
+mkdir(lcpDataDir)
 postFix = ['.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
-fname=fullfile(resultsDir, ['amphi' postFix]);
-lcpResDir = fullfile(mfilePath, 'LCPsolvers/results');
+fname=fullfile(lcpDataDir, ['amphi' postFix]);
+lcpResDir = fullfile(mfilePath, 'LCPsolvers/data');
 mkdir(lcpResDir);
 LCP_file_path=fullfile(lcpResDir, ['amphiLCPs' postFix]);
 %% boundary_label function
@@ -99,16 +99,16 @@ lcpOpts = struct('solver','bbpgd','max_iter',100,'tol_rel',1e-6,'tol_abs',1e-5);
 parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
 
 % low-fidelity parameters
-lofi_p = 2;
-lofi = struct('Shape','','n3',n3,'rd',rd,'p',lofi_p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
+% lofi_p = 2;
+% lofi = struct('Shape','','n3',n3,'rd',rd,'p',lofi_p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
 
 %Create Fparams struct 
 Fparams = struct('parbd',parbd,'parslv',parslv,'lcpOpts',lcpOpts,...
     'Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp','lambda',lambda,'gamma',gamma,...
     'denseMV',denseMV,'typeMV','Vsh','tdisc',tdisc,'init_dir',init_dir, ...
     'boundary_label',boundary_label,'denseforce',denseforce,...
-    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path, ...
-    'lofi', lofi);
+    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);%, ...
+    % 'lofi', lofi);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
 RBS_mobility(fname,Fparams,[]);
