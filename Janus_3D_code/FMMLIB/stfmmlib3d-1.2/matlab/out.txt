@@ -1,0 +1,1546 @@
+/Applications/Xcode.app/Contents/Developer/usr/bin/make -f makefile.mwrap TARGET=matlab-linux-a64 clean
+rm -f stfmm3dpart.o sthfmm3dpart.o st3green.o st3routs.o lfmm3dparthess_tf.o lfmm3dparthess.o lfmm3drouts.o d3tstrcr.o d3mtreeplot.o prini.o l3dterms.o laprouts3d.o l3dtrans.o prinm.o yrecursion.o legeexps.o rotviarecur3.o lfmm3dpartquad.o 
+/Applications/Xcode.app/Contents/Developer/usr/bin/make -f makefile.mwrap TARGET=matlab-linux-a64 -j
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/stfmm3dpart.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/sthfmm3dpart.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/st3green.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/st3routs.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/lfmm3dparthess_tf.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/lfmm3dparthess.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/lfmm3drouts.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/d3tstrcr.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/d3mtreeplot.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/prini.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/l3dterms.f
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/laprouts3d.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/l3dtrans.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/prinm.f
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/yrecursion.f
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/legeexps.f
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/rotviarecur3.f
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran  -c -g -O2 -fPIC -Wargument-mismatch -fallow-argument-mismatch  ../src/lfmm3dpartquad.f
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+gfortran: warning: switch '-Wargument-mismatch' is no longer supported
+../src/st3green.f:437:35:
+
+  437 |      $     (source,du,rnorm,target,uvec,p,
+      |                                   1
+Warning: Rank mismatch in argument 'uvec' at (1) (rank-1 and scalar)
+../src/st3green.f:443:35:
+
+  443 |      $     (source,du,rnorm,target,uvec,p,
+      |                                   1
+Warning: Rank mismatch in argument 'uvec' at (1) (rank-1 and scalar)
+../src/st3green.f:449:35:
+
+  449 |      $     (source,du,rnorm,target,uvec,p,
+      |                                   1
+Warning: Rank mismatch in argument 'uvec' at (1) (rank-1 and scalar)
+../src/st3green.f:455:35:
+
+  455 |      $     (source,du,rnorm,target,uvec,p,
+      |                                   1
+Warning: Rank mismatch in argument 'uvec' at (1) (rank-1 and scalar)
+../src/lfmm3drouts.f:210:30:
+
+  203 |          do 2300 ilev=nlev,3,-1
+      |                                                                        2
+......
+  210 |          do 2200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                              1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:210:44:
+
+  203 |          do 2300 ilev=nlev,3,-1
+      |                                                                        2
+......
+  210 |          do 2200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                                            1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:210:58:
+
+  203 |          do 2300 ilev=nlev,3,-1
+      |                                                                        2
+......
+  210 |          do 2200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                                                          1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:367:29:
+
+  355 |         do 4300 ilev=3,nlev+1
+      |                                                                        2
+......
+  367 |         do 4200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                             1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:367:43:
+
+  355 |         do 4300 ilev=3,nlev+1
+      |                                                                        2
+......
+  367 |         do 4200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                                           1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:367:57:
+
+  355 |         do 4300 ilev=3,nlev+1
+      |                                                                        2
+......
+  367 |         do 4200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                                                         1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:513:29:
+
+  506 |         do 5300 ilev=3,nlev
+      |                                                                        2
+......
+  513 |         do 5200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                             1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:513:43:
+
+  506 |         do 5300 ilev=3,nlev
+      |                                                                        2
+......
+  513 |         do 5200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                                           1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:513:57:
+
+  506 |         do 5300 ilev=3,nlev
+      |                                                                        2
+......
+  513 |         do 5200 ibox=laddr(1,ilev),laddr(1,ilev)+laddr(2,ilev)-1
+      |                                                         1
+Warning: Array reference at (1) out of bounds (3 > 1) in loop beginning at (2)
+../src/lfmm3drouts.f:103:47:
+
+  102 |            call prin2('after d3tstrcr, center=*',center,3)
+      |                                                 2
+  103 |            call prin2('after d3tstrcr, size=*',size,1)
+      |                                               1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (rank-1 and scalar)
+../src/lfmm3drouts.f:106:48:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  106 |            call prinf('after d3tstrcr, laddr=*',laddr,2*(nlev+1))
+      |                                                1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-2)
+../src/lfmm3drouts.f:230:34:
+
+  102 |            call prin2('after d3tstrcr, center=*',center,3)
+      |                                                 2
+......
+  230 |             call prin2('radius=*',radius,1)
+      |                                  1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (rank-1 and scalar)
+../src/lfmm3drouts.f:232:31:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  232 |             call prinf('box=*',box,20)
+      |                               1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3drouts.f:238:72:
+
+  238 |             call l3dzero(rmlexp(iaddr(1,ibox)),nterms(level0))
+      |                                                                        1
+Warning: Type mismatch in argument 'mpole' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3drouts.f:258:40:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  258 |             call prinf('=============*',x,0)
+      |                                        1
+Warning: Type mismatch between actual argument at (1) and actual argument at (2) (REAL(8)/INTEGER(4)).
+../src/lfmm3drouts.f:371:30:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  371 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3drouts.f:381:32:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  381 |            call prinf('list2=*',list,nlist)
+      |                                1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3drouts.f:523:37:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  523 |                   call prinf('box=*',box,20)
+      |                                     1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3drouts.f:540:43:
+
+  102 |            call prin2('after d3tstrcr, center=*',center,3)
+      |                                                 2
+......
+  540 |                      call prin2('radius=*',radius,1)
+      |                                           1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (rank-1 and scalar)
+../src/lfmm3drouts.f:559:37:
+
+   76 |         if (ifprint.eq.1) call prinf('lused7=*',lused7,1)
+      |                                                2
+......
+  559 |                   call prinf('box=*',box,20)
+      |                                     1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:319:49:
+
+  267 |         if (ifprint .ge. 1) call prin2('epsfmm=*',epsfmm,1)
+      |                                                  2
+......
+  319 |         if (ifprint .ge. 1) call prin2('scale=*',scale,nlev+1)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:402:47:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  402 |         if(ifprint.eq.1) call prinf('nterms=*',nterms,nlev+1)
+      |                                               1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'chargesort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'dipstrsort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'pot' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'fld' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'hess' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'itarget' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'pottarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'fldtarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'hesstarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'iaddr' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess.f:489:72:
+
+  489 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'mptemp' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess.f:640:38:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  640 |      $     call prinf('nterms_eval=*',nterms_eval,4*(nlev+1))
+      |                                      1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-2)
+../src/lfmm3dparthess.f:678:30:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  678 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:759:36:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  759 |                call prinf('list3=*',list,nlist)
+      |                                    1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:823:72:
+
+  823 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg)
+      |                                                                        1
+Warning: Type mismatch in argument 'ifhess' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess.f:823:72:
+
+  823 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg)
+      |                                                                        1
+Warning: Type mismatch in argument 'hess' at (1); passed INTEGER(4) to COMPLEX(8)
+../src/lfmm3dparthess.f:823:72:
+
+  823 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg)
+      |                                                                        1
+Warning: Type mismatch in argument 'target' at (1); passed COMPLEX(8) to REAL(8)
+../src/lfmm3dparthess.f:881:36:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  881 |                call prinf('list4=*',list,nlist)
+      |                                    1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:1030:30:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+ 1030 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:1157:30:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+ 1157 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:1187:49:
+
+  282 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2 
+......
+ 1187 |         if (ifprint .ge. 2) call prinf('list1=*',list,nlist)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess.f:1225:32:
+
+  267 |         if (ifprint .ge. 1) call prin2('epsfmm=*',epsfmm,1)
+      |                                                  2
+......
+ 1225 |         call prin2('timeinfo=*',timeinfo,8)
+      |                                1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/sthfmm3dpart.f:128:32:
+
+  128 |      $     ifpot,pot,pre,ifgrad,grad,
+      |                                1
+Warning: Rank mismatch in argument 'grad' at (1) (rank-3 and scalar)
+../src/sthfmm3dpart.f:129:18:
+
+  129 |      $     ntargs,target,ifpottarg,pottarg,pretarg,
+      |                  1
+Warning: Rank mismatch in argument 'target' at (1) (rank-2 and scalar)
+../src/sthfmm3dpart.f:129:35:
+
+  129 |      $     ntargs,target,ifpottarg,pottarg,pretarg,
+      |                                   1
+Warning: Rank mismatch in argument 'pottarg' at (1) (rank-2 and scalar)
+../src/sthfmm3dpart.f:129:43:
+
+  129 |      $     ntargs,target,ifpottarg,pottarg,pretarg,
+      |                                           1
+Warning: Rank mismatch in argument 'pretarg' at (1) (rank-1 and scalar)
+../src/sthfmm3dpart.f:130:22:
+
+  130 |      $     ifgradtarg,gradtarg)
+      |                      1
+Warning: Rank mismatch in argument 'gradtarg' at (1) (rank-3 and scalar)
+../src/prini.f:143:20:
+
+  141 |         do 1800 i=1,1000
+      |                                                                        2
+  142 | c
+  143 |         c(iadd+i)=b(i)
+      |                    1
+Warning: Array reference at (1) out of bounds (1000 > 1) in loop beginning at (2)
+../src/l3dtrans.f:1261:72:
+
+ 1261 |      2         w(iephi),w(ifr),ier,rotmatf,rotmatb,ldm)
+      |                                                                        1
+Warning: Type mismatch in argument 'marray' at (1); passed REAL(8) to COMPLEX(8)
+../src/l3dtrans.f:1261:72:
+
+ 1261 |      2         w(iephi),w(ifr),ier,rotmatf,rotmatb,ldm)
+      |                                                                        1
+Warning: Type mismatch in argument 'marray1' at (1); passed REAL(8) to COMPLEX(8)
+../src/l3dtrans.f:1261:72:
+
+ 1261 |      2         w(iephi),w(ifr),ier,rotmatf,rotmatb,ldm)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/d3tstrcr.f:653:72:
+
+  653 |         call d3tcpcc(w(icenters),w(icorners),ibox,center,corners)
+      |                                                                        1
+Warning: Type mismatch in argument 'centers' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:653:72:
+
+  653 |         call d3tcpcc(w(icenters),w(icorners),ibox,center,corners)
+      |                                                                        1
+Warning: Type mismatch in argument 'corners' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:2007:36:
+
+ 2007 |         call d3tlinksto0(itype,ibox,list,nlist,w(w(iilistad)),
+      |                                    1
+Warning: Rank mismatch in argument 'list' at (1) (rank-1 and scalar)
+../src/d3tstrcr.f:2048:26:
+
+ 2048 |      1      w(w(iilists)),list,w(inboxes),nlist)
+      |                          1
+Warning: Rank mismatch in argument 'list' at (1) (rank-1 and scalar)
+../src/d3tstrcr.f:2088:40:
+
+ 2088 |         call d3tlinkrem0(ier,itype,ibox,list,nlist,w(w(iilistad)),
+      |                                        1
+Warning: Rank mismatch in argument 'list' at (1) (rank-1 and scalar)
+../src/d3tstrcr.f:845:38:
+
+  845 |         call d3tlinkretr(jer,itype5,i,list5,nlist,w,lused)
+      |                                      1
+Warning: Rank mismatch in argument 'list' at (1) (scalar and rank-1)
+../src/d3tstrcr.f:872:40:
+
+  872 |         call d3tlinkretr(jer,itype,ibox,list5,nlist,w,lused)
+      |                                        1
+Warning: Rank mismatch in argument 'list' at (1) (scalar and rank-1)
+../src/d3tstrcr.f:874:40:
+
+  874 |         call d3tlinkstor(ier,itype,ibox,list5,nlist,w(lused+1),lused2)
+      |                                        1
+Warning: Rank mismatch in argument 'list' at (1) (scalar and rank-1)
+../src/d3tstrcr.f:899:41:
+
+  899 |         call d3tlinkretr(jer,itype3,ibox,list5,nlist,w,lused)
+      |                                         1
+Warning: Rank mismatch in argument 'list' at (1) (scalar and rank-1)
+../src/d3tstrcr.f:231:72:
+
+  231 |      1      w(icenters),w(icorners) )
+      |                                                                        1
+Warning: Type mismatch in argument 'centers' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:231:72:
+
+  231 |      1      w(icenters),w(icorners) )
+      |                                                                        1
+Warning: Type mismatch in argument 'corners' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:238:72:
+
+  238 |      1        w(iwlists),lwlists,lused)
+      |                                                                        1
+Warning: Type mismatch in argument 'corners' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:472:72:
+
+  472 |      1      w(icenters),w(icorners) )
+      |                                                                        1
+Warning: Type mismatch in argument 'centers' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:472:72:
+
+  472 |      1      w(icenters),w(icorners) )
+      |                                                                        1
+Warning: Type mismatch in argument 'corners' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:479:72:
+
+  479 |      1        w(iwlists),lwlists,lused)
+      |                                                                        1
+Warning: Type mismatch in argument 'corners' at (1); passed INTEGER(4) to REAL(8)
+../src/d3tstrcr.f:540:45:
+
+  537 |         call prin2('after d3tstrcr, center0=*',center0,3)
+      |                                               2
+......
+  540 |         call prin2('after d3tstrcr, size0=*',size0,1)
+      |                                             1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (rank-1 and scalar)
+../src/legeexps.f:881:26:
+
+  877 |         do 2000 k=2,n+1
+      |                                                                        2
+......
+  881 |         polout(k+1)=polin(k)/(2*j+1)
+      |                          1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:882:27:
+
+  877 |         do 2000 k=2,n+1
+      |                                                                        2
+......
+  882 |         polout(k-1)=-polin(k)/(2*j+1)+polout(k-1)
+      |                           1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1056:17:
+
+ 1054 |         do 1200 j=2,ninit
+      |                                                                        2
+ 1055 | c
+ 1056 |         pjcoefs1(j)=(2*j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1057:17:
+
+ 1054 |         do 1200 j=2,ninit
+      |                                                                        2
+......
+ 1057 |         pjcoefs2(j)=-(j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1076:21:
+
+ 1072 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 1076 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                     1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1076:40:
+
+ 1072 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 1076 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                                        1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1082:22:
+
+ 1072 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 1082 |         derj=pjcoefs1(j)*(pjm1+x*derjm1)+pjcoefs2(j)*derjm2
+      |                      1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1082:50:
+
+ 1072 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 1082 |         derj=pjcoefs1(j)*(pjm1+x*derjm1)+pjcoefs2(j)*derjm2
+      |                                                  1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1171:17:
+
+ 1169 |         do 1200 j=2,ninit
+      |                                                                        2
+ 1170 | c
+ 1171 |         pjcoefs1(j)=(2*j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1172:17:
+
+ 1169 |         do 1200 j=2,ninit
+      |                                                                        2
+......
+ 1172 |         pjcoefs2(j)=-(j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1187:21:
+
+ 1185 |         DO 600 J = 2,N
+      |                                                                        2
+ 1186 | c
+ 1187 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                     1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:1187:40:
+
+ 1185 |         DO 600 J = 2,N
+      |                                                                        2
+ 1186 | c
+ 1187 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                                        1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2046:17:
+
+ 2044 |         do 1200 j=2,ninit
+      |                                                                        2
+ 2045 | c
+ 2046 |         pjcoefs1(j)=(2*j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2047:17:
+
+ 2044 |         do 1200 j=2,ninit
+      |                                                                        2
+......
+ 2047 |         pjcoefs2(j)=-(j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2066:21:
+
+ 2062 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 2066 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                     1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2066:40:
+
+ 2062 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 2066 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                                        1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2072:22:
+
+ 2062 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 2072 |         derj=pjcoefs1(j)*(pjm1+x*derjm1)+pjcoefs2(j)*derjm2
+      |                      1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2072:50:
+
+ 2062 |         DO 1600 J = 2,N
+      |                                                                        2
+......
+ 2072 |         derj=pjcoefs1(j)*(pjm1+x*derjm1)+pjcoefs2(j)*derjm2
+      |                                                  1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2136:17:
+
+ 2134 |         do 1200 j=2,ninit
+      |                                                                        2
+ 2135 | c
+ 2136 |         pjcoefs1(j)=(2*j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2137:17:
+
+ 2134 |         do 1200 j=2,ninit
+      |                                                                        2
+......
+ 2137 |         pjcoefs2(j)=-(j-done)/j
+      |                 1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2151:21:
+
+ 2149 |         DO 1600 J = 2,N
+      |                                                                        2
+ 2150 | c
+ 2151 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                     1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/legeexps.f:2151:40:
+
+ 2149 |         DO 1600 J = 2,N
+      |                                                                        2
+ 2150 | c
+ 2151 |         pj= pjcoefs1(j)*x*pjm1+pjcoefs2(j)*pjm2
+      |                                        1
+Warning: Array reference at (1) out of bounds (2 > 1) in loop beginning at (2)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'charge' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'dipstr' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'cpot' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'cfld' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'chess' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'cpottarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'cfldtarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:230:72:
+
+  230 |      $     w(icpottarg),w(icfldtarg),w(ichesstarg),w(ihessmatrtarg))
+      |                                                                        1
+Warning: Type mismatch in argument 'chesstarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/stfmm3dpart.f:709:29:
+
+  660 |         call prin2('epsfmm=*',epsfmm,1)
+      |                              2
+......
+  709 |         call prin2('scale=*',scale,nlev+1)
+      |                             1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/stfmm3dpart.f:857:72:
+
+  857 |      $     call st3dptsort(nsource,wlists(iisource),w(ipot),pot)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/stfmm3dpart.f:859:72:
+
+  859 |      $     call st3dftsort(nsource,wlists(iisource),w(ipre),pre)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/stfmm3dpart.f:861:72:
+
+  861 |      $     call st3dstsort(nsource,wlists(iisource),w(igrad),grad)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/stfmm3dpart.f:865:72:
+
+  865 |      $     w(ipottarg),pottarg)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/stfmm3dpart.f:868:72:
+
+  868 |      $     w(ipretarg),pretarg)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/stfmm3dpart.f:871:72:
+
+  871 |      $     w(igradtarg),gradtarg)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/stfmm3dpart.f:1046:30:
+
+  672 |         call prinf('nbox=*',nbox,1)
+      |                            2  
+......
+ 1046 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/stfmm3dpart.f:1076:49:
+
+  672 |         call prinf('nbox=*',nbox,1)
+      |                            2                     
+......
+ 1076 |         if (ifprint .eq. 1) call prinf('list1=*',list,nlist)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/stfmm3dpart.f:1115:32:
+
+  660 |         call prin2('epsfmm=*',epsfmm,1)
+      |                              2  
+......
+ 1115 |         call prin2('timeinfo=*',timeinfo,8)
+      |                                1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/stfmm3dpart.f:114:32:
+
+  114 |      $     ifpot,pot,pre,ifgrad,grad,
+      |                                1
+Warning: Rank mismatch in argument 'grad' at (1) (rank-3 and scalar)
+../src/stfmm3dpart.f:115:18:
+
+  115 |      $     ntargs,target,ifpottarg,pottarg,pretarg,
+      |                  1
+Warning: Rank mismatch in argument 'target' at (1) (rank-2 and scalar)
+../src/stfmm3dpart.f:115:35:
+
+  115 |      $     ntargs,target,ifpottarg,pottarg,pretarg,
+      |                                   1
+Warning: Rank mismatch in argument 'pottarg' at (1) (rank-2 and scalar)
+../src/stfmm3dpart.f:115:43:
+
+  115 |      $     ntargs,target,ifpottarg,pottarg,pretarg,
+      |                                           1
+Warning: Rank mismatch in argument 'pretarg' at (1) (rank-1 and scalar)
+../src/stfmm3dpart.f:116:22:
+
+  116 |      $     ifgradtarg,gradtarg)
+      |                      1
+Warning: Rank mismatch in argument 'gradtarg' at (1) (rank-3 and scalar)
+../src/lfmm3dparthess_tf.f:304:49:
+
+  252 |         if (ifprint .ge. 1) call prin2('epsfmm=*',epsfmm,1)
+      |                                                  2
+......
+  304 |         if (ifprint .ge. 1) call prin2('scale=*',scale,nlev+1)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:394:47:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  394 |         if(ifprint.eq.1) call prinf('nterms=*',nterms,nlev+1)
+      |                                               1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'chargesort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'dipstrsort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'pot' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'fld' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'hess' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'itarget' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'pottarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'fldtarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'hesstarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'iaddr' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dparthess_tf.f:488:72:
+
+  488 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'mptemp' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dparthess_tf.f:641:38:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  641 |      $     call prinf('nterms_eval=*',nterms_eval,4*(nlev+1))
+      |                                      1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-2)
+../src/lfmm3dparthess_tf.f:677:30:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  677 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:754:36:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  754 |                call prinf('list3=*',list,nlist)
+      |                                    1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:859:36:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  859 |                call prinf('list4=*',list,nlist)
+      |                                    1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:963:35:
+
+  814 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg)
+      |               2                    
+......
+  963 |      $         ifpot,pot,iffld,fld,ifhess,hess,
+      |                                   1
+Warning: Type mismatch between actual argument at (1) and actual argument at (2) (INTEGER(4)/REAL(8)).
+../src/lfmm3dparthess_tf.f:963:42:
+
+  814 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg)
+      |                          2                
+......
+  963 |      $         ifpot,pot,iffld,fld,ifhess,hess,
+      |                                          1
+Warning: Type mismatch between actual argument at (1) and actual argument at (2) (COMPLEX(8)/INTEGER(4)).
+../src/lfmm3dparthess_tf.f:964:15:
+
+  814 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg)
+      |                                    2
+......
+  964 |      $         targetsort,ifpottarg,pottarg,iffldtarg,fldtarg,
+      |               1
+Warning: Type mismatch between actual argument at (1) and actual argument at (2) (REAL(8)/COMPLEX(8)).
+../src/lfmm3dparthess_tf.f:965:72:
+
+  965 |      $         ifhesstarg,hesstarg)
+      |                                                                        1
+Warning: More actual than formal arguments in procedure call at (1)
+../src/lfmm3dparthess_tf.f:1000:30:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+ 1000 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:1125:30:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+ 1125 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:1155:49:
+
+  267 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2 
+......
+ 1155 |         if (ifprint .ge. 2) call prinf('list1=*',list,nlist)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dparthess_tf.f:1172:72:
+
+ 1172 |      $         ifhesstarg,hesstarg)
+      |                                                                        1
+Warning: More actual than formal arguments in procedure call at (1)
+../src/lfmm3dparthess_tf.f:1193:32:
+
+  252 |         if (ifprint .ge. 1) call prin2('epsfmm=*',epsfmm,1)
+      |                                                  2
+......
+ 1193 |         call prin2('timeinfo=*',timeinfo,8)
+      |                                1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/laprouts3d.f:8363:72:
+
+ 8363 |      $   wlege,nlege,binom,w(isss))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:8018:72:
+
+ 8018 |      2          w(ifr),binom,w(isss))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:6757:72:
+
+ 6757 |      &   center,nterms,locexp,w(ipp),w(iephi),w(ifr))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:5927:72:
+
+ 5927 |      2          w(ifr),sss)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:4355:72:
+
+ 4355 |      $   w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:4355:72:
+
+ 4355 |      $   w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:4355:72:
+
+ 4355 |      $   w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'frder' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3971:72:
+
+ 3971 |      2          w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3971:72:
+
+ 3971 |      2          w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3971:72:
+
+ 3971 |      2          w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'frder' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3542:72:
+
+ 3542 |      $      wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3542:72:
+
+ 3542 |      $      wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3204:72:
+
+ 3204 |      1   mpole,w(ipp),w(iephi),w(ifr),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3204:72:
+
+ 3204 |      1   mpole,w(ipp),w(iephi),w(ifr),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2177:72:
+
+ 2177 |      &   center,nterms,locexp,w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2177:72:
+
+ 2177 |      &   center,nterms,locexp,w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2177:72:
+
+ 2177 |      &   center,nterms,locexp,w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'frder' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:1636:72:
+
+ 1636 |      2          w(ifr),w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:1636:72:
+
+ 1636 |      2          w(ifr),w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:1636:72:
+
+ 1636 |      2          w(ifr),w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'frder' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:1079:72:
+
+ 1079 |      &          nterms,locexp,w(ipp),w(iephi),w(ifr))
+      |                                                                                1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:1079:72:
+
+ 1079 |      &          nterms,locexp,w(ipp),w(iephi),w(ifr))
+      |                                                                                1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:605:72:
+
+  605 |      2          w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:605:72:
+
+  605 |      2          w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:605:72:
+
+  605 |      2          w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'frder' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:325:72:
+
+  325 |      1     pot,iffld,fld,w(ipp),w(ippd),w(iephi),w(ifr),w(ifrder))
+      |                                                                         1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:787:72:
+
+  787 |      2       w(ifrder))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2517:72:
+
+ 2517 |      $     w(iephi),w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2605:72:
+
+ 2605 |      $     w(iephi),w(ifr),w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2856:72:
+
+ 2856 |      2   w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:2941:72:
+
+ 2941 |      2       w(ifrder),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3349:72:
+
+ 3349 |      1   mpole,w(ipp),w(iephi),w(ifr),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3349:72:
+
+ 3349 |      1   mpole,w(ipp),w(iephi),w(ifr),wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3689:72:
+
+ 3689 |      $   wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:3689:72:
+
+ 3689 |      $   wlege,nlege)
+      |                                                                        1
+Warning: Type mismatch in argument 'fr' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:4586:72:
+
+ 4586 |      1   center,nterms,mpole,wlege,nlege,w(ipp),w(iephi),w(ifr))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:4781:72:
+
+ 4781 |      2          w(ifr),binom,w(isss))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:6167:72:
+
+ 6167 |      2          w(ifr),binom,w(isss))
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/laprouts3d.f:6238:72:
+
+ 6238 |      2          w(ifr),binom,sss)
+      |                                                                        1
+Warning: Type mismatch in argument 'ephi' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:314:49:
+
+  262 |         if (ifprint .ge. 1) call prin2('epsfmm=*',epsfmm,1)
+      |                                                  2
+......
+  314 |         if (ifprint .ge. 1) call prin2('scale=*',scale,nlev+1)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:415:47:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  415 |         if(ifprint.eq.1) call prinf('nterms=*',nterms,nlev+1)
+      |                                               1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:447:72:
+
+  447 |      $     w(iquadvecsort),w(iquadstrsort))
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dpartquad.f:447:72:
+
+  447 |      $     w(iquadvecsort),w(iquadstrsort))
+      |                                                                        1
+Warning: Type mismatch in argument 'chargesort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:447:72:
+
+  447 |      $     w(iquadvecsort),w(iquadstrsort))
+      |                                                                        1
+Warning: Type mismatch in argument 'dipstrsort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:447:72:
+
+  447 |      $     w(iquadvecsort),w(iquadstrsort))
+      |                                                                        1
+Warning: Type mismatch in argument 'quadstrsort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'isource' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'chargesort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'dipstrsort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'quadstrsort' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'pot' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'fld' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'hess' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'itarget' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'pottarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'fldtarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'hesstarg' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'iaddr' at (1); passed REAL(8) to INTEGER(4)
+../src/lfmm3dpartquad.f:514:72:
+
+  514 |      $     wlists(iwlists),lwlists)
+      |                                                                        1
+Warning: Type mismatch in argument 'mptemp' at (1); passed REAL(8) to COMPLEX(8)
+../src/lfmm3dpartquad.f:670:38:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  670 |      $     call prinf('nterms_eval=*',nterms_eval,4*(nlev+1))
+      |                                      1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-2)
+../src/lfmm3dpartquad.f:706:30:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  706 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:793:36:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  793 |                call prinf('list3=*',list,nlist)
+      |                                    1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:910:36:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+  910 |                call prinf('list4=*',list,nlist)
+      |                                    1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:1062:30:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+ 1062 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:1187:30:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2
+......
+ 1187 |            call prinf('box=*',box,20)
+      |                              1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:1218:49:
+
+  277 |         if (ifprint .ge. 1) call prinf('nbox=*',nbox,1)
+      |                                                2 
+......
+ 1218 |         if (ifprint .ge. 2) call prinf('list1=*',list,nlist)
+      |                                                 1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+../src/lfmm3dpartquad.f:1257:32:
+
+  262 |         if (ifprint .ge. 1) call prin2('epsfmm=*',epsfmm,1)
+      |                                                  2
+......
+ 1257 |         call prin2('timeinfo=*',timeinfo,8)
+      |                                1
+Warning: Rank mismatch between actual argument at (1) and actual argument at (2) (scalar and rank-1)
+mwrap -c99complex -mex      stfmm3d_r2012a -mb stfmm3d_r2012a.mw
+mwrap -c99complex -mex      stfmm3d_r2012a -c stfmm3d_r2012a.c stfmm3d_r2012a.mw
+gcc -o stfmmlib3d-1.2.mexmaca64 -fexceptions -shared -fPIC -fno-omit-frame-pointer -pthread -I/Applications/MATLAB_R2024b.app/extern/include -DMATLAB_MEX_FILE -DMATLAB_DEFAULT_RELEASE=R2018b stfmm3d_r2012a.c stfmm3dpart.o sthfmm3dpart.o st3green.o st3routs.o lfmm3dparthess_tf.o lfmm3dparthess.o lfmm3drouts.o d3tstrcr.o d3mtreeplot.o prini.o l3dterms.o laprouts3d.o l3dtrans.o prinm.o yrecursion.o legeexps.o rotviarecur3.o lfmm3dpartquad.o  -L/Applications/MATLAB_R2024b.app/bin/maca64 -lmx -lmex -lmat -lm 
+Undefined symbols for architecture arm64:
+  "__gfortran_os_error_at", referenced from:
+      _stfmm3dparttarg0_ in stfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      _sthfmm3dparttarg_ in sthfmm3dpart.o
+      ...
+  "__gfortran_runtime_error", referenced from:
+      _l3dtaevalhessd_ in laprouts3d.o
+      _l3dtaevalhessdini_ in laprouts3d.o
+      _l3dmpevalhessd_ in laprouts3d.o
+      _l3dmpevalhessdini_ in laprouts3d.o
+      _l3dformmp_add_trunc_ in laprouts3d.o
+      _l3dformta_add_trunc_ in laprouts3d.o
+      _l3dformmp_dp_add_trunc_ in laprouts3d.o
+      ...
+  "__gfortran_second", referenced from:
+      _stfmm3dparttarg0_evalloc_ in stfmm3dpart.o
+      _stfmm3dparttarg0_evalloc_ in stfmm3dpart.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      _lfmm3dparthesstftargmain_ in lfmm3dparthess_tf.o
+      ...
+  "__gfortran_st_write", referenced from:
+      _plot_points3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      ...
+  "__gfortran_st_write_done", referenced from:
+      _plot_points3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      ...
+  "__gfortran_stop_string", referenced from:
+      _rotviarecur3_ in rotviarecur3.o
+  "__gfortran_transfer_array_write", referenced from:
+      _messpr_ in prini.o
+      _messpr_ in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      _master.0.prini_.isra.0 in prini.o
+      ...
+  "__gfortran_transfer_character_write", referenced from:
+      _plot_label3d_ in d3mtreeplot.o
+      _plot_label3d_ in d3mtreeplot.o
+      _plot_label3d_ in d3mtreeplot.o
+      _plot_label3d_ in d3mtreeplot.o
+      _plot_label3d_ in d3mtreeplot.o
+      _plot_label3d_ in d3mtreeplot.o
+      _rotviarecur3_ in rotviarecur3.o
+      ...
+  "__gfortran_transfer_complex_write", referenced from:
+      _master.0.prinm_ in prinm.o
+      _master.0.prinm_ in prinm.o
+      _master.0.prinm_ in prinm.o
+      _master.0.prinm_ in prinm.o
+  "__gfortran_transfer_integer_write", referenced from:
+      _plot_label3d_ in d3mtreeplot.o
+      _plot_label3d_ in d3mtreeplot.o
+  "__gfortran_transfer_real_write", referenced from:
+      _plot_points3d_ in d3mtreeplot.o
+      _plot_points3d_ in d3mtreeplot.o
+      _plot_points3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      _plot_box3d_ in d3mtreeplot.o
+      ...
+ld: symbol(s) not found for architecture arm64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+make[1]: *** [all] Error 1
+make: *** [macos-applesilicon] Error 2
