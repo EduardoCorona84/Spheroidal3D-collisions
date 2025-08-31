@@ -47,7 +47,7 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
     %%% Backwards compatibility
     S_scale = 1;
     Xeval_p = p;
-    mix_obl = false;
+    mix_obl = true;
     useS = false;
 
     %%% Set up spheroid system
@@ -279,7 +279,6 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
         c = pars.centers; % Get spheroid centers
     
         for i=1:ns
-            % 1. Get the geometry for the i-th spheroid to integrate sigma
             if ~pars.oblate(i)
                 Yi = prolate_spheroid_shape(p, pars.u0(i), pars.a(i), 'cart');
             else
@@ -287,15 +286,15 @@ function [soln, fluxsoln, truesoln, trueflux, sigma_vec,condK] = spheroidalDP_ch
             end
             Sns = SurfaceSph(Yi(:));
     
-            % 2. Calculate the total charge Qi on the i-th spheroid
+            % Calculate the total charge Qi on the i-th spheroid
             Qi = integrateOverS(Sns, sigma(:,:,i));
             
-            % 3. Calculate the flux contribution from this charge at all target points
+            % Calculate the flux contribution from this charge at all target points
             ci = c(i,:);
             r_vec = Xeval - ci; % Vectors from center to each target point
             r_norm = vecnorm(r_vec, 2, 2); % Distances ||x - c_i||
             
-            % E-field dot normal: (  (x-ci)/||x-ci||^3 ) . n_x
+            % ((x-ci)/||x-ci||^3) . n_x
             E_dot_n = dot(r_vec, NrY, 2) ./ (r_norm.^3);
             
             % Add the contribution from this spheroid's completion charge
