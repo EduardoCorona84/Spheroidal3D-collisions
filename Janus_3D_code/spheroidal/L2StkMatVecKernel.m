@@ -169,6 +169,8 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                 row_perm = [row_x, row_y, row_z];
                 col_perm = [col_x, col_y, col_z];
 
+                % prm(1:3:3*np) = 1:np; prm(2:3:3*np) = np+1:2*np; prm(3:3:3*np)=2*np+1:3*np;
+
                 % Apply the permutation
                 LP_smooth = LP_smooth(row_perm_idx, col_perm_idx);
             end
@@ -337,6 +339,10 @@ function M = TLPmatrix(IDparams, p, np, ns)
     nu_z_all = repmat([0,0,1], np, 1, ns);
 
     [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_all, nu_y_all, nu_z_all);
+    if ns==1
+        % Ideally, should have a different function for doing this.
+        SP_x_cells = {SP_x_cells}; SP_y_cells = {SP_y_cells}; SP_z_cells = {SP_z_cells};
+    end
 
     % Build spheroidalgraddiv operator
     I = eye(np);
@@ -348,10 +354,15 @@ function M = TLPmatrix(IDparams, p, np, ns)
         [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, []);
 
         if IDparams.oblate(i)
-            error("not implemented.");
+            X_self = oblate_spheroid_shape(p, IDparams.u0, IDparams.a);
+            S_self = cart2spheroidal(X_self, IDparams.a, IDparams.oblate);
+            u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
+            [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
+            [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
+            [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
         else
             X_self = prolate_spheroid_shape(p, IDparams.u0, IDparams.a);
-            S_self = cart2spheroidal(X_self, params.a, params.oblate);
+            S_self = cart2spheroidal(X_self, IDparams.a, IDparams.oblate);
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
             [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
             [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
@@ -365,6 +376,9 @@ function M = TLPmatrix(IDparams, p, np, ns)
 
     % Build TLP matvec kernel
     for i=1:ns
+        %%%
+        %%% Setup
+        %%%
         if ns==1
             X_src_i = IDparams.get_X();
         else
@@ -383,6 +397,10 @@ function M = TLPmatrix(IDparams, p, np, ns)
         ddS_y_i = ddS_y_cells{i};
         ddS_z_i = ddS_z_cells{i};
         ddS_op = [ddS_x_i; ddS_y_i; ddS_z_i];
+
+        %%%
+        %%% Build matrix
+        %%%
 
         % Extract SP sum term
         M1_diag_term = diag(N_src_i(:,1))*SP_x_i + diag(N_src_i(:,2))*SP_y_i + diag(N_src_i(:,3))*SP_z_i;

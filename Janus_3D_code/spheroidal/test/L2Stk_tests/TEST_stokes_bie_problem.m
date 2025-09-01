@@ -2,34 +2,27 @@ classdef TEST_stokes_bie_problem < matlab.unittest.TestCase
     properties
         params=SpheroidalParameters;
         p = 16;
-
-        u0_prolate = 100001/sqrt(200001);
-        u0_oblate = 8/sqrt(3);
-        a_prolate;
-        a_oblate;
     end
 
     methods (TestClassSetup)
         function setup(testCase)
             clc();
-
-            testCase.a_prolate = 1/testCase.u0_prolate;
-            testCase.a_oblate = 1/sqrt(1 + testCase.u0_oblate^2);
         end
     end
 
     methods (Test)
         function testInteriorDirichletProblemOneSpheroid(testCase)
+            rng(42);
             p = 16;
             eta = 10;
             ns = 1;
-            u0 = 13/sqrt(69);
-            target_distances = 0.4; % Distance from the surface to evaluate the potential
+            u0 = 3/sqrt(2);
+            target_distances = 0.3; % Distance from the surface to evaluate the potential
             plt = false;
             neumann = false;
             interior = true;
             
-            [soln, truesoln, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            [soln, ~, truesoln, ~, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
         end
 
         function testExteriorDirichletProblemOneSpheroid(testCase)
@@ -37,19 +30,41 @@ classdef TEST_stokes_bie_problem < matlab.unittest.TestCase
             p = 16;
             eta = 10;
             ns = 1;
-            u0 = 100001/sqrt(200001);
+            u0 = 3/sqrt(2);
             target_distances = 3; % Distance from the surface to evaluate the potential
             plt = false;
             neumann = false;
             interior = false;
             
-            [soln, truesoln, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
+            [soln, ~, truesoln, ~, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
         end
 
-        function testExteriorDirichletProblemMultipleSpheroid(testCase)
+        function testInteriorNeumannProblemOneSpheroid(testCase)
+            rng(42);
+            p = 16;
+            eta = 10;
+            ns = 1;
+            u0 = 3/sqrt(2);
+            target_distances = 0.4; % Distance from the surface to evaluate the potential
+            plt = true;
+            neumann = true;
+            interior = true;
+            
+            [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
         end
 
         function testExteriorNeumannProblemOneSpheroid(testCase)
+            rng(42);
+            p = 16;
+            eta = 10;
+            ns = 1;
+            u0 = 3/sqrt(2);
+            target_distances = 1; % Distance from the surface to evaluate the potential
+            plt = false;
+            neumann = true;
+            interior = false;
+            
+            [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] =  stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior);
         end
     end
 end

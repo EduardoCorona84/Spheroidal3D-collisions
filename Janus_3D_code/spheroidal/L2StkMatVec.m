@@ -17,10 +17,6 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
     p=pars.p;
     np=2*p*(p+1);
 
-    if p==0
-        error("p=0.");
-    end
-
     if length(u0)==1
         u0=u0*ones(1,ns); 
     end
@@ -44,7 +40,7 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
         X_spectral = cell(1,ns);
         if strcmp(pot, 'TLP')
             nu_spectral = cell(1,ns);
-            Nu_t = params.get_nu_targets(nu_vec);
+            Nu_t = pars.get_nu_targets(nu);
         end
 
         % Separate target points and normal vectors into nearby and far
@@ -64,7 +60,7 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
         elseif strcmp(pot, 'DLP')
             [L2Stk_spectral_cell_x, L2Stk_spectral_cell_y, L2Stk_spectral_cell_z]=L2StkDLP(X_spectral, pars, sigma_x, sigma_y, sigma_z, ns);
         elseif strcmp(pot, 'TLP')
-            [L2Stk_spectral_cell_x, L2Stk_spectral_cell_y, L2Stk_spectral_cell_z]=L2StkTLP(X_spectral, nu_spectral, pars, sigma_x, sigma_y, sigma_z, ns);
+            [L2Stk_spectral_cell_x, L2Stk_spectral_cell_y, L2Stk_spectral_cell_z]=L2StkTLP(X_spectral, nu_spectral, pars, sigma_x, sigma_y, sigma_z, ns, false);
         else
             error("Invalid potential given.");
         end
