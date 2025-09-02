@@ -15,7 +15,7 @@ X = cell(n3,1); W=X; Nr=X;
 Cg = reshape(repmat(C.',np,1),3,[]).';
 rg = repmat(reshape(repmat(r.',np,1),1,[]).',1,3);
 Xg = zeros(np*n3,3); Wg=zeros(np*n3,1); Nrg=Xg; Xrp = Xg;  
-
+% np = 40, n3 = 8, r in 8x1, C in 8x3, Cg in 320x3
 if size(Sc,2)>1
     tau=X; 
     

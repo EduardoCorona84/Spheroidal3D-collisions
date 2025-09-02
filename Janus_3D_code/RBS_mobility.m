@@ -143,6 +143,7 @@ MRot = @(wh,t) RotationMat(wh,t);
 
 Xt{1}=Xrp; Ct{1}=Fparams.parbd.C;
 for i=1:Nt
+    Fparams.ixTime = i;
     if i == Nt 
         Fparams.endFlag = true; 
     else 
@@ -828,7 +829,7 @@ end
 
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
-persistent A_list A_diag_list b_list save_iter
+persistent lcp_list save_iter
 
 if ~isfield(Fparams, 'saveLCPs') 
     saveLCPs = false;
@@ -852,13 +853,17 @@ if ~isfield(Fparams, 'endFlag')
 else 
     endFlag = Fparams.endFlag;
 end
-if saveLCPs && (isempty(A_list) || isempty(b_list) || isempty(save_iter) || isempty(A_diag_list))
-    A_diag_list = {};
-    A_list = {};
-    b_list = {};
-    save_iter = 1;
+if saveLCPs && isempty(lcp_list) 
+    lcp_list = repmat( ...
+        struct( ...
+            'A', [], ...
+            'F', [], ...
+            'C', [], ...
+            'b', [] ...
+        ), [1, Fparams.Nt] ...
+    );
+    save_iter = 0;
 end
-
 
 parslv = Fparams.parslv; 
 rd = Fparams.parbd.rd; 
@@ -961,17 +966,7 @@ if isfield(Fparams, 'lofi')
     lofi_parslv.prec = [];
     lofi_A = @(x) real(F.'*(lofi_Ck*Lapp(lofi_SD,Lslv(lofi_TD,...
         -Lapp(lofi_TD, lofi_Bf(x))+lofi_Lk*lofi_Bf(x),lofi_parslv)+lofi_Bf(x))));
-    xrand = rand(numF,1);
-    tic
-        lofi_Ax = lofi_A(xrand);
-    disp("LoFi Mat-Vec Time")
-    toc
-    tic
-        Ax = A(xrand);
-    disp("HiFi Mat-Vec Time")
-    toc
-    disp(['Abs Error hifi - lofi: ' num2str(norm(Ax - lofi_Ax))]);
-    disp(['Rel Error hifi - lofi: ' num2str(norm(Ax - lofi_Ax) / norm(Ax))]);
+    e
 end
 
 %% Build constant vector b: 
@@ -1013,35 +1008,33 @@ switch lower(lcpOpts.solver)
 end
 
 if saveLCPs
+    ixTime = Fparams.ixTime;
     %% Save out components for mat-vec
+    lcp_list(ixTime).b = bvec; 
     if ~Fparams.denseMV
-        this_A = struct('F',F,'Ck',Ck, ...
-            'SD',SD,'TD',TD,'Bk',Bk,'Lk',Lk);
+        lcp_list(ixTime).F = F; 
+        lcp_list(ixTime).C = Ct; 
     else
         % in the dense case just save the mat
-        this_A = Amat;
+        lcp_list(ixTime).A = Amat;
     end 
-    this_b = bvec;
     %% Check if the file is getting very large
-    tAvar = whos('this_A');
-    tbBvar = whos('this_b');
-    Avar = whos('A_list');
-    bvar = whos('b_list');
-    pvar = whos('parslv');
-    total_bytes = tAvar.bytes+tbBvar.bytes+Avar.bytes+bvar.bytes+pvar.bytes;
+    varInfo = whos('lcp_list');
+    total_bytes = varInfo.bytes;
     if total_bytes > 2e9 
         save_iter = save_iter + 1;
-        if endFlag 
-            save_iter = 1;
-        end
-        A_list = {};
-        b_list = {};
+        lcp_list = repmat( ...
+            struct( ...
+                'A', [], ...
+                'F', [], ...
+                'C', [], ...
+                'b', [] ...
+            ), [1, Fparams.Nt] ...
+        );
     end 
-    %% add to the save
-    A_list{end+1} = this_A;
-    b_list{end+1} = this_b;
-    save([LCP_file_path '.prt_' num2str(save_iter) '.mat'], '-v7.3', ...
-            'A_list', 'b_list', 'parslv');
+    saveFile = [LCP_file_path '.prt_' num2str(save_iter) '.mat'];
+    save(saveFile, '-v7.3', ...
+        'lcp_list', 'Fparams');
 end
 fprintf(['\n minmap ' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
