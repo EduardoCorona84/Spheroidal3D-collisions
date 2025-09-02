@@ -5,7 +5,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts)
     %b is a dense vector
 
     %set default opts and initialize variables in opts and info
-    [opts, info] = set_default_opts(opts, x0);
+    [opts, info] = set_default_opts(opts, x0, fg);
     %check_opts(opts)
     n = numel(x0);
     eta = 1;
@@ -20,7 +20,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts)
         %compute gradient and function evaluation
         [f_k, grad_k, Ax_k] = fg(x_k, Ax_km1, Aq, eta);
         %convergence logic using high fidelity iterates (need to think about this more), we can also add adaptivity in here.
-        [converged, info, opts] = check_convergence(k, f_k, f_km1, x_k, x_km1, info, opts);
+        [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, info, opts);
         if converged
             x = x_k;
             break
@@ -52,7 +52,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts)
 
         %take the optimal step size
         q = x_k - x_km1;
-        [eta, Aq] = step_size(-1, q, x_km1, Ax_km1, fg, opts.outer.solver_opts);
+        [eta, Aq] = step_size(-1, q, x_km1, Ax_km1, opts.outer.solver_opts);
         x_k = x_km1 + eta*q;
         % Increment the number of iterations
         k = k + 1;
@@ -65,9 +65,9 @@ function opts = update_low(k, fg_low, s_k, y_k, opts, info)
     %and we are targetting the operator itself, and not the inverse
 
     %also need separate qn memories for these methods, make sure to set this in opts and be careful with implementing these things.
-    switch lower(opts.outer.correction_opts)
+    switch lower(opts.outer.correction_opts.update)
         case 'sr1'
-            opts.outer.correction = get_correction_SR1(k, fg_low, s_k, y_k, opts.outer.correction, info);
+            opts.outer.correction_opts = get_correction_SR1(k, fg_low, s_k, y_k, opts.outer.correction_opts, info);
         otherwise
             error('Unknown correction option');
     end

@@ -1,4 +1,4 @@
-function [opts, info] = default_LCP_Opts(opts, x0, multi)
+function [opts, info] = default_LCP_opts(opts, x0, multi)
     n = numel(x0);
 
     if nargin < 3
@@ -64,8 +64,8 @@ function [opts, info] = default_LCP_Opts(opts, x0, multi)
         opts.r = min(opts.r, n);
     end
 
-    opts.S = zeros(n, r);
-    opts.Y = zeros(n, r);
+    opts.S = zeros(n, opts.r);
+    opts.Y = zeros(n, opts.r);
 
     if ~isfield(opts, 'qnUpdate') || isempty(opts.qnUpdate)
         opts.qnUpdate = 'bfgs';
@@ -91,6 +91,7 @@ function [opts, info] = default_LCP_Opts(opts, x0, multi)
 
     if multi == true
         %do nothing, we'll deal with storage in the multi fidelity set default opts.
+        info = [];
         return
     else
         info = struct('kkt', [], ...

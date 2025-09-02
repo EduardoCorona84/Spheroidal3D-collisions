@@ -4,7 +4,7 @@ function [r, h0, rho, S, Y] = updateQNMemory(k, s, y, opts)
 
     n = numel(s);
     r = opts.r;
-    if k==0 || any([isempty(opts.rho_), isempty(opts.S_), isempty(opts.Y_)])
+    if k==0 || any([~isfield(opts, 'rho_'), ~isfield(opts, 'S_'), ~isfield(opts, 'Y_')])
         opts.rho_ = zeros(r, 1);
         opts.S_ = zeros(n, r);
         opts.Y_ = zeros(n, r);

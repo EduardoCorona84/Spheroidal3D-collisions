@@ -1,13 +1,13 @@
 function [x_k_half, opts] = outer_solver(k, x_km1, grad_km1, Ax_km1, s_k, y_k, opts)
 
-    switch lower(opts.outer.solver_type)
+    switch lower(opts.outer.solver_opts.solver)
         case 'bb1'
             x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;
         case 'bb2'
             x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;
         case 'prox'
             %update the inverse Hessian, we have a subsection of opts dedicated to the outer solver, that we pass to all these functions so its plug and play
-            opts = update_Hk(k, s_k, y_k, opts.outer.solver_opts);
+            opts.outer.solver_opts = update_Hk(k, s_k, y_k, opts.outer.solver_opts);
             %take the prox step.
             p = -opts.outer.solver_opts.H(grad_km1);
             % step size direction

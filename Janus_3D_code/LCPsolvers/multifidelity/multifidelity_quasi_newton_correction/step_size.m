@@ -1,4 +1,4 @@
-function [kappa, Ap] = step_size(k, p, x, Ax, fg, opts, s_k, y_k)
+function [kappa, Ap] = step_size(k, p, x, Ax, opts, s_k, y_k)
 
 if k == 0
     mode = opts.stepSize.init;
@@ -22,8 +22,22 @@ switch lower(mode)
         % For QP, this is the optsimal step length (see page 56 of n&W)
         % Notice that is A is not perfectly symmetric, then we do not have
         % kappa = -(Ax+b)'p/(p'Ap)
-        [~, ~, Ap] = fg(p);
-        kappa = -(1/2*(dot(p, Ax) +  dot(x, Ap)) + dot(p,opts.b)) / dot(p, Ap);
+        Ap = opts.A(p);
+        kappa = -(1/2*(dot(p, Ax) +  dot(x, Ap)) + dot(p, opts.b)) / dot(p, Ap);
+
+        %deal with the constrained case
+        if k < 0
+            if kappa <= 1
+                return
+            else
+                kappa_list = - x(p < 0) ./ p(p < 0);
+                if isempty(kappa_list)
+                    return;
+                end
+                kappa = min(kappa, min(kappa_list));
+            end
+            
+        end
     case 'uniform' 
         kappa = 1;
     otherwise 

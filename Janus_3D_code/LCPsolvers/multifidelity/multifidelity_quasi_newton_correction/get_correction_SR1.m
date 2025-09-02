@@ -1,4 +1,4 @@
-function opts = get_correction_SR1(k, fg_low, s_k, y_k, opts)
+function opts = get_correction_SR1(k, fg_low, s_k, y_k, opts, info)
 
     %TO DO: implement update storage and compact representation
     %Three cases:
@@ -23,7 +23,7 @@ function opts = get_correction_SR1(k, fg_low, s_k, y_k, opts)
                     end
                 end
                 %If no skip, compute quantity of the needed matrix
-                opts.outer.update_matrix = opts.outer.update_matrix + ((quantity) * (quantity)' / (s_1' * quantity));
+                opts.update_matrix = opts.update_matrix + ((quantity) * (quantity)' / (s_k' * quantity));
 
             case 'dense limited'
                 % Implement dense limited memory update, we store r amount of y_k and s_k and then use these for the update. The update will be a full dense matrix, but this lets us use limited memory. Have an option for skips.

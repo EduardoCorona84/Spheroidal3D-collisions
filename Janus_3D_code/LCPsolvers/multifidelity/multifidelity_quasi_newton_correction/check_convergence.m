@@ -5,6 +5,8 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
     %2. If we are in the high fidelity only regime (or some to be developed equivalent for alternating high low), we want to check if we have converged using various criterion (ideas rel, abs, kkt, with rel and abs (still want to characterize this))
     %3.Update the info struct with the information used to make these decisions
 
+    converged = false;
+    
     if k == 0
         %for now we will do nothing. If KKT/merit function is a good measure, we could use this here.
     else

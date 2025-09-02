@@ -1,4 +1,4 @@
-function [opts, info] = set_default_opts(opts, x0)
+function [opts, info] = set_default_opts(opts, x0, fg)
     %this function sets default opts for the solver 
     n = numel(x0);
 
@@ -87,7 +87,22 @@ function [opts, info] = set_default_opts(opts, x0)
         opts.outer.solver_opts = struct();
         opts.outer.solver_opts.solver = 'prox';
         %we can pass this to standard default opts with a flat that will tell it to exclude certain things
-        [info.outer, opts.outer.solver_opts] = default_LCP_opts(opts.outer.solver_opts, x0, true);
+        [opts.outer.solver_opts, ~] = default_LCP_opts(opts.outer.solver_opts, x0, true);
+    end
+
+    %if taking optimal step sizes, add the necessary info to the opts struct
+    if strcmpi(opts.outer.solver_opts.stepSize.eta, 'opt')
+        % If we are using the optimal step size, we need to set the
+        % appropriate options in the solver_opts
+        if ~isfield(opts.outer.solver_opts, 'A')
+            opts.outer.solver_opts.A = create_A(fg);
+        end
+        if ~isfield(opts.outer.solver_opts, 'b')
+            %get b from a function evaluation, this is really not something that should be done as a function eval can be very expensive, this is used as a fallback.
+            [~, grad_ones, A_ones] = fg(ones(n,1), [], [], []);
+            opts.outer.solver_opts.b = grad_ones - A_ones;
+        end
+
     end
 
     %now all the outer solver opts should be set, we want to set the info struct for outer iterates ourselves
