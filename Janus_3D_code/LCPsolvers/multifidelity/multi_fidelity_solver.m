@@ -16,8 +16,7 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
         return;
     end
 
-    %Compute high and low fidelity operators at the initial point 
-
+    %Compute highfidelity operator at the initial point 
     outer_iter = 1;
 
     A_true_0 = A(x_outer_0);
@@ -25,10 +24,33 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
     f_0 = 1/2*x_outer_0'*A_true_0 + b'*x_outer_0;
     info = update_info('outer', info, outer_iter, x_outer_0, A_true_0, b, opts);
 
-    %Take a gradient descent step with the high fidelity model 
+    %Take an unconstrained gradient descent step with the high fidelity model 
     x_outer_1 = x_outer_0 - opts.outer.step_init*grad_outer_0;
+    %project
     if opts.outer.projected == true
         x_outer_1 = max(x_outer_1, 0);
+    end
+
+    %now take an optimal step if optimal step is enabled
+    if opts.outer.optimal_step == true
+        q = x_outer_1 - x_outer_0;
+        Aq = A(q);
+        step = -dot(q, grad_outer_0)/dot(q, Aq);
+        if step <= 1
+            %do nothing
+        else
+            step_list = - x_outer_0(q < 0) ./ q(q < 0);
+            if isempty(step_list)
+                %do nothing, use optimal step.
+            else
+                step = min(step, min(step_list));
+            end
+        end
+        
+        step = min(1, step);
+        x_outer_1 = x_outer_0 + step*q;
+    else
+        %do nothing
     end
 
     outer_iter = outer_iter + 1;
@@ -37,7 +59,13 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
     while outer_iter <= opts.outer.max_iter
 
         %evaluate full fidelity operator
-        A_true_1 = A(x_outer_1);    
+        if opts.outer.optimal_step == true
+            %can express x_k+1 = x_k + step*q, so
+            %A(x_k+1) = A*x_k + step*(A*q)
+            A_true_1 = A_true_0 + step*Aq;
+        else
+            A_true_1 = A(x_outer_1);
+        end
         grad_outer_1 = A_true_1 + b;
         f_1 = 1/2*x_outer_1'*A_true_1 + b'*x_outer_1;
         info = update_info('outer', info, outer_iter, x_outer_1, A_true_1, b, opts);
@@ -79,16 +107,31 @@ function [x, info] = multi_fidelity_solver(A, Ahat, b, x0, opts)
         %update the low fidelity info
         info.inner{outer_iter} = info_inner;
 
-        %check if using optimal step size (I should steal nic's logic here)
+        %update variables
+        %previous iterate is updated to starting iterate of current iteration
+        x_outer_0 = x_outer_1;
+
+        %check if using optimal step size (I should steal nic's logic here) and update x_outer_1 (current iterate)
         if opts.outer.optimal_step == true
             q = x_inner_1 - x_outer_1;
-
-
+            Aq = A(q);
+            step = -dot(q, grad_outer_1)/dot(q, Aq);
+            if step <= 1
+                %do nothing
+            else
+                step_list = - x_outer_1(q < 0) ./ q(q < 0);
+                if isempty(step_list)
+                    %do nothing
+                else
+                    step = min(step, min(step_list));
+                end
+            end
+            x_outer_1 = x_outer_1 + step*q;
+        else
+            x_outer_1 = x_inner_1;
         end
 
-        %update variables
-        x_outer_0 = x_outer_1;
-        x_outer_1 = x_inner_1;
+        %update A evaluation and iteration count
         A_true_0 = A_true_1;
         outer_iter = outer_iter + 1;
 
@@ -102,7 +145,7 @@ end
 function [opts, info] = update_low(Ahat, s_1, y_1, info, outer_iter, opts)
 
     switch lower(opts.outer.low_update)
-        case 'sr1'
+        case 'sr1' %we are interested in adding memory and skips to SR1 update (instead of full memory). I am going to rip nic's implementation for the sr1 metric.
             quantity = y_1 - (Ahat(s_1) + opts.outer.update_matrix*s_1);
             if opts.outer.low_skips == true
                 %check skip condition and skip if so

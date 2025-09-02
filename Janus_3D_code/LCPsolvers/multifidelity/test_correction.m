@@ -11,6 +11,7 @@ opts.outer.warm_start.enabled = false;
 opts.outer.warm_start.only = false;
 opts.inner.enabled = false;
 opts.outer.correction = false;
+opts.outer.optimal_step = true;
 [~, info] = multi_fidelity_solver(A_func, A_func, b, zeros(size(b)), opts);
 %find x_ref
 objective_values = zeros(1, info.outer.iter);
@@ -44,11 +45,12 @@ for i = 1:length(noise_levels)
     opts.outer.correction = false;
     opts.outer.adaptive = 'none';
     opts.inner.enabled = true;
-    opts.inner.max_iter = 1; %take 1 low fidelity step between high fidelities
+    opts.inner.max_iter = 2; %take 1 low fidelity step between high fidelities
     [~, info] = multi_fidelity_solver(A_func, A_noisy_func, b, zeros(size(b)), opts);
     iterate_rel_errors{i, 1} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
     %now test alternating high and low fidelity with correction
     opts.outer.correction = true;
+    opts.outer.low_skips = true;
     opts.outer.low_update = 'sr1';
     [~, info] = multi_fidelity_solver(A_func, A_noisy_func, b, zeros(size(b)), opts);
     iterate_rel_errors{i, 2} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
