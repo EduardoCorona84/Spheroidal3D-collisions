@@ -1,11 +1,12 @@
-function [x, info] = warm_start_solver(fg_low, opts.warm_start.solver_opts);
+function [x, info] = warm_start_solver(fg_low, x0, opts)
     
-    switch lower(opts.warm_start.solver_opts.type)
+    addpath('../../solvers')
+    switch lower(opts.type)
         case 'bbpgd'
-            [x, info] = %name of bbpgd solver
+            [x, info] = projectedGradientDescent(fg_low, x0, opts);
 
         case 'prox'
-            [x, info] = %name of prox solver
+            [x, info] = proxQuasiNewton(fg_low, x0, opts);
 
             %etc, fill in for each solver.
     end

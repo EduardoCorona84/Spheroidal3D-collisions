@@ -1,12 +1,9 @@
-function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts)
+function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts, info)
     %x0 is the initial iterate
     %fg is a full fidelity function/gradient evaluation
     %fg_low is a low fidelity function/gradient evaluation
     %b is a dense vector
 
-    %set default opts and initialize variables in opts and info
-    [opts, info] = set_default_opts(opts, x0, fg);
-    %check_opts(opts)
     n = numel(x0);
     eta = 1;
     x_k = x0;
@@ -44,7 +41,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts)
 
         %now take the next step with the inner solver
         if opts.inner.enabled == true
-            [x_k, info.inner{k + 1}, opts] = inner_solver(x_k_half, fg_low, correction, opts);
+            [x_k, info.inner{k + 1}, opts] = inner_solver(x_k_half, opts);
         else
             %if no inner iteration, we leave the info struct empty
             x_k = x_k_half;

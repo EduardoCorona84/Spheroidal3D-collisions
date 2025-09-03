@@ -42,11 +42,10 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
                 end
             end
         end
-        
-        if opts.outer.storeIts == true
-            info.outer.iterHist(k+1, :) = x_k;
-        end
+    end
 
+    if opts.outer.storeIts == true
+        info.outer.iterHist(k+1, :) = x_k;
     end
 
     if converged == true

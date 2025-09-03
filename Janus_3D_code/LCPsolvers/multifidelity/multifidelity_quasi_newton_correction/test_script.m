@@ -24,7 +24,7 @@ fg_low = create_fg(eye(problem_size), b);
 %create opts for me
 opts.inner.enabled = false;
 x0 = zeros(problem_size, 1);
-[x_new, info_new] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts);
+[x_new, info_new] = multifidelity_wrapper(x0, fg, fg_low, opts);
 
 %create opts for nic
 

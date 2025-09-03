@@ -1,13 +1,42 @@
-function [opts, info] = set_default_opts(opts, x0, fg)
+function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     %this function sets default opts for the solver 
     n = numel(x0);
 
+    %warm start opts
+    if ~isfield(opts, 'warm')
+        opts.warm = struct();
+    end
+
+    if ~isfield(opts.warm, 'enabled')
+        opts.warm.enabled = true;
+    end
+
+    if ~isfield(opts.warm, 'solver_opts')
+        opts.warm.solver_opts = struct();
+    end
+
+    if ~isfield(opts.warm.solver_opts, 'type')
+        opts.warm.solver_opts.type = 'bbpgd';
+    end
+
+    if ~isfield(opts.warm.solver_opts, 'max_iter')
+        opts.warm.solver_opts.max_iter = 20;
+    end
+    
+
+    %we won't make the info struct as the warm start solver will do this automatically. We will just assign the resulting struct to the info struct of the multifielity (under warm).
+    if ~isfield(opts.warm.solver_opts, 'storeIts') || isempty(opts.warm.solver_opts.storeIts)
+        opts.warm.solver_opts.storeIts = true;
+    end
+
+
+    %outer solver opts
     if ~isfield(opts, 'outer')
         opts.outer = struct();
     end
 
     if ~isfield(opts.outer, 'max_iter')
-        opts.outer.max_iter = 200;
+        opts.outer.max_iter = 10;
     end
 
     if ~isfield(opts.outer, 'correction')
@@ -97,6 +126,7 @@ function [opts, info] = set_default_opts(opts, x0, fg)
         if ~isfield(opts.outer.solver_opts, 'A')
             opts.outer.solver_opts.A = create_A(fg);
         end
+
         if ~isfield(opts.outer.solver_opts, 'b')
             %get b from a function evaluation, this is really not something that should be done as a function eval can be very expensive, this is used as a fallback.
             [~, grad_ones, A_ones] = fg(ones(n,1), [], [], []);
@@ -105,15 +135,18 @@ function [opts, info] = set_default_opts(opts, x0, fg)
 
     end
 
-    %now all the outer solver opts should be set, we want to set the info struct for outer iterates ourselves
+    %now all the outer solver opts should be set, we want to set the info struct for outer iterates ourselves 
 
     if ~isfield(opts.outer, 'storeIts') || isempty(opts.outer.storeIts)
-        opts.outer.storeIts = false;
-    elseif opts.outer.storeIts
+        opts.outer.storeIts = true;
+    end
+
+    if opts.outer.storeIts == true
         info.outer.iterHist = zeros(opts.outer.max_iter+1, n);
     end
 
     %add in other outer info struct later
+
 
     %now we go through inner opts
     if ~isfield(opts.inner, 'enabled')
@@ -126,7 +159,13 @@ function [opts, info] = set_default_opts(opts, x0, fg)
         %we are going to use the exact same information for the prox steps as the outer solver. some of the other things might have to be edited a bit.
         opts.inner.solver_opts = opts.outer.solver_opts;
     end
-    
+
+    opts.inner.solver_opts.A = create_A(fg_low);
+
+    opts.warm.solver_opts.A = opts.inner.solver_opts.A;
+
+    opts.warm.solver_opts.b = opts.inner.solver_opts.b;
+
     if ~isfield(opts.inner, 'max_iter')
         opts.inner.solver_opts.max_iter = 1;
     end

@@ -11,7 +11,7 @@ function [x_k_half, opts] = outer_solver(k, x_km1, grad_km1, Ax_km1, s_k, y_k, o
             %take the prox step.
             p = -opts.outer.solver_opts.H(grad_km1);
             % step size direction
-            kappa = step_size(k, p, x_km1, Ax_km1, opts.outer.solver_opts);
+            kappa = step_size(1, p, x_km1, Ax_km1, opts.outer.solver_opts);
 
             x_k_half = x_km1 + kappa * p;
             %prox step, but once again storing the parameters in opts
