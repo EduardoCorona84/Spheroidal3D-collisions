@@ -64,9 +64,6 @@ function [opts, info] = default_LCP_opts(opts, x0, multi)
         opts.r = min(opts.r, n);
     end
 
-    opts.S = zeros(n, opts.r);
-    opts.Y = zeros(n, opts.r);
-
     if ~isfield(opts, 'qnUpdate') || isempty(opts.qnUpdate)
         opts.qnUpdate = 'bfgs';
     else 

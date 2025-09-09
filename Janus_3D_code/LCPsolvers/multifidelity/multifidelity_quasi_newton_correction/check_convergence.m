@@ -48,8 +48,18 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
         info.outer.iterHist(k+1, :) = x_k;
     end
 
+    if opts.outer.storeFuncs == true
+        info.outer.funcHist(k+1) = f_k;
+    end
+
     if converged == true
-        info.outer.iter = k;
+        info.outer.iter = k + 1;
+        if opts.outer.storeIts
+            info.outer.iterHist = info.outer.iterHist(1:k+1, :);
+        end
+        if opts.outer.storeFuncs
+            info.outer.funcHist = info.outer.funcHist(1:k+1);
+        end
     end
 
 end

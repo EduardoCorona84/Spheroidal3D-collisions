@@ -18,8 +18,10 @@ if r == 0
     return 
 end
 
+
 % Get a matrix free implementation of the inverse hessian approximation
 H = @(g) apply_H(g, bMask, r, rho, S, Y, h0);
+
 
 if nargout <= 2
     return 

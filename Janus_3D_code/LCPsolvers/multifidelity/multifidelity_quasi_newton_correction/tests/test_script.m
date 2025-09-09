@@ -22,21 +22,28 @@ fg_low = create_fg(eye(problem_size), b);
 %1. First Case: Compare High against High (only high fidelity evaluations)
 
 %create opts for me
-opts.inner.enabled = false;
-x0 = zeros(problem_size, 1);
-[x_new, info_new] = multifidelity_wrapper(x0, fg, fg_low, opts);
 
 %create opts for nic
+%same solver type for both
+opts_nic.max_iter = 10;
+opts_nic.solver = 'prox';
+opts_nic.A = @(x) the_matrix*x;
+opts_nic.b = b;
+opts_nic.storeIts = true;
+[x_nic, info_nic] = proxQuasiNewton(fg, x0, opts_nic);
 
-[x_nic, info_nic] = proxQuasiNewton(x0, fg, opts_nic);
+opts.warm.enabled = false;
+opts.inner.enabled = true;
+opts.outer.solver_opts.A = @(x) the_matrix*x;
+opts.outer.solver_opts.b = b;
+opts.outer.max_iter = 10;
+x0 = zeros(problem_size, 1);
+[x_new, info_new] = multifidelity_wrapper(fg, fg_low, x0, opts);
 
 
 
-%2. Second Case: Compare Alternating with Correction (Old) versus Alternating with Correction (New)
+
+
+%2. Second Case: Compare Alternating with Correction (Old) versus Alternating 
 
 %add old code
-addpath('../LCPsolvers/multifidelity/')
-
-[x_old, info_old] = multifidelity_solver(x0, fg, opts_nic);
-
-[x_]

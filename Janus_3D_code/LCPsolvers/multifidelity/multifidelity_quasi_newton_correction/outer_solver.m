@@ -26,7 +26,7 @@ function opts = update_Hk(k, s, y_k, opts)
 
     switch lower(opts.qnUpdate)
         case 'bfgs'
-            opts = get_H_BFGS(k, s, y_k, opts);
+            opts = get_H_BFGS_multi(k, s, y_k, opts);
         case 'sr1'
             
         otherwise

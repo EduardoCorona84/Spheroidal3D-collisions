@@ -5,10 +5,12 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts)
     switch lower(opts.inner.solver)
         case 'outer preconditioned prox'
             %In this case we are going to use the same prox evaluator as the outer steps.
-            %So we set the inner opts to be the same as the outer, but we retain the low-fidelity A matrix.
-            temp = opts.inner.solver_opts.A; 
+            %So we set the inner opts to be the same as the outer, but we retain the low-fidelity A matrix and the max_iters
+            A_low = opts.inner.solver_opts.A; 
+            max_iter_low = opts.inner.solver_opts.max_iter;
             opts.inner.solver_opts = opts.outer.solver_opts;
-            opts.inner.solver_opts.A = temp;
+            opts.inner.solver_opts.A = A_low;
+            opts.inner.solver_opts.max_iter = max_iter_low;
 
             %create corrected gradient
             grad_inner = @(x) opts.inner.solver_opts.A(x) + opts.outer.correction_opts.update_matrix*x + opts.inner.solver_opts.b;

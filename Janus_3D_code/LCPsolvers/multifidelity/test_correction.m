@@ -22,7 +22,7 @@ end
 x_ref = info.outer.x_iters(:, min_ind);
 x_ref_rel_errors =vecnorm(info.outer.x_iters(:, 1:min_ind) - x_ref)/norm(x_ref);
 
-noise_levels = [4, 3, 2, 1, 1/2, 1e-1, (1/2*1e-1), 1e-2, (1/2*1e-2), 1e-3, (1/2*1e-3)];
+noise_levels = [50, 3, 2, 1, 1/2, 1e-1, (1/2*1e-1), 1e-2, (1/2*1e-2), 1e-3, (1/2*1e-3)];
 matrix_rel_errors = zeros(1, length(noise_levels));
 
 %1 is alternating no correction

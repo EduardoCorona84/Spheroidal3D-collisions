@@ -1,4 +1,4 @@
-function opts = get_H_BFGS(k, s, y, opts, bMask, debug)
+function opts = get_H_BFGS_multi(k, s, y, opts, bMask, debug)
 
     n = numel(s);
     if ~exist('bMask', 'var') || isempty(bMask)
@@ -9,7 +9,8 @@ function opts = get_H_BFGS(k, s, y, opts, bMask, debug)
         debug = false;
     end
     n = numel(s);
-    [r, h0, rho, S, Y] = updateQNMemory(k, s, y, opts);
+    [r, h0, rho, S, Y, opts] = updateQNMemory_multi(k, s, y, opts);
+    opts.h0 = h0;
     if r == 0
         opts.H = @(g) g; 
         opts.h0 = 1;
@@ -21,9 +22,11 @@ function opts = get_H_BFGS(k, s, y, opts, bMask, debug)
     % Get a matrix free implementation of the inverse hessian approximation
     opts.H = @(g) apply_H(g, bMask, r, rho, S, Y, h0);
 
+    %{
     if nargout <= 2
         return 
     end
+    %}
     % If requested provide U and V such that B = 1/h0 I + U*U' + V*V'
     % see N&W pg 184 for the unrolled formulas
     % we don't use the compact representation because a sqrt may not exist of
@@ -34,7 +37,7 @@ function opts = get_H_BFGS(k, s, y, opts, bMask, debug)
         s = S(~bMask,i); 
         y = Y(~bMask,i);
         opts.U(~bMask,i) = y / sqrt(dot(s,y));
-        v = s/opts.h0 ;
+        v = s/h0 ;
         if i > 1 
             ucoeff = arrayfun(@(j) dot(opts.U(~bMask,j),s), 1:i-1)';
             vcoeff = arrayfun(@(j) dot(opts.V(~bMask,j),s), 1:i-1)';

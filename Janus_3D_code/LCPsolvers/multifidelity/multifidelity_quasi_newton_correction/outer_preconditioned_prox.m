@@ -8,7 +8,7 @@ function [x, info] = outer_preconditioned_prox(x0, grad, opts)
         grad_0 = grad(x0);
         info.matvecs(i) = info.matvecs(i) + 1;
         p = -opts.H(grad_0);
-        x_1 = prox(x0 + p, opts.inner.prox);
+        x_1 = prox(x0 + p, opts);
         x0 = x_1;
     end
     x = x_1;

@@ -1,4 +1,4 @@
-function [r, h0, rho, S, Y] = updateQNMemory(k, s, y, opts)
+function [r, h0, rho, S, Y, opts] = updateQNMemory_multi(k, s, y, opts)
     %this had used persistent variables, but I personally prefer storing these things in opts and then updating
     %persistent rho_ S_ Y_ 
 

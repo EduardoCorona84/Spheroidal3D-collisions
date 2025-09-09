@@ -41,7 +41,8 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts, 
 
         %now take the next step with the inner solver
         if opts.inner.enabled == true
-            [x_k, info.inner{k + 1}, opts] = inner_solver(x_k_half, opts);
+            [x_k, info_inner, opts] = inner_solver(x_k_half, opts);
+            info.inner{k + 1} = info_inner;
         else
             %if no inner iteration, we leave the info struct empty
             x_k = x_k_half;

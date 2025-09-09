@@ -1,4 +1,4 @@
-function [x, info] = multifidelity_wrapper(x0, fg, fg_low, opts)
+function [x, info] = multifidelity_wrapper(fg, fg_low, x0, opts)
     %this function takes in an initial iterate, high and low fidelity functions, and an opts struct and returns a final iterate and an info struct.
 
     [opts, info] = set_default_opts(opts, x0, fg, fg_low);

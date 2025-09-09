@@ -114,10 +114,14 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     if ~isfield(opts.outer, 'solver_opts')
         %default to prox for the outer solver
         opts.outer.solver_opts = struct();
-        opts.outer.solver_opts.solver = 'prox';
-        %we can pass this to standard default opts with a flat that will tell it to exclude certain things
-        [opts.outer.solver_opts, ~] = default_LCP_opts(opts.outer.solver_opts, x0, true);
     end
+
+    if ~isfield(opts.outer.solver_opts, 'solver')
+        opts.outer.solver_opts.solver = 'prox';
+    end
+
+    %we can pass this to standard default opts with a flat that will tell it to exclude certain things
+    [opts.outer.solver_opts, ~] = default_LCP_opts(opts.outer.solver_opts, x0, true);
 
     %if taking optimal step sizes, add the necessary info to the opts struct
     if strcmpi(opts.outer.solver_opts.stepSize.eta, 'opt')
@@ -141,8 +145,16 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
         opts.outer.storeIts = true;
     end
 
+    if ~isfield(opts.outer, 'storeFuncs')
+        opts.outer.storeFuncs = false;
+    end
+
     if opts.outer.storeIts == true
         info.outer.iterHist = zeros(opts.outer.max_iter+1, n);
+    end
+
+    if opts.outer.storeFuncs == true
+        info.outer.funcHist = zeros(opts.outer.max_iter+1, 1);
     end
 
     %add in other outer info struct later
@@ -166,7 +178,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
 
     opts.warm.solver_opts.b = opts.inner.solver_opts.b;
 
-    if ~isfield(opts.inner, 'max_iter')
+    if ~isfield(opts.inner.solver_opts, 'max_iter')
         opts.inner.solver_opts.max_iter = 1;
     end
 
