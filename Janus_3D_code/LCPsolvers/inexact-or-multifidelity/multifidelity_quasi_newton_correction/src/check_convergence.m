@@ -28,6 +28,8 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
                     %do nothing
                 else
                     switch(lower(opts.outer.adaptive))
+                        case 'none'
+                            %do nothing
                         case 'high'
                             opts.inner.enabled = false;
 
@@ -53,7 +55,7 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
     end
 
     if converged == true
-        info.outer.iter = k + 1;
+        info.outer.iter = k;
         if opts.outer.storeIts
             info.outer.iterHist = info.outer.iterHist(1:k+1, :);
         end

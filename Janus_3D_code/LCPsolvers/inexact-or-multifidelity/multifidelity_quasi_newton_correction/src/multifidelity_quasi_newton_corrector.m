@@ -32,7 +32,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts, 
         f_km1 = f_k;
 
         %update the low fidelity operator using the high fidelity information 
-        if opts.outer.correction == true
+        if opts.outer.correction == true && k > 0
             opts = update_low(k, fg_low, s_k, y_k, opts, info);            
         end
 
@@ -40,7 +40,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts, 
         [x_k_half, opts] = outer_solver(k, x_km1, grad_km1, Ax_km1, s_k, y_k, opts);
 
         %now take the next step with the inner solver
-        if opts.inner.enabled == true
+        if opts.inner.enabled == true && k > 0
             [x_k, info_inner, opts] = inner_solver(x_k_half, opts);
             info.inner{k + 1} = info_inner;
         else

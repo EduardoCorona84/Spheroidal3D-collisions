@@ -1,7 +1,7 @@
 function [x_k_half, opts] = outer_solver(k, x_km1, grad_km1, Ax_km1, s_k, y_k, opts)
 
     switch lower(opts.outer.solver_opts.solver)
-        case 'bb1'
+        case 'bbpgd'
             x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;
         case 'bb2'
             x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;

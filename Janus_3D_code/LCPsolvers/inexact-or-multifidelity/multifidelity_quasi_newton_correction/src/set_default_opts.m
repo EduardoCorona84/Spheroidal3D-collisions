@@ -1,5 +1,9 @@
 function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     %this function sets default opts for the solver 
+
+    %in the case in which A or b are not given, we can get them from the function handle.
+    %This requires adding the path to this function
+    addpath('../../utilities/');
     n = numel(x0);
 
     %warm start opts

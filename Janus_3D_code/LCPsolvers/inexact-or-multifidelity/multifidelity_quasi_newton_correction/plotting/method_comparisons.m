@@ -1,4 +1,5 @@
 function method_comparisons(A, A_low, b)
+    addpath('../src/');
     %This function takes in a matrix A (or function handle) and a vector b and then compares the performance of 
     %1. Warm Start
     %2. Only high fidelity prox quasi-Newton
@@ -10,6 +11,7 @@ function method_comparisons(A, A_low, b)
     %for now, we will just do high and alternating correction
     fg = create_fg(A, b);
     fg_low = create_fg(A_low, b);
+    problem_size = length(b);
 
     %high
     opts.warm.enabled = false;
@@ -29,27 +31,44 @@ function method_comparisons(A, A_low, b)
     x_ref = info_high.outer.iterHist(f_ref_ind, :)';
 
     %create error history for high, the construction has it so that every iteration is one matvec
-    error_high = vecnorm(info_high.outer.iterHist' - x_ref);
+    error_high = vecnorm(info_high.outer.iterHist' - x_ref)/norm(x_ref);
+
+    %high
+    opts.warm.enabled = true;
+    opts.inner.enabled = false;
+    opts.outer.correction = false;
+    opts.outer.storeFuncs = true;
+    opts.outer.solver_opts.tol_abs = 1e-16;
+    opts.outer.solver_opts.tol_rel = 1e-16;
+    opts.outer.solver_opts.A = @(x) A*x;
+    opts.outer.solver_opts.b = b;
+    opts.outer.max_iter = 100;
+    x0 = zeros(problem_size, 1);
+    [~, info_high_warm] = multifidelity_wrapper(fg, fg_low, x0, opts);
+
+    error_high_warm = vecnorm(info_high_warm.outer.iterHist' - x_ref)/norm(x_ref);
 
 
     %alternating correction
-    opts.warm.enabled = false;
+    opts.warm.enabled = true;
     opts.inner.enabled = true;
     opts.outer.correction = true;
-    opts.outer.solver_opts.tol_abs = 1e-12;
-    opts.outer.solver_opts.tol_rel = 1e-12;
+    opts.outer.adaptive = 'none';
+    opts.outer.solver_opts.tol_abs = 1e-16;
+    opts.outer.solver_opts.tol_rel = 1e-16;
     opts.outer.solver_opts.A = @(x) A*x;
     opts.outer.solver_opts.b = b;
-    opts.outer.max_iter = 30;
+    opts.outer.max_iter = 100;
     x0 = zeros(problem_size, 1);
     [~, info_corr] = multifidelity_wrapper(fg, fg_low, x0, opts);
 
     %create error history for corr
-    error_corr = vecnorm(info_corr.outer.iterHist' - x_ref);
+    error_corr = vecnorm(info_corr.outer.iterHist' - x_ref)/norm(x_ref);
 
     %plot the results
     semilogy(error_high, '-o', 'DisplayName', 'High Fidelity Only');
     hold on
+    semilogy(error_high_warm, '-o', 'DisplayName', 'High Fidelity Warm Start');
     semilogy(error_corr, '-o', 'DisplayName', 'Multifidelity with Correction');
     xlabel('Matvecs');
     ylabel('Error');
