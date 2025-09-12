@@ -62,36 +62,39 @@ function [Stk_x, Stk_y, Stk_z] = L2StkDLP(Xeval, pars, sigma_x, sigma_y, sigma_z
     pars.sigma = y_dot_sig; pars.get_shc;
     [ydotsig_dx,ydotsig_dy,ydotsig_dz] = spheroidalDP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
 
-    %%% Get normal vectors (at source points) necessary for densities
-    % TODO: change this for multiple spheroids
-    norm_vecs = get_norm_vecs(pars.p, pars.u0, pars.oblate);
-    nx_src = norm_vecs(:,1);
-    ny_src = norm_vecs(:,2);
-    nz_src = norm_vecs(:,3);
-
+    %%% Generate densities that are dependent on the source normal vectors
+    np = 2*pars.p*(pars.p+1);
+    sigmax_dot_n = zeros(np, 3, ns); sigmay_dot_n = sigmax_dot_n; sigmaz_dot_n = sigmax_dot_n;
+    for i=1:ns
+        norm_vecs = get_norm_vecs(pars.p, pars.u0(i), pars.oblate(i));
+        sigmax_dot_n(:,:,i) = norm_vecs.*sigma_x(:,:,i);
+        sigmay_dot_n(:,:,i) = norm_vecs.*sigma_y(:,:,i);
+        sigmaz_dot_n(:,:,i) = norm_vecs.*sigma_z(:,:,i);
+    end
+    
     %%% Now, we must calculate the third quantity, which involves NINE terms.
     % For x-component: \nabla \cdot (S_L[n_x \sigma])
-    pars.sigma = nx_src .* sigma_x; pars.get_shc;
+    pars.sigma = sigmax_dot_n(:,1,:); pars.get_shc;
     [SPxx, ~, ~] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
-    pars.sigma = nx_src .* sigma_y; pars.get_shc;
+    pars.sigma = sigmay_dot_n(:,1,:); pars.get_shc;
     [~, SPxy, ~] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
-    pars.sigma = nx_src .* sigma_z; pars.get_shc;
+    pars.sigma = sigmaz_dot_n(:,1,:); pars.get_shc;
     [~, ~, SPxz] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
 
     % For y-component: \nabla \cdot (S_L[n_y \sigma])
-    pars.sigma = ny_src .* sigma_x; pars.get_shc;
+    pars.sigma = sigmax_dot_n(:,2,:); pars.get_shc;
     [SPyx, ~, ~] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
-    pars.sigma = ny_src .* sigma_y; pars.get_shc;
+    pars.sigma = sigmay_dot_n(:,2,:); pars.get_shc;
     [~, SPyy, ~] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
-    pars.sigma = ny_src .* sigma_z; pars.get_shc;
+    pars.sigma = sigmaz_dot_n(:,2,:); pars.get_shc;
     [~, ~, SPyz] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
 
     % For z-component: \nabla \cdot (S_L[n_z \sigma])
-    pars.sigma = nz_src .* sigma_x; pars.get_shc;
+    pars.sigma = sigmax_dot_n(:,3,:); pars.get_shc;
     [SPzx, ~, ~] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
-    pars.sigma = nz_src .* sigma_y; pars.get_shc;
+    pars.sigma = sigmay_dot_n(:,3,:); pars.get_shc;
     [~, SPzy, ~] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
-    pars.sigma = nz_src .* sigma_z; pars.get_shc;
+    pars.sigma = sigmaz_dot_n(:,3,:); pars.get_shc;
     [~, ~, SPzz] = spheroidalSP(pars, Xeval, nu_x_spectral, nu_y_spectral, nu_z_spectral);
 
     %%% Finally, we calculate the Stokes double layer potentials in term of

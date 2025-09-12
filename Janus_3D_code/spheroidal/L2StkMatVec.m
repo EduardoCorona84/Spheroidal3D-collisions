@@ -27,10 +27,8 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
 
     if nargin==4
         error("Not implemented.");
-        % Self evaluation of SL_Stk
-        [Stk_x,Stk_y,Stk_z]=L2Stk([],pars,sigma_x,sigma_y,sigma_z,ns);
     else
-        if (strcmp(pot, 'TLP') && nargin < 6)
+        if (strcmp(pot, 'TLP') && nargin < 7)
             error("Input for normal vector is necessary for the traction of the Stokes SLP.");
         end
 
@@ -82,6 +80,7 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
             nt_smooth=size(X_smooth,1);
 
             if nt_smooth>0
+                fprintf("Kernel_Eval being used in L2StkMatVec...");
                 if ~if_oblate(i)
                     Xself=prolate_spheroid_shape(p,u0(i),a(i));
                 else

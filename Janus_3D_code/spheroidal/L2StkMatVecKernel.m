@@ -45,50 +45,50 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
     IDparams.sigma = repmat(eye(np),1,1,ns);
 
     if strcmp(pot, 'SLP')
-        M = SLPmatrix(IDparams, np, ns);
+        M = SLPmatrix_dev(IDparams, [], np, ns);
+        M = blkdiag(M{:});
     elseif strcmp(pot, 'DLP')
-        M = DLPmatrix(IDparams, np, ns);
+        M = DLPmatrix_dev(IDparams, [], np, ns);
+        M = blkdiag(M{:});
     elseif strcmp(pot, 'TLP')
-        M = TLPmatrix(IDparams, p, np, ns);
+        M = TSLmatrix(IDparams, [], [], p, ns);
     else
         error("Invalid potential given: should be 'SLP', 'DLP', or 'TLP'.");
     end
 
+    separation = pars.separate_spheroids();
+
     % Calculate effect from each particle on all the others
     if ns~=1
-        error("Not implemented.");
+        fprintf("Generating matvec matrix for multiple bodies (%d bodies)...\n", ns);
         for i=1:ns
             % Get target coordinates relative to self (particle i)
             [X,~]=IDparams.get_X(i);
+            % Get surface normals relative to self (particle i)
             [Nu,~]=IDparams.get_Norm_rot(p, i);
 
             ind=[1:i-1 i+1:ns];
             sep = separation(i,ind);
-            sep_rep = repmat(sep, np,1);
+            sep_rep = repmat(sep, np, 1);
             smooth_sep = sep_rep(:)==1;
 
-            X_spectral = cell(1,ns);
+            X_spectral = cell(1, ns);
             X_spectral{i} = X(~smooth_sep,:);
             X_smooth = X(smooth_sep,:);
 
-            Nu_spectral_x = cell(1,ns); Nu_spectral_y=cell(1,ns); Nu_spectral_z=cell(1,ns);
-            Nu_spectral_x{i} = Nu_x_ii(~smooth_sep,:);
-            Nu_spectral_y{i} = Nu_y_ii(~smooth_sep,:);
-            Nu_spectral_z{i} = Nu_z_ii(~smooth_sep,:);
-
-            SL_spectral_cell=spheroidalSL(IDparams,X_spectral);
-            [SP_spectral_x_cell,SP_spectral_y_cell,SP_spectral_z_cell]=spheroidalSP(IDparams,X_spectral,Nu_spectral_x,Nu_spectral_y,Nu_spectral_z);
+            Nu_spectral = cell(1,ns);
+            Nu_spectral{i} = Nu(~smooth_sep,:);
+            Nu_smooth= Nu(smooth_sep,:);
 
             %%%
             %%% Handle near target points
             %%%
-
             if strcmp(pot, 'SLP')
-                LP_spectral_cell = L2Stk(IDparams, np, ns);
+                LP_spectral_cell = SLPmatrix_dev(IDparams, X_spectral, np, ns);
             elseif strcmp(pot, 'DLP')
-                LP_spectral_cell = L2StkDLP();
+                LP_spectral_cell = DLPmatrix_dev(IDparams, X_spectral, np, ns);
             elseif strcmp(pot, 'TLP')
-                LP_spectral_cell = L2StkTLP();
+                LP_spectral_cell = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns);
             else
                 error("Invalid potential was given; should be 'SLP', 'DLP', or 'TLP'.");
             end
@@ -96,9 +96,9 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
             %%%
             %%% Handle far target points
             %%%
-
             LP_smooth=[];
             if ~isempty(X_smooth)
+                fprintf("Handling smooth points in L2StkMatVecKernel...");
                 %%% Setup Kernel_Eval parameters
                 if ~if_oblate(i)
                     Xself=prolate_spheroid_shape(p,u0(i),a(i));
@@ -108,16 +108,16 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                 Sns=SurfaceSph(Xself);
 
                 if strcmp(pot, 'SLP')
-                    pot = 'SL_Stk_3D';
+                    KEpot = 'SL_Stk_3D';
                 elseif strcmp(pot, 'DLP')
-                    pot = 'DL_Stk_3D';
+                    KEpot = 'DL_Stk_3D';
                 elseif strcmp(pot, 'TLP')
-                    pot = 'TSL_Stk_3D';
+                    KEpot = 'TSL_Stk_3D';
                 else
                     error("Invalid potential given.");
                 end
     
-                KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-8,2,400,1);
+                KEparams = Kernel_Eval_parameters(KEpot,0,1,1,1,1e-8,2,400,1);
                 KEparams.dim = 3; KEparams.mu=1;
                 [~, gwt]=g_grid(p+1);
                 wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
@@ -131,8 +131,8 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                 KEparams.cj=repmat((1:3)',np,1);
                 KEparams.ci=repmat((1:3)',nt_smooth,1);
 
-                if strcmp(potential, 'TLP')
-                    KEparams.nor = nu_eval;
+                if strcmp(pot, 'TLP')
+                    KEparams.nor = Nu_smooth;
                 end
     
                 LP_smooth = Kernel_Eval(Xtrg_ii,Xv,KEparams);
@@ -158,42 +158,213 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                     the following code snippet does.
                 %}
 
-                nt = size(X_smooth, 1);
-                np = size(Xself, 1);
-                row_x = 1:3:3*nt;
-                row_y = 2:3:3*nt;
-                row_z = 3:3:3*nt;
-                col_x = 1:3:3*np;
-                col_y = 2:3:3*np;
-                col_z = 3:3:3*np;
-                row_perm = [row_x, row_y, row_z];
-                col_perm = [col_x, col_y, col_z];
+                % Note that LP_smooth is not necessarily square.
+                nt_smooth = size(X_smooth, 1); % Number of smooth target points
 
-                % prm(1:3:3*np) = 1:np; prm(2:3:3*np) = np+1:2*np; prm(3:3:3*np)=2*np+1:3*np;
+                % Permutation for columns (source points)
+                prm_col = zeros(1, 3*np); 
+                prm_col(1:3:end) = 1:np; 
+                prm_col(2:3:end) = np + (1:np); 
+                prm_col(3:3:end) = 2*np + (1:np);
 
-                % Apply the permutation
-                LP_smooth = LP_smooth(row_perm_idx, col_perm_idx);
+                % Permutation for rows (target points)
+                prm_row = zeros(1, 3*nt_smooth);
+                prm_row(1:3:end) = 1:nt_smooth;
+                prm_row(2:3:end) = nt_smooth + (1:nt_smooth);
+                prm_row(3:3:end) = 2*nt_smooth + (1:nt_smooth);
+
+                LP_smooth = LP_smooth(prm_row, prm_col);
             end
 
             %%%
             %%% Fill in appropriate block of the matrix
             %%%
 
-            % TODO: change below for dimension matching.
-            LPi = zeros(np*(ns-1),np);
-            LPi(smooth_sep,:) = LP_smooth;
-            LPi(~smooth_sep,:) = LP_spectral_cell{i};
+            % LPi represents source-to-all
+            smooth_sep_rows = repelem(smooth_sep, 3, 1);
+            LPi = zeros(3*np*(ns-1),3*np);
+            LPi(smooth_sep_rows,:) = LP_smooth;
+            LPi(~smooth_sep_rows,:) = LP_spectral_cell{i};
     
-            full_ind = ones(1,ns);
-            full_ind(i)=0;
-            full_ind = reshape(repmat(full_ind,np,1),[],1)==1;
+            % Now, place LPi in the correct block of the matrix M
+            full_ind = true(3*np*ns, 1);
+            full_ind((i-1)*3*np+1 : i*3*np) = false; % Remove interaction of source particle i
     
-            M(full_ind,(i-1)*np+1:i*np) = LPi;
+            M(full_ind, (i-1)*(3*np)+1:i*(3*np)) = LPi;
         end
     end
 end
 
-function M = SLPmatrix(IDparams, np, ns)
+%% DEVELOPMENT
+function M_cells = DLPmatrix_dev(IDparams, X_spectral, np, ns)
+    is_self_interaction = isempty(X_spectral);
+
+    M_cells = cell(1, ns);
+    
+    nu_x_cells = cell(1, ns);
+    nu_y_cells = cell(1, ns);
+    nu_z_cells = cell(1, ns);
+
+    for i = 1:ns
+        if is_self_interaction
+            num_trg = np;
+        else
+            num_trg = size(X_spectral{i}, 1);
+        end
+        
+        if num_trg > 0
+            nu_x_cells{i} = repmat([1,0,0], num_trg, 1);
+            nu_y_cells{i} = repmat([0,1,0], num_trg, 1);
+            nu_z_cells{i} = repmat([0,0,1], num_trg, 1);
+        end
+    end
+
+    % Cell i corresponds to particle i acting on target points in X_spectral 
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_cells, nu_y_cells, nu_z_cells);
+    [DP_x_cells, DP_y_cells, DP_z_cells] = spheroidalDP(IDparams, X_spectral, nu_x_cells, nu_y_cells, nu_z_cells);
+
+    for i=1:ns
+        if ~is_self_interaction && isempty(X_spectral{i})
+            continue;
+        end
+
+        [~, X_src_i] = IDparams.get_X(i);
+        N_src_i = IDparams.get_Norm(IDparams.p, i); %maybe rotation is needed?
+        
+        % Get target points
+        if is_self_interaction
+            X_trg_i = X_src_i;
+        else
+            X_trg_i = X_spectral{i};
+        end
+        
+
+        % Extract SP terms
+        SP_x_i = SP_x_cells{i};
+        SP_y_i = SP_y_cells{i};
+        SP_z_i = SP_z_cells{i};
+
+        % Extract DP terms
+        DP_x_i = DP_x_cells{i};
+        DP_y_i = DP_y_cells{i};
+        DP_z_i = DP_z_cells{i};
+
+        % Extract DP sum term
+        % [ x*DPx y*DPx z*DPx ] [ sigma_x ]
+        % [ x*DPy y*DPy z*DPy ] [ sigma_y ]
+        % [ x*DPz y*DPz z*DPz ] [ sigma_z ]
+        M1_11 = diag(X_trg_i(:,1)) * DP_x_i; M1_12 = diag(X_trg_i(:,2)) * DP_x_i; M1_13 = diag(X_trg_i(:,3)) * DP_x_i;
+        M1_21 = diag(X_trg_i(:,1)) * DP_y_i; M1_22 = diag(X_trg_i(:,2)) * DP_y_i; M1_23 = diag(X_trg_i(:,3)) * DP_y_i;
+        M1_31 = diag(X_trg_i(:,1)) * DP_z_i; M1_32 = diag(X_trg_i(:,2)) * DP_z_i; M1_33 = diag(X_trg_i(:,3)) * DP_z_i;
+        M1 = [
+            M1_11, M1_12, M1_13;
+            M1_21, M1_22, M1_23;
+            M1_31, M1_32, M1_33
+        ];
+
+        % Extract individual DP term; i.e. DP[y \cdot \sigma]
+        % [ DPx ]                        [ sigma_x ]
+        % [ DPy ][ Xsrc_x Xsrc_y Xsrc_z ][ sigma_y ]
+        % [ DPz ]                        [ sigma_z ]
+        M2 = [DP_x_i; DP_y_i; DP_z_i] * [diag(X_src_i(:,1)), diag(X_src_i(:,2)), diag(X_src_i(:,3))];
+
+        % Extract SP sum term
+        % [ SPx ][ Nx Nx Nx ][ sigma_x ]
+        % [ SPy ][ Ny Ny Ny ][ sigma_y ]
+        % [ SPz ][ Nz Nz Nz ][ sigma_z ]
+        M3_11 = SP_x_i * diag(N_src_i(:,1)); M3_12 = SP_y_i * diag(N_src_i(:,1)); M3_13 = SP_z_i * diag(N_src_i(:,1));
+        M3_21 = SP_x_i * diag(N_src_i(:,2)); M3_22 = SP_y_i * diag(N_src_i(:,2)); M3_23 = SP_z_i * diag(N_src_i(:,2));
+        M3_31 = SP_x_i * diag(N_src_i(:,3)); M3_32 = SP_y_i * diag(N_src_i(:,3)); M3_33 = SP_z_i * diag(N_src_i(:,3));
+        M3 = [
+            M3_11, M3_12, M3_13;
+            M3_21, M3_22, M3_23;
+            M3_31, M3_32, M3_33
+        ];
+
+        M_cells{i} = -M1 + M2 - M3;
+    end
+end
+function M_cells = SLPmatrix_dev(IDparams, X_spectral, np, ns)
+    is_self_interaction = isempty(X_spectral);
+
+    M_cells = cell(1, ns);
+    
+    nu_x_cells = cell(1, ns);
+    nu_y_cells = cell(1, ns);
+    nu_z_cells = cell(1, ns);
+
+    for i = 1:ns
+        if is_self_interaction
+            num_trg = np;
+        else
+            num_trg = size(X_spectral{i}, 1);
+        end
+        
+        if num_trg > 0
+            nu_x_cells{i} = repmat([1,0,0], num_trg, 1);
+            nu_y_cells{i} = repmat([0,1,0], num_trg, 1);
+            nu_z_cells{i} = repmat([0,0,1], num_trg, 1);
+        end
+    end
+    
+    % Get all SP matrices. Each output is np x np x ns.
+    SLM = spheroidalSL(IDparams);
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_cells, nu_y_cells, nu_z_cells);
+
+    for i=1:ns
+        if ~is_self_interaction && isempty(X_spectral{i})
+            continue;
+        end
+
+        if is_self_interaction
+            [~, X_src_i] = IDparams.get_X(i);
+            X_trg_i = X_src_i;
+        else
+            X_trg_i = X_spectral{i};
+        end
+
+        % Extract SL term
+        % M1 for each spheroid: 3np x 3np
+        % [ SL 0  0 ][ sigma_x ] = [ SL[sigma_x] ]
+        % [ 0  SL 0 ][ sigma_y ]   [ SL[sigma_y] ]
+        % [ 0  0  SL][ sigma_z ]   [ SL[sigma_z] ] 
+        M1 = kron(eye(3), SLM(:,:,i));
+
+        % Extract SP terms
+        SP_x_i = SP_x_cells{i};
+        SP_y_i = SP_y_cells{i};
+        SP_z_i = SP_z_cells{i};
+
+        % Surface SP but with arbitrary derivative vector, 
+        % dSx: np x np; 
+        % M2 for each spheroid: 3np x 3np
+        % [ x*dSx y*dSx z*dSx ][ sigma_x ]
+        % [ x*dSy y*dSy z*dSy ][ sigma_y ]
+        % [ x*dSz y*dSz z*dSz ][ sigma_z ]
+        Dx = diag(X_trg_i(:,1));
+        Dy = diag(X_trg_i(:,2));
+        Dz = diag(X_trg_i(:,3));
+        M2 = [
+            Dx*SP_x_i, Dy*SP_x_i, Dz*SP_x_i;
+            Dx*SP_y_i, Dy*SP_y_i, Dz*SP_y_i;
+            Dx*SP_z_i, Dy*SP_z_i, Dz*SP_z_i
+        ];
+
+        % SPM[Xsrc dot sigma]
+        % dSx: np x np;
+        % Xsrc_x: np x np;
+        % [ dSx ]                        [ sigma_x ]
+        % [ dSy ][ Xsrc_x Xsrc_y Xsrc_z ][ sigma_y ]
+        % [ dSz ]                        [ sigma_z ]
+        M3 = [SP_x_i; SP_y_i; SP_z_i] * [Dx, Dy, Dz];
+
+        % Collect all of the results
+        M_cells{i} = M1 - M2 + M3;
+    end
+end
+
+%% SELF TO SELF
+function M = SLPmatrix(IDparams, X_spectral, np, ns)
     SLM = spheroidalSL(IDparams);
     M_cells = cell(1, ns);
     nu_x_all = repmat([1,0,0], np, 1, ns);
@@ -201,7 +372,7 @@ function M = SLPmatrix(IDparams, np, ns)
     nu_z_all = repmat([0,0,1], np, 1, ns);
     
     % Get all SP matrices. Each output is np x np x ns.
-    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_all, nu_y_all, nu_z_all);
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_all, nu_y_all, nu_z_all);
 
     % A crutch to handle the ns=1 case...
     if ns == 1
@@ -209,11 +380,7 @@ function M = SLPmatrix(IDparams, np, ns)
     end
 
     for i=1:ns
-        if ns==1
-            X_src_i = IDparams.get_X();
-        else
-            X_src_i = IDparams.get_X(i);
-        end
+        [~, X_src_i] = IDparams.get_X(i);
 
         % Extract SL term
         % M1 for each spheroid: 3np x 3np
@@ -332,13 +499,17 @@ function M = DLPmatrix(IDparams, np, ns)
     M = blkdiag(M_cells{:});
 end
 
-function M = TLPmatrix(IDparams, p, np, ns)
+function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
+    np = 2*p*(p + 1);
     M_cells = cell(1, ns);
-    nu_x_all = repmat([1,0,0], np, 1, ns);
-    nu_y_all = repmat([0,1,0], np, 1, ns);
-    nu_z_all = repmat([0,0,1], np, 1, ns);
 
-    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_all, nu_y_all, nu_z_all);
+    if isempty(Nu_spectral) % Self-evaluation
+        nu_x_all = repmat([1,0,0], np, 1, ns);
+        nu_y_all = repmat([0,1,0], np, 1, ns);
+        nu_z_all = repmat([0,0,1], np, 1, ns);
+    end
+
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_all, nu_y_all, nu_z_all);
     if ns==1
         % Ideally, should have a different function for doing this.
         SP_x_cells = {SP_x_cells}; SP_y_cells = {SP_y_cells}; SP_z_cells = {SP_z_cells};
@@ -349,9 +520,9 @@ function M = TLPmatrix(IDparams, p, np, ns)
     Z = zeros(np);
     ddS_x_cells = cell(1, ns); ddS_y_cells = ddS_x_cells; ddS_z_cells = ddS_x_cells;
     for i=1:ns
-        [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, []);
-        [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, []);
-        [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, []);
+        [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, X_spectral);
+        [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, X_spectral);
+        [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, X_spectral);
 
         if IDparams.oblate(i)
             X_self = oblate_spheroid_shape(p, IDparams.u0, IDparams.a);
@@ -379,6 +550,7 @@ function M = TLPmatrix(IDparams, p, np, ns)
         %%%
         %%% Setup
         %%%
+        % Grab source points
         if ns==1
             X_src_i = IDparams.get_X();
         else
@@ -401,7 +573,6 @@ function M = TLPmatrix(IDparams, p, np, ns)
         %%%
         %%% Build matrix
         %%%
-
         % Extract SP sum term
         M1_diag_term = diag(N_src_i(:,1))*SP_x_i + diag(N_src_i(:,2))*SP_y_i + diag(N_src_i(:,3))*SP_z_i;
         M1 = kron(eye(3), M1_diag_term);
