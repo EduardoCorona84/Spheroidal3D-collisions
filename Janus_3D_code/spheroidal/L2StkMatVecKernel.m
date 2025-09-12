@@ -4,6 +4,8 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
         potential. Note that this mimics the code found in spheroidalMatVecKernel.m.
     %}
 
+    DEVELOPMENT_FLAG = false;
+
     if isempty(pars.u0)
         error("No surface parameter u_0 given")
     end
@@ -58,8 +60,57 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
 
     separation = pars.separate_spheroids();
 
-    % Calculate effect from each particle on all the others
-    if ns~=1
+    if DEVELOPMENT_FLAG
+    if ns > 1
+        fprintf("Generating matvec matrix for multiple bodies (%d bodies)...\n", ns);
+        for i=1:ns % Source particle i
+            % This is necessary due to how the spheroidal LPs are setup.
+            % Otherwise, we would have to do something similar to
+            % spheroidalMatVecKernel's code.
+            params_i = IDparams.copy();
+            params_i.u0 = IDparams.u0(i);
+            params_i.a = IDparams.a(i);
+            params_i.centers = IDparams.centers(i, :);
+            params_i.thetas = IDparams.thetas(i);
+            params_i.phis = IDparams.phis(i);
+            params_i.oblate = IDparams.oblate(i);
+            params_i.sigma = eye(np);
+
+            for j=1:ns % Target particle j
+                if i==j % Self-interaction already handled above.
+                    continue;
+                end
+
+                X_target = IDparams.get_X_at_target(i, j);
+                M_ji = zeros(3*np, 3*np); % Interaction of j on i
+
+                is_smooth = separation(i, j);
+                if ~is_smooth % Near
+                    if strcmp(pot, 'SLP')
+                        M_cell = SLPmatrix(IDparams, X_target, np, 1);
+                        M_ji = M_cell{1};
+                    elseif strcmp(pot, 'DLP')
+                        M_ji = DLP_matrix_at_target(params_i, X_target, np);
+                    elseif strcmp(pot, 'TLP')
+                        error("not implemented.");
+                        [Nu_target,~] = IDparams.get_Norm_rot(p, j);
+                        M_cell = TSLmatrix(params_i, X_target, Nu_target, p, 1);
+                        M_ji = M_cell{1};
+                    end
+                else % Far
+                    error("Not implemented.")
+                end
+
+                % Rows are targets, columns are source
+                % M_ji = \int_{\Gamma_i} (stuff)*\sigma_j dS
+                M((j-1)*(3*np) + (1:3*np), (i-1)*(3*np) + (1:3*np)) = M_ji;
+            end % End for target spheroid j
+        end % End for source spheroid i
+    end
+    end
+
+    % Calculate self-to-all interaction (i.e. the off-diagonal blocks)
+    if ns~=1 && ~DEVELOPMENT_FLAG
         fprintf("Generating matvec matrix for multiple bodies (%d bodies)...\n", ns);
         for i=1:ns
             % Get target coordinates relative to self (particle i)
@@ -196,6 +247,53 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
 end
 
 %% DEVELOPMENT
+function M = DLP_matrix_at_target(params_i, X_target, np)
+    nu_x_all = repmat([1,0,0], np, 1);
+    nu_y_all = repmat([0,1,0], np, 1);
+    nu_z_all = repmat([0,0,1], np, 1);
+
+    [SP_x, SP_y, SP_z] = spheroidalSP(params_i, X_target, nu_x_all, nu_y_all, nu_z_all);
+    [DP_x, DP_y, DP_z] = spheroidalDP(params_i, X_target, nu_x_all, nu_y_all, nu_z_all);
+
+    X_src = params_i.get_X - params_i.centers;
+    N_src = params_i.get_Norm(params_i.p, 1);
+    X_trg = X_target;
+
+    % Extract DP sum term
+    % [ x*DPx y*DPx z*DPx ] [ sigma_x ]
+    % [ x*DPy y*DPy z*DPy ] [ sigma_y ]
+    % [ x*DPz y*DPz z*DPz ] [ sigma_z ]
+    M1_11 = diag(X_trg(:,1)) * DP_x; M1_12 = diag(X_trg(:,2)) * DP_x; M1_13 = diag(X_trg(:,3)) * DP_x;
+    M1_21 = diag(X_trg(:,1)) * DP_y; M1_22 = diag(X_trg(:,2)) * DP_y; M1_23 = diag(X_trg(:,3)) * DP_y;
+    M1_31 = diag(X_trg(:,1)) * DP_z; M1_32 = diag(X_trg(:,2)) * DP_z; M1_33 = diag(X_trg(:,3)) * DP_z;
+    M1 = [
+        M1_11, M1_12, M1_13;
+        M1_21, M1_22, M1_23;
+        M1_31, M1_32, M1_33
+    ];
+
+    % Extract individual DP term; i.e. DP[y \cdot \sigma]
+    % [ DPx ]                        [ sigma_x ]
+    % [ DPy ][ Xsrc_x Xsrc_y Xsrc_z ][ sigma_y ]
+    % [ DPz ]                        [ sigma_z ]
+    M2 = [DP_x; DP_y; DP_z] * [diag(X_src(:,1)), diag(X_src(:,2)), diag(X_src(:,3))];
+
+    % Extract SP sum term
+    % [ SPx ][ Nx Nx Nx ][ sigma_x ]
+    % [ SPy ][ Ny Ny Ny ][ sigma_y ]
+    % [ SPz ][ Nz Nz Nz ][ sigma_z ]
+    M3_11 = SP_x * diag(N_src(:,1)); M3_12 = SP_y * diag(N_src(:,1)); M3_13 = SP_z * diag(N_src(:,1));
+    M3_21 = SP_x * diag(N_src(:,2)); M3_22 = SP_y * diag(N_src(:,2)); M3_23 = SP_z * diag(N_src(:,2));
+    M3_31 = SP_x * diag(N_src(:,3)); M3_32 = SP_y * diag(N_src(:,3)); M3_33 = SP_z * diag(N_src(:,3));
+    M3 = [
+        M3_11, M3_12, M3_13;
+        M3_21, M3_22, M3_23;
+        M3_31, M3_32, M3_33
+    ];
+
+    M = -M1 + M2 - M3;
+end
+
 function M_cells = DLPmatrix_dev(IDparams, X_spectral, np, ns)
     is_self_interaction = isempty(X_spectral);
 
@@ -592,4 +690,9 @@ function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
     end
 
     M = blkdiag(M_cells{:});
+end
+
+%% HELPER CODE
+function indices = LOCAL_get_spheroid_index(np, source, target)
+    
 end

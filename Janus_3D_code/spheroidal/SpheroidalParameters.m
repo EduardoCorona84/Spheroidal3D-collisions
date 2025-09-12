@@ -23,6 +23,8 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
 
         etaS
         etaC
+
+        useSurfDivFormula = false % Decide whether to use first-order formula in TSL
     end
     properties
         p = 0
@@ -46,8 +48,7 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
                 if p~=fix(p)
                     error("size of sigma must match discretization on a Gauss-Legendre grid.")
                 end
-            end
-            
+            end 
         end
 
         %Calculate spherical/spheroidal harmonic coefficients
@@ -436,8 +437,8 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
             end 
         end
 
-        %plot spheroids
-        function plot(obj,Xt)
+        %plot spheroids and normals
+        function plot(obj,Xt,nu)
             X=obj.get_X;
             if nargin==1
                 Xt=[];
@@ -446,6 +447,9 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
             colors=[repmat([0 0 1],size(X,1),1); repmat([1 0 0],size(Xt,1),1)];
             figure;
             scatter3(Xplt(:,1),Xplt(:,2),Xplt(:,3),16,colors,'filled');
+            if nargin == 3
+                
+            end
             axis equal;
         end
 
@@ -488,7 +492,6 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
             ns=size(obj.centers,1);
             np=2*ext_p*(ext_p+1);
             nor_rot=zeros(np*ns,3);
-            % nor_rot = zeros(np, 3, ns);
             nor_self=[];
             if nargin<3
                 % no center particle given, do self rotation only.
@@ -569,5 +572,47 @@ classdef SpheroidalParameters < matlab.mixin.Copyable
             end
         end
 
+        function X = get_X_at_target(obj, source_index, target_index)
+            assert(source_index ~= target_index, "Not implemented for getting points at self.");
+
+            px = obj.p; assert(px > 0);
+            np = 2*px*(px+1);
+            u0_arr=obj.u0;
+            a_arr=obj.a;
+            center_source=obj.centers(source_index,:)';
+            if isempty(obj.Rmat)
+                theta=obj.thetas(source_index);
+                phi=obj.phis(source_index);
+            else
+                R=obj.Rmat(:,:,source_index);
+            end
+
+            if obj.oblate(target_index)
+                X=oblate_spheroid_shape(px,u0_arr(target_index),a_arr(target_index));
+            else
+                X=prolate_spheroid_shape(px,u0_arr(target_index),a_arr(target_index));
+            end
+
+            center_target=obj.centers(target_index,:)';
+            if isempty(obj.Rmat)
+                theta_target=obj.thetas(target_index);
+                phi_target=obj.phis(target_index);
+
+                Rty=[cos(theta_target) 0 sin(theta_target); 0 1 0; -sin(theta_target) 0 cos(theta_target)];
+                Rtz=[cos(phi_target) -sin(phi_target) 0; sin(phi_target) cos(phi_target) 0; 0 0 1];
+                Rt=Rtz*Rty;
+
+                Ry=[cos(theta) 0 sin(theta); 0 1 0; -sin(theta) 0 cos(theta)];
+                Rz=[cos(phi) -sin(phi) 0; sin(phi) cos(phi) 0; 0 0 1];
+                R=Rz*Ry;
+            else
+                Rt=obj.Rmat(:,:,target_index);
+            end
+
+            X = ( R' * ( Rt * X' + repmat(center_target - center_source,1,np) ) )';
+        end
+
+        function X = get_nu_at_target(obj, source_index, target_index)
+        end
     end
 end
