@@ -19,7 +19,7 @@ end
 successful = cellfun(@(x) ~isempty(x), noisy_matrices(:, 1));
 noisy_matrices = noisy_matrices(successful, :);
 
-b = (2*rand(problem_size, 1) - 1)*problem_size;
+b = (2*rand(problem_size, 1) - 1);
 
 %pass the test matrices to the method comparison function
 %saved .fig files in the plots folder

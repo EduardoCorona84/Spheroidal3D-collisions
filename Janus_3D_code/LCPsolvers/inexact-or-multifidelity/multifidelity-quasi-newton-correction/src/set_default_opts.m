@@ -27,7 +27,6 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
         opts.warm.solver_opts.max_iter = 20;
     end
     
-
     %we won't make the info struct as the warm start solver will do this automatically. We will just assign the resulting struct to the info struct of the multifielity (under warm).
     if ~isfield(opts.warm.solver_opts, 'storeIts') || isempty(opts.warm.solver_opts.storeIts)
         opts.warm.solver_opts.storeIts = true;
@@ -40,19 +39,42 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     end
 
     if ~isfield(opts.outer, 'max_iter')
-        opts.outer.max_iter = 10;
+        opts.outer.max_iter = 100;
     end
 
     if ~isfield(opts.outer, 'correction')
         opts.outer.correction = true;
     end
 
-    %make correction opts struct
+    %if we warm start, we can use this as a correction on the first iteration of multifidelity solve
+    if opts.warm.enabled == true && ~isfield(opts.outer, 'warm_correction')
+        opts.outer.warm_correction = true;
+    end
+
+    %we cannot do warm correction if we are not warm starting, this should cover cases in which warm_correction is not set with or is set to true when warm start is false.
+    if opts.warm.enabled == false
+        opts.outer.warm_correction = false;
+    end
+
+    %these are out here as right now I am using the same secant directions for correction and prox. This could be changed in the future.
+
+    if ~isfield(opts.outer, 'correction')
+        opts.outer.correction = true;
+    end
+    
+    if ~isfield(opts.outer, 'correction_opts')
+        opts.outer.correction_opts = struct();
+    end
+
+    if ~isfield(opts.outer.correction_opts, 'direction')
+        opts.outer.correction_opts.direction = 'matvec';
+    end
+
+
+
+    %make fill in the correction opts struct
     if opts.outer.correction == true 
 
-        if ~isfield(opts.outer, 'correction_opts')
-            opts.outer.correction_opts = struct();
-        end
 
         if ~isfield(opts.outer.correction_opts, 'update')
             opts.outer.correction_opts.update = 'sr1';
@@ -169,22 +191,28 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
         opts.inner.enabled = true;
     end
 
-
-    if ~isfield(opts.inner, 'solver')
-        opts.inner.solver = 'outer preconditioned prox';
-        %we are going to use the exact same information for the prox steps as the outer solver. some of the other things might have to be edited a bit.
-        opts.inner.solver_opts = opts.outer.solver_opts;
+    %by default us outer preconditioned prox, we won't set all the opts as the function does it for us (in outer_solver)
+    if ~isfield(opts.inner, 'solver_opts')
+        opts.inner.solver_opts = struct();
     end
 
-    opts.inner.solver_opts.A = create_A(fg_low);
+    if ~isfield(opts.inner.solver_opts, 'solver')
+        opts.inner.solver_opts.solver = 'outer preconditioned prox';
+    end
 
-    opts.warm.solver_opts.A = opts.inner.solver_opts.A;
-
-    opts.warm.solver_opts.b = opts.inner.solver_opts.b;
+    if ~isfield(opts.inner.solver_opts, 'A')
+        opts.inner.solver_opts.A = create_A(fg_low);
+    end
 
     if ~isfield(opts.inner.solver_opts, 'max_iter')
         opts.inner.solver_opts.max_iter = 1;
     end
+
+    opts.inner.solver_opts.b = opts.outer.solver_opts.b;
+
+    opts.warm.solver_opts.A = opts.inner.solver_opts.A;
+
+    opts.warm.solver_opts.b = opts.inner.solver_opts.b;
 
     %for every outer iteration, we have an entry in the cell array to store the info the inner iterations corresponding to the outer iteration.
     info.inner = cell(opts.outer.max_iter + 1, 1);

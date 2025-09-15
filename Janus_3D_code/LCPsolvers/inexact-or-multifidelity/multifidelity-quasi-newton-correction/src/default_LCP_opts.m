@@ -52,6 +52,8 @@ function [opts, info] = default_LCP_opts(opts, x0, multi)
         switch lower(opts.solver)
             case 'bbpgd'
                 opts.stepSize.kappa = 'bb1';
+                %testing
+                opts.stepSize.eta = 'uniform';
             otherwise 
                 opts.stepSize.kappa = 'uniform';
         end

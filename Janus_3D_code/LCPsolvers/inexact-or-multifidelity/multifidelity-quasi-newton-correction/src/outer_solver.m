@@ -2,9 +2,16 @@ function [x_k_half, opts] = outer_solver(k, x_km1, grad_km1, Ax_km1, s_k, y_k, o
 
     switch lower(opts.outer.solver_opts.solver)
         case 'bbpgd'
-            x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;
+            if k == 0
+                x_k_half = x_km1 - grad_km1;
+            else
+                x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;
+            end
+            x_k_half = max(x_k_half, 0);
+
         case 'bb2'
             x_k_half = x_km1 - ((s_k'*s_k)/(s_k'*y_k))*grad_km1;
+
         case 'prox'
             %update the inverse Hessian, we have a subsection of opts dedicated to the outer solver, that we pass to all these functions so its plug and play
             opts.outer.solver_opts = update_Hk(k, s_k, y_k, opts.outer.solver_opts);

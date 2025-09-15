@@ -7,7 +7,7 @@ function fg = create_fg(A_init, b)
     function [f_k, grad_k, Ax_k] = temp_fg(x_k, Ax_km1, Aq, eta)
 
         %Allow for the function to reuse previous evaluations to create a new evaluation.
-        if nargin < 2 || isempty(Ax_km1)
+        if nargin < 2 || isempty(Ax_km1) || isempty(eta) || isempty(Aq)
             Ax_k = A(x_k);
 
         else 

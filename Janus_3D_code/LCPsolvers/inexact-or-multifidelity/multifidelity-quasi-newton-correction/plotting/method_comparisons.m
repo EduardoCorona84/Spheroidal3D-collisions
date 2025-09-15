@@ -50,15 +50,22 @@ function method_comparisons(A, A_low, b)
 
 
     %alternating correction
-    opts.warm.enabled = true;
+    opts.warm.enabled = false;
     opts.inner.enabled = true;
     opts.outer.correction = true;
+    opts.outer.correction_opts.direction = 'matvec';
+    opts.outer.warm_correction = true;
     opts.outer.adaptive = 'none';
+    %opts.outer.solver_opts.solver = 'bbpgd';
+    %opts.inner.solver_opts.solver = 'bbpgd';
     opts.outer.solver_opts.tol_abs = 1e-16;
     opts.outer.solver_opts.tol_rel = 1e-16;
     opts.outer.solver_opts.A = @(x) A*x;
     opts.outer.solver_opts.b = b;
+    opts.inner.solver_opts.A = @(x) A_low*x;
+    opts.inner.solver_opts.b = b;
     opts.outer.max_iter = 100;
+    opts.inner.solver_opts.max_iter = 1;
     x0 = zeros(problem_size, 1);
     [~, info_corr] = multifidelity_wrapper(fg, fg_low, x0, opts);
 

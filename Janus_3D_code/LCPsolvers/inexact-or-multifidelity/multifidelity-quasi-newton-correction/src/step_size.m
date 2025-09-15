@@ -55,12 +55,4 @@ function [kappa, Ap] = step_size(k, p, x, Ax, opts, s_k, y_k)
     %   of x + kappa p = 0 by taking -x / p elementwize. When -x / p < 0 then
     %   it is irrelevant. But if not then we need to make sure that we only
     %   travel to the closest feasible point.
-    if k < 0
-        if kappa <= 1 
-            return 
-        else
-            kappa_list = - x(p < 0) ./ p(p < 0);
-            kappa = min(kappa, min(kappa_list));
-        end
-    end
 end
