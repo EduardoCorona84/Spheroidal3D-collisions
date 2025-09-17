@@ -1,4 +1,4 @@
-function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X, nu)
+function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X, nu_trg)
     if isempty(pars.u0)
         error("No surface parameter u_0 given")
     end
@@ -38,7 +38,7 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
         X_spectral = cell(1,ns);
         if strcmp(pot, 'TLP')
             nu_spectral = cell(1,ns);
-            Nu_t = pars.get_nu_targets(nu);
+            Nu_t = pars.get_nu_targets(nu_trg);
         end
 
         % Separate target points and normal vectors into nearby and far
@@ -80,12 +80,13 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
             nt_smooth=size(X_smooth,1);
 
             if nt_smooth>0
-                fprintf("Kernel_Eval being used in L2StkMatVec...");
+                fprintf("Kernel_Eval being used in L2StkMatVec...\n");
                 if ~if_oblate(i)
                     Xself=prolate_spheroid_shape(p,u0(i),a(i));
                 else
                     Xself=oblate_spheroid_shape(p,u0(i),a(i));
                 end
+                nu_self = get_norm_vecs(p, u0(i), if_oblate(i));
                 Sns=SurfaceSph(Xself);
 
                 if strcmp(pot, 'SLP')
@@ -114,7 +115,10 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
 
                 %%% Normal vector handling
                 if strcmp(pot, 'TLP')
-                    KEparams.nor = reshape(repmat(nu,1,3)',3,[])';
+                    Nu_smooth = Nu_t(sep(:,i)==1,:,i);
+                    KEparams.nor = reshape(repmat(Nu_smooth,1,3)',3,[])';
+                elseif strcmp(pot, 'DLP')
+                    KEparams.nor = reshape(repmat(nu_self,1,3)',3,[])';
                 end
 
                 LP_Kernel = Kernel_Eval(Xtrg_ii,Xv,KEparams);

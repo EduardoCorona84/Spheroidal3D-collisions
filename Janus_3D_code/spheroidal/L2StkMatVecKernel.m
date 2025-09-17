@@ -4,7 +4,7 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
         potential. Note that this mimics the code found in spheroidalMatVecKernel.m.
     %}
 
-    DEVELOPMENT_FLAG = false;
+    DEVELOPMENT_FLAG = true;
 
     if isempty(pars.u0)
         error("No surface parameter u_0 given")
@@ -18,10 +18,6 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
 
     if p < 2
         error('KernelEval (smooth quadrature) requires at least p=2.')
-    end
-
-    if strcmp(pot, 'TLP') && isempty(nu_eval)
-        error("Normal vectors at target points must be passed in for the traction layer potential.");
     end
 
     u0=pars.u0;
@@ -46,9 +42,8 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
     IDparams = copy(pars);
     IDparams.sigma = repmat(eye(np),1,1,ns);
 
-    if strcmp(pot, 'SLP')
-        M = SLPmatrix_dev(IDparams, [], np, ns);
-        M = blkdiag(M{:});
+    if strcmp(pot, 'SLP') % Not yet implemented!
+        M = SLPmatrix(IDparams, [], np, ns);
     elseif strcmp(pot, 'DLP')
         M = DLPmatrix_dev(IDparams, [], np, ns);
         M = blkdiag(M{:});
@@ -70,179 +65,95 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
             params_i = IDparams.copy();
             params_i.u0 = IDparams.u0(i);
             params_i.a = IDparams.a(i);
-            params_i.centers = IDparams.centers(i, :);
-            params_i.thetas = IDparams.thetas(i);
-            params_i.phis = IDparams.phis(i);
             params_i.oblate = IDparams.oblate(i);
             params_i.sigma = eye(np);
+
+            % Recall that we shift the entire coordinate system so that the
+            % spheroid is upright and is centered at the origin. Thus, the
+            % only complication are the target points.
+            params_i.centers = [0 0 0];
+            params_i.thetas = 0;
+            params_i.phis = 0;
+
+            % Get all coordinates of other spheroids
+            [X_all_targets, X_self] = IDparams.get_X(i);
+            [Nu_all_targets, Nu_self] = IDparams.get_Norm_rot(p,i);
+
+            spheroid_index = 0;
 
             for j=1:ns % Target particle j
                 if i==j % Self-interaction already handled above.
                     continue;
                 end
 
-                X_target = IDparams.get_X_at_target(i, j);
+                spheroid_index = spheroid_index + 1;
+                row_indices = (spheroid_index - 1)*np+1 : spheroid_index*np;
+
+                X_target = X_all_targets(row_indices,:);
+                Nu_target = Nu_all_targets(row_indices,:);
                 M_ji = zeros(3*np, 3*np); % Interaction of j on i
 
                 is_smooth = separation(i, j);
                 if ~is_smooth % Near
                     if strcmp(pot, 'SLP')
+                        error("not implemented.");
                         M_cell = SLPmatrix(IDparams, X_target, np, 1);
                         M_ji = M_cell{1};
                     elseif strcmp(pot, 'DLP')
                         M_ji = DLP_matrix_at_target(params_i, X_target, np);
                     elseif strcmp(pot, 'TLP')
-                        error("not implemented.");
-                        [Nu_target,~] = IDparams.get_Norm_rot(p, j);
-                        M_cell = TSLmatrix(params_i, X_target, Nu_target, p, 1);
-                        M_ji = M_cell{1};
+                        M_ji = TSLmatrix_at_target(params_i, X_target, Nu_target, p);
                     end
                 else % Far
-                    error("Not implemented.")
+                    fprintf("Handling smooth points in L2StkMatVecKernel...\n");
+                    %%% Setup Kernel_Eval parameters
+                    Sns=SurfaceSph(X_self);
+    
+                    if strcmp(pot, 'SLP')
+                        KEpot = 'SL_Stk_3D';
+                    elseif strcmp(pot, 'DLP')
+                        KEpot = 'DL_Stk_3D';
+                    elseif strcmp(pot, 'TLP')
+                        KEpot = 'TSL_Stk_3D';
+                    else
+                        error("Invalid potential given.");
+                    end
+        
+                    KEparams = Kernel_Eval_parameters(KEpot,0,1,1,1,1e-8,2,400,1);
+                    KEparams.dim = 3; KEparams.mu=1;
+                    [~, gwt]=g_grid(p+1);
+                    wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
+                    wt = wt(:);
+                    Wns = Sns.geoProp.W .* wt;
+                    Wv = repmat(Wns,1,3)'; Wv=Wv(:);
+                    Xv = reshape(repmat(X_self,1,3)',3,[])';
+                    Xtrg_ii = reshape(repmat(X_target,1,3)',3,[])';
+                    KEparams.X = Xv;
+                    KEparams.W2 = Wv.';
+                    KEparams.cj=repmat((1:3)',size(X_self,1),1);
+                    KEparams.ci=repmat((1:3)',size(X_target,1),1);
+    
+                    if strcmp(pot, 'TLP')
+                        KEparams.nor = reshape(repmat(Nu_target,1,3)',3,[])';
+                    elseif strcmp(pot, 'DLP')
+                        KEparams.nor = reshape(repmat(Nu_self,1,3)',3,[])';
+                    end
+        
+                    LP_smooth = Kernel_Eval(Xtrg_ii,Xv,KEparams);
+
+                    prm = zeros(1,3*np); 
+                    prm(1:np) = 1:3:3*np; prm(np+1:2*np) = 2:3:3*np; prm(2*np+1:3*np)=3:3:3*np;
+                    LP_smooth = LP_smooth(prm, prm);
                 end
 
                 % Rows are targets, columns are source
-                % M_ji = \int_{\Gamma_i} (stuff)*\sigma_j dS
-                M((j-1)*(3*np) + (1:3*np), (i-1)*(3*np) + (1:3*np)) = M_ji;
+                % M_ji(x_j) = \int_{\Gamma_i} K(x_j, y_i) * \sigma_i(y_i) dS(y_i)
+                target_block = (j-1)*(3*np) + (1:3*np);
+                source_block = (i-1)*(3*np) + (1:3*np);
+                M(target_block, source_block) = M_ji;
             end % End for target spheroid j
         end % End for source spheroid i
     end
-    end
-
-    % Calculate self-to-all interaction (i.e. the off-diagonal blocks)
-    if ns~=1 && ~DEVELOPMENT_FLAG
-        fprintf("Generating matvec matrix for multiple bodies (%d bodies)...\n", ns);
-        for i=1:ns
-            % Get target coordinates relative to self (particle i)
-            [X,~]=IDparams.get_X(i);
-            % Get surface normals relative to self (particle i)
-            [Nu,~]=IDparams.get_Norm_rot(p, i);
-
-            ind=[1:i-1 i+1:ns];
-            sep = separation(i,ind);
-            sep_rep = repmat(sep, np, 1);
-            smooth_sep = sep_rep(:)==1;
-
-            X_spectral = cell(1, ns);
-            X_spectral{i} = X(~smooth_sep,:);
-            X_smooth = X(smooth_sep,:);
-
-            Nu_spectral = cell(1,ns);
-            Nu_spectral{i} = Nu(~smooth_sep,:);
-            Nu_smooth= Nu(smooth_sep,:);
-
-            %%%
-            %%% Handle near target points
-            %%%
-            if strcmp(pot, 'SLP')
-                LP_spectral_cell = SLPmatrix_dev(IDparams, X_spectral, np, ns);
-            elseif strcmp(pot, 'DLP')
-                LP_spectral_cell = DLPmatrix_dev(IDparams, X_spectral, np, ns);
-            elseif strcmp(pot, 'TLP')
-                LP_spectral_cell = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns);
-            else
-                error("Invalid potential was given; should be 'SLP', 'DLP', or 'TLP'.");
-            end
-
-            %%%
-            %%% Handle far target points
-            %%%
-            LP_smooth=[];
-            if ~isempty(X_smooth)
-                fprintf("Handling smooth points in L2StkMatVecKernel...");
-                %%% Setup Kernel_Eval parameters
-                if ~if_oblate(i)
-                    Xself=prolate_spheroid_shape(p,u0(i),a(i));
-                else
-                    Xself=oblate_spheroid_shape(p,u0(i),a(i));
-                end
-                Sns=SurfaceSph(Xself);
-
-                if strcmp(pot, 'SLP')
-                    KEpot = 'SL_Stk_3D';
-                elseif strcmp(pot, 'DLP')
-                    KEpot = 'DL_Stk_3D';
-                elseif strcmp(pot, 'TLP')
-                    KEpot = 'TSL_Stk_3D';
-                else
-                    error("Invalid potential given.");
-                end
-    
-                KEparams = Kernel_Eval_parameters(KEpot,0,1,1,1,1e-8,2,400,1);
-                KEparams.dim = 3; KEparams.mu=1;
-                [~, gwt]=g_grid(p+1);
-                wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
-                wt = wt(:);
-                Wns = Sns.geoProp.W; Wns= Wns.*wt;
-                Wv = repmat(Wns,1,3)'; Wv=Wv(:);
-                Xv = reshape(repmat(Xself,1,3)',3,[])';
-                Xtrg_ii = reshape(repmat(X_smooth,1,3)',3,[])';
-                KEparams.X = Xv;
-                KEparams.W2 = Wv.';
-                KEparams.cj=repmat((1:3)',np,1);
-                KEparams.ci=repmat((1:3)',nt_smooth,1);
-
-                if strcmp(pot, 'TLP')
-                    KEparams.nor = Nu_smooth;
-                end
-    
-                LP_smooth = Kernel_Eval(Xtrg_ii,Xv,KEparams);
-
-                %{
-                    Let p_1, ..., p_n represents the discretization points. The problem
-                    with Kernel_Eval is that it returns the result in the following manner:
-                        [
-                            sigma_x(p_1), sigma_y(p_1), sigma_z(p_1);
-                            sigma_x(p_2), sigma_y(p_2), sigma_z(p_2);
-                            etc.
-                        ]
-
-                    However, we don't want this. Instead, in accordance with the rest of the
-                    code, we want the following format:
-                        [
-                            sigma_x(p_1), sigma_x(p_2), sigma_x(p_3), ...
-                            sigma_y(p_1), sigma_y(p_2), sigma_y(p_3), ...
-                            sigma_z(p_1), sigma_z(p_2), sigma_z(p_3), ...
-                        ]
-
-                    To do this, we must permute LP_smooth to the desired format, which is what
-                    the following code snippet does.
-                %}
-
-                % Note that LP_smooth is not necessarily square.
-                nt_smooth = size(X_smooth, 1); % Number of smooth target points
-
-                % Permutation for columns (source points)
-                prm_col = zeros(1, 3*np); 
-                prm_col(1:3:end) = 1:np; 
-                prm_col(2:3:end) = np + (1:np); 
-                prm_col(3:3:end) = 2*np + (1:np);
-
-                % Permutation for rows (target points)
-                prm_row = zeros(1, 3*nt_smooth);
-                prm_row(1:3:end) = 1:nt_smooth;
-                prm_row(2:3:end) = nt_smooth + (1:nt_smooth);
-                prm_row(3:3:end) = 2*nt_smooth + (1:nt_smooth);
-
-                LP_smooth = LP_smooth(prm_row, prm_col);
-            end
-
-            %%%
-            %%% Fill in appropriate block of the matrix
-            %%%
-
-            % LPi represents source-to-all
-            smooth_sep_rows = repelem(smooth_sep, 3, 1);
-            LPi = zeros(3*np*(ns-1),3*np);
-            LPi(smooth_sep_rows,:) = LP_smooth;
-            LPi(~smooth_sep_rows,:) = LP_spectral_cell{i};
-    
-            % Now, place LPi in the correct block of the matrix M
-            full_ind = true(3*np*ns, 1);
-            full_ind((i-1)*3*np+1 : i*3*np) = false; % Remove interaction of source particle i
-    
-            M(full_ind, (i-1)*(3*np)+1:i*(3*np)) = LPi;
-        end
     end
 end
 
@@ -461,6 +372,69 @@ function M_cells = SLPmatrix_dev(IDparams, X_spectral, np, ns)
     end
 end
 
+function M = TSLmatrix_at_target(params_i, X_target, Nu_target, p)
+    np = 2*p*(p+1);
+    nu_x_all = repmat([1,0,0], np, 1);
+    nu_y_all = repmat([0,1,0], np, 1);
+    nu_z_all = repmat([0,0,1], np, 1);
+
+    [SP_x, SP_y, SP_z] = spheroidalSP(params_i, X_target, nu_x_all, nu_y_all, nu_z_all);
+
+    %% Build spheroidalgraddiv operator
+    I = eye(np);
+    Z = zeros(np);
+
+    [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(params_i, I, Z, Z, X_target);
+    [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(params_i, Z, I, Z, X_target);
+    [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(params_i, Z, Z, I, X_target);
+
+    if params_i.oblate
+        S_self = oblate_spheroid_shape(p, params_i.u0, params_i.a, 'cart');
+        u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
+        [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
+        [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
+        [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
+    else
+        S_self = prolate_spheroid_shape(p, params_i.u0, params_i.a, 'cart');
+        u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
+        [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
+        [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
+        [D3_X, D3_Y, D3_Z] = convert_from_prolate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
+    end
+
+    ddS_x = [D1_X, D1_Y, D1_Z];
+    ddS_y = [D2_X, D2_Y, D2_Z];
+    ddS_z = [D3_X, D3_Y, D3_Z];
+
+    %% Build TLP matvec kernel
+    % Grab source points
+    X_src = params_i.get_X - params_i.centers;
+    Xtarget_dot_N = repmat(dot(X_target, Nu_target, 2), 3, 1); % 3np x 1 vector.
+
+    % Extract ddS terms
+    ddS_op = [ddS_x; ddS_y; ddS_z];
+
+    %%%
+    %%% Build matrix
+    %%%
+    % Extract SP sum term
+    M1_diag_term = diag(Nu_target(:,1))*SP_x + diag(Nu_target(:,2))*SP_y + diag(Nu_target(:,3))*SP_z;
+    M1 = kron(eye(3), M1_diag_term);
+
+    % Extract ddS sum term
+    % The idea is that we multiply on the left by the normal vector term, on the right
+    % by the y_j term, and the ddS operator is represented by [ddS_x; ddS_y; ddS_z].
+    M2_1 = kron(eye(3), diag(Nu_target(:,1))) * ddS_op * kron(eye(3), diag(X_src(:,1)));
+    M2_2 = kron(eye(3), diag(Nu_target(:,2))) * ddS_op * kron(eye(3), diag(X_src(:,2)));
+    M2_3 = kron(eye(3), diag(Nu_target(:,3))) * ddS_op * kron(eye(3), diag(X_src(:,3)));
+    M2 = M2_1 + M2_2 + M2_3;
+
+    % Extract ddS term
+    M3 = diag(Xtarget_dot_N) * ddS_op;
+
+    M = M1 + M2 - M3;
+end
+
 %% SELF TO SELF
 function M = SLPmatrix(IDparams, X_spectral, np, ns)
     SLM = spheroidalSL(IDparams);
@@ -600,42 +574,46 @@ end
 function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
     np = 2*p*(p + 1);
     M_cells = cell(1, ns);
+    is_self_interaction = true;
 
-    if isempty(Nu_spectral) % Self-evaluation
-        nu_x_all = repmat([1,0,0], np, 1, ns);
-        nu_y_all = repmat([0,1,0], np, 1, ns);
-        nu_z_all = repmat([0,0,1], np, 1, ns);
+    for i = 1:ns
+        if is_self_interaction
+            num_trg = np;
+        else
+            num_trg = size(X_spectral{i}, 1);
+        end
+        
+        if num_trg > 0
+            nu_x_cells{i} = repmat([1,0,0], num_trg, 1);
+            nu_y_cells{i} = repmat([0,1,0], num_trg, 1);
+            nu_z_cells{i} = repmat([0,0,1], num_trg, 1);
+        end
     end
 
-    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_all, nu_y_all, nu_z_all);
-    if ns==1
-        % Ideally, should have a different function for doing this.
-        SP_x_cells = {SP_x_cells}; SP_y_cells = {SP_y_cells}; SP_z_cells = {SP_z_cells};
-    end
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_cells, nu_y_cells, nu_z_cells);
 
     % Build spheroidalgraddiv operator
-    I = eye(np);
-    Z = zeros(np);
+    I = repmat(eye(np),1,1,ns);
+    Z = repmat(zeros(np),1,1,ns);
     ddS_x_cells = cell(1, ns); ddS_y_cells = ddS_x_cells; ddS_z_cells = ddS_x_cells;
+    [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, X_spectral);
+    [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, X_spectral);
+    [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, X_spectral);
     for i=1:ns
-        [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, X_spectral);
-        [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, X_spectral);
-        [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, X_spectral);
-
         if IDparams.oblate(i)
-            X_self = oblate_spheroid_shape(p, IDparams.u0, IDparams.a);
-            S_self = cart2spheroidal(X_self, IDparams.a, IDparams.oblate);
+            X_self = oblate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i));
+            S_self = cart2spheroidal(X_self, IDparams.a(i), IDparams.oblate(i));
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
-            [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
-            [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
-            [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
+            [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
+            [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
+            [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
         else
-            X_self = prolate_spheroid_shape(p, IDparams.u0, IDparams.a);
-            S_self = cart2spheroidal(X_self, IDparams.a, IDparams.oblate);
+            X_self = prolate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i));
+            S_self = cart2spheroidal(X_self, IDparams.a(i), IDparams.oblate(i));
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
-            [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
-            [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
-            [D3_X, D3_Y, D3_Z] = convert_from_prolate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
+            [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
+            [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
+            [D3_X, D3_Y, D3_Z] = convert_from_prolate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
         end
 
         ddS_x_cells{i} = [D1_X, D1_Y, D1_Z];
@@ -690,9 +668,4 @@ function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
     end
 
     M = blkdiag(M_cells{:});
-end
-
-%% HELPER CODE
-function indices = LOCAL_get_spheroid_index(np, source, target)
-    
 end
