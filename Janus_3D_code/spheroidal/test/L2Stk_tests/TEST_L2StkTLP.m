@@ -1,68 +1,442 @@
 %{
-    Test code for Laplace to Stokes double layer potential with two prolate
-    spheroids.
-
-    The density, sigma, is randomized.
+    Test code for spheroidalDP.m.
 %}
 
 
-clear;
+classdef TEST_L2StkTLP < matlab.unittest.TestCase
+    properties
+        params=SpheroidalParameters;
+        p = 16;
+       
+        % u0_prolate = 8/(3*sqrt(7)); % AR = 8
+        % u0_prolate = 4/sqrt(15); % AR = 4
+        % u0_prolate = 3/(2*sqrt(2)); % AR = 3
+        u0_prolate = 2/sqrt(3); % AR = 2
+        % u0_prolate = 3/sqrt(5); % AR = 1.5
+        % u0_prolate = 13/sqrt(69); % AR = 1.3
+        % u0_prolate = 6/sqrt(11); % AR = 1.2
+        % u0_prolate = 11/sqrt(21); % AR = 1.1
+        % u0_prolate = 3.2796
+        % u0_prolate = 21/sqrt(41); % AR = 1.05
+        % u0_prolate = 21/sqrt(41) + 1e-11; % AR = 1.05
+        % u0_prolate = 100001/sqrt(200001); % AR = 1+1e-5
+        u0_oblate = 3/sqrt(5);
+        a_prolate;
+        a_oblate;
+    end
 
-params=SpheroidalParameters; 
-params.matvec_eta=10; 
-params.u0=1.1;
-params.a=1/1.1;
-params.oblate=0; 
-params.centers=[0 0 0];
-p=8; np=2*p*(p+1);
+    methods (TestClassSetup)
+        function setup(testCase)
+            clc();
+            testCase.a_prolate = 1/testCase.u0_prolate;
+            testCase.a_oblate = 1/sqrt(1 + testCase.u0_oblate^2);
+            addpath(genpath('../../.'))
+        end
+    end
 
-sigma_x = rand(np,1)+0.5;
-sigma_y = rand(np,1)-0.5;
-sigma_z = rand(np,1);
+    methods (Test)
+        %% Kernel_Eval check (off-surface)
+        function testTLPProlateKernelEval(testCase)
+            %{
+                Should agree with the TLP implementation in Kernel_Eval
+                off-surface.
+            %}
+            rng(42);
 
-% Get Cartesian coordinates from the two spheroids
-target_u0 = 1.2;
-target_a = 1/1.2;
-Xtrg = prolate_spheroid_shape(p, target_u0, target_a)+[3,3,1];
-Xself = prolate_spheroid_shape(p, params.u0, params.a);
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
+            params.isReal = true;
 
-Sns = SurfaceSph(Xself);
-integrate = @(f) integrateOverS(Sns, f)';
+            X_trg = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = X_trg + nu_trg;
+            nt = size(X_trg, 1);
 
-Ntrg = size(Xtrg, 1);
-Nself = size(Xself, 1);
+            % nu_trg = nu_trg + 5*rand(size(nu_trg));
 
-% Pre-calculate Rvec and r for all target-source pairs
-Rvec_x = Xtrg(:, 1)' - Xself(:, 1);
-Rvec_y = Xtrg(:, 2)' - Xself(:, 2);
-Rvec_z = Xtrg(:, 3)' - Xself(:, 3);
-r = sqrt(Rvec_x.^2 + Rvec_y.^2 + Rvec_z.^2);
+            [u, v] = gl_grid(p);
+            sigma_x = cos(u) .* sin(u).^2 + sin(u) .* cos(v);
+            sigma_y = cos(u).^2 + sin(u).*cos(u).*sin(v);
+            sigma_z = cos(u) .* sin(u).^2 - sin(u) .* cos(v) + exp(cos(u).^3);
 
-% Pre-compute the normal vectors at the source points
-norm_vecs = get_norm_vecs(p, target_u0, oblate_flag=false);
-nx_target = norm_vecs(:,1);
-ny_target = norm_vecs(:,2);
-nz_target = norm_vecs(:,3);
+            %%% Stokes Kernel_Eval
+            % Get source geometry and weights
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
 
-% First, we calculate the Stokes double layer potential manually.
-% Precomputations
-r_inv_5 = r .^ (-5);
-RdotN = Rvec_x .* nx_target + Rvec_y .* ny_target + Rvec_z .* nz_target; % (x-y) \cdot n(y)
-RdotSigma = Rvec_x .* sigma_x + Rvec_y .* sigma_y + Rvec_z .* sigma_z; % (x-y) \cdot \sigma(y)
+            % Quadrature weights for Kernel_Eval
+            Sns = SurfaceSph(X_src);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src_orig = Sns.geoProp.W .* wt_gl;
+            Wv = repmat(W_src_orig,1,3)'; Wv=Wv(:);
 
-integrand_TLPx = RdotN .* Rvec_x .* RdotSigma .* r_inv_5;
-integrand_TLPy = RdotN .* Rvec_y .* RdotSigma .* r_inv_5;
-integrand_TLPz = RdotN .* Rvec_z .* RdotSigma .* r_inv_5;
+            pot = 'TSL_Stk_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            Xv = reshape(repmat(X_src,1,3)',3,[])';
+            KEparams.X = Xv;
+            KEparams.W2 = Wv.';
+            KEparams.nor = reshape(repmat(nu_trg,1,3)',3,[])';
+            KEparams.ci = repmat((1:3)', size(X_trg, 1), 1);
+            KEparams.cj = repmat((1:3)', size(X_src, 1), 1);
 
-% Integrate
-TLPx = -(3/(4*pi)) * integrate(integrand_TLPx);
-TLPy = -(3/(4*pi)) * integrate(integrand_TLPy);
-TLPz = -(3/(4*pi)) * integrate(integrand_TLPz);
+            Xtrg_ii = reshape(repmat(X_trg,1,3)',3,[])';
+            TLP_mat = Kernel_Eval(Xtrg_ii, Xv, KEparams);
 
-% Now, actually calculate result from L2Stk and compare.
-target_pts = cell(1, 1);
-target_pts{1} = Xtrg;
-[L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
+            %%% Compute results
+            sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
+            TLP_kernel_eval = TLP_mat * sig;
+            TLP_kernel_eval = reshape(TLP_kernel_eval,3,[]).';
 
-fprintf("\n inf error of Stokes traction layer potential in x: %e, in y: %e, in z: %e\n", ...
-    max(norm(L2StkTLPx{1}-TLPx)), max(norm(L2StkTLPy{1}-TLPy)),max(norm(L2StkTLPz{1}-TLPz)));
+            %%% Spectral calculation
+            target_pts = cell(1, 1);
+            target_pts{1} = X_trg;
+            target_nu = cell(1, 1);
+            target_nu{1} = nu_trg;
+            [L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+
+            %%% Compare results
+            rel_errs = [
+                norm(L2StkTLPx{1} - TLP_kernel_eval(:,1)) ./ norm(TLP_kernel_eval(:,1));
+                norm(L2StkTLPy{1} - TLP_kernel_eval(:,2)) ./ norm(TLP_kernel_eval(:,2));
+                norm(L2StkTLPz{1} - TLP_kernel_eval(:,3)) ./ norm(TLP_kernel_eval(:,3));
+            ];
+            tol = 9e-6;
+            testCase.verifyLessThan(rel_errs, tol, ...
+                'Formula for Stokes TLP does not match Kernel_Eval.');
+        end
+
+        function testTLPOblateKernelEval(testCase)
+            %{
+                Should agree with the TLP implementation in Kernel_Eval
+                off-surface.
+            %}
+            rng(42);
+
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true; 
+            params.centers = [0 0 0];
+
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = X_trg + nu_trg;
+            nt = size(X_trg, 1);
+
+            [u, v] = gl_grid(p);
+            sigma_x = cos(u) .* sin(u).^2 + sin(u) .* cos(v);
+            sigma_y = cos(u).^2 + sin(u).*cos(u).*sin(v);
+            sigma_z = cos(u) .* sin(u).^2 - sin(u) .* cos(v) + exp(cos(u).^3);
+
+            %%% Stokes Kernel_Eval
+            % Get source geometry and weights
+            X_src = oblate_spheroid_shape(p, params.u0, params.a);
+            N_src = params.get_Norm(p, 1);
+
+            % Quadrature weights for Kernel_Eval
+            Sns = SurfaceSph(X_src);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src_orig = Sns.geoProp.W .* wt_gl;
+            Wv = repmat(W_src_orig,1,3)'; Wv=Wv(:);
+
+            pot = 'TSL_Stk_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            Xv = reshape(repmat(X_src,1,3)',3,[])';
+            KEparams.X = Xv;
+            KEparams.W2 = Wv.';
+            KEparams.nor = reshape(repmat(nu_trg,1,3)',3,[])';
+            KEparams.ci = repmat((1:3)', size(X_trg, 1), 1);
+            KEparams.cj = repmat((1:3)', size(X_src, 1), 1);
+
+            Xtrg_ii = reshape(repmat(X_trg,1,3)',3,[])';
+            TLP_mat = Kernel_Eval(Xtrg_ii, Xv, KEparams);
+
+            %%% Compute results
+            sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
+            TLP_kernel_eval = TLP_mat * sig;
+            TLP_kernel_eval = reshape(TLP_kernel_eval,3,[]).';
+
+            %%% Spectral calculation
+            target_pts = cell(1, 1);
+            target_pts{1} = X_trg;
+            target_nu = cell(1, 1);
+            target_nu{1} = nu_trg;
+            [L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+
+            %%% Compare results
+            rel_errs = [
+                norm(L2StkTLPx{1} - TLP_kernel_eval(:,1)) ./ norm(TLP_kernel_eval(:,1));
+                norm(L2StkTLPy{1} - TLP_kernel_eval(:,2)) ./ norm(TLP_kernel_eval(:,2));
+                norm(L2StkTLPz{1} - TLP_kernel_eval(:,3)) ./ norm(TLP_kernel_eval(:,3));
+            ];
+            tol = 9e-6;
+            testCase.verifyLessThan(rel_errs, tol, ...
+                'Formula for Stokes TLP does not match Kernel_Eval.');
+        end
+
+        %% On-surface check
+        function testCheckWithkerneldS(testCase)
+            %{
+                Compares the on-surface evaluation with the implementation
+                in kerneldS.
+            %}
+            p = 24;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+            params.isReal = true;
+
+            X_self = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_self = get_norm_vecs(p, params.u0, params.oblate);
+
+            [u, v] = gl_grid(p);
+            sigma_x = cos(u) .* sin(u).^2 + sin(u) .* cos(v);
+            sigma_y = cos(u).^2 + sin(u).*cos(u).*sin(v);
+            sigma_z = cos(u) .* sin(u).^2 - sin(u) .* cos(v) + exp(cos(u).^3);
+
+            %%% Spectral calculation
+            target_pts = cell(1, 1);
+            target_pts{1} = X_self;
+            target_nu = cell(1, 1);
+            target_nu{1} = nu_self;
+            [L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+            [L2StkTLPdivx, L2StkTLPdivy, L2StkTLPdivz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, true);
+
+            %%% kerneldS calculation
+            Df = kerneldS([], SurfaceSph(X_self));
+            kerneldS_result = Df * reshape([sigma_x, sigma_y, sigma_z].', [], 1);
+            kerneldS_result = reshape(kerneldS_result,3,[]).';
+
+            rel_errs = [
+                norm(L2StkTLPx{1} - kerneldS_result(:,1)) / norm(kerneldS_result(:,1));
+                norm(L2StkTLPy{1} - kerneldS_result(:,2)) / norm(kerneldS_result(:,2));
+                norm(L2StkTLPz{1} - kerneldS_result(:,3)) / norm(kerneldS_result(:,3));
+            ];
+
+            rel_div_errs = [
+                norm(L2StkTLPdivx{1} - kerneldS_result(:,1)) / norm(kerneldS_result(:,1));
+                norm(L2StkTLPdivy{1} - kerneldS_result(:,2)) / norm(kerneldS_result(:,2));
+                norm(L2StkTLPdivz{1} - kerneldS_result(:,3)) / norm(kerneldS_result(:,3));
+            ];
+
+            tol = 1e-4;
+            testCase.verifyLessThan(rel_errs, tol, "On-surface evaluation for the TLP failed.");
+
+        end
+
+        function testSurfaceDivergenceFormulaOffSurface(testCase)
+            rng(42);
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+
+            X_self = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_self = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = X_self + 5*nu_self;
+
+            sigma_x = rand(np,1)+0.5;
+            sigma_y = rand(np,1)-0.5;
+            sigma_z = rand(np,1);
+
+            %%% Second-order derivative calculation
+            target_pts = cell(1, 1);
+            target_pts{1} = X_trg;
+            target_nu = cell(1, 1);
+            target_nu{1} = nu_self;
+            [L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+
+            %%% First-order derivative calculation
+            [L2StkTLPx_div, L2StkTLPy_div, L2StkTLPz_div] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, true);
+
+            %%% Comparison
+            rel_errs = [
+                norm(L2StkTLPx{1} - L2StkTLPx_div{1}) / norm(L2StkTLPx{1});
+                norm(L2StkTLPy{1} - L2StkTLPy_div{1}) / norm(L2StkTLPy{1});
+                norm(L2StkTLPz{1} - L2StkTLPz_div{1}) / norm(L2StkTLPz{1});
+            ];
+
+            testCase.verifyLessThan(rel_errs, 1e-6, "Divergence formula doesn't match.");
+        end
+
+        %% Near-surface (convergence) test
+        function testTSLNearSurfaceConvergenceFromInterior(testCase)
+            p = 20;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+            params.isReal = true;
+
+            X_self = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_self = get_norm_vecs(p, params.u0, params.oblate);
+
+            [u, v] = gl_grid(p);
+            sigma_x = cos(u) .* sin(u).^2 + sin(u) .* cos(v);
+            sigma_y = cos(u).^2 + sin(u).*cos(u).*sin(v);
+            sigma_z = cos(u) .* sin(u).^2 - sin(u) .* cos(v) + exp(cos(u).^3);
+
+            %%% Spectral calculation at surface
+            target_pts = cell(1, 1);
+            target_pts{1} = X_self;
+            target_nu = cell(1, 1);
+            target_nu{1} = nu_self;
+            [L2StkTLPx_surf, L2StkTLPy_surf, L2StkTLPz_surf] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+
+            lim_x = L2StkTLPx_surf{1} + 0.5*sigma_x;
+            lim_y = L2StkTLPy_surf{1} + 0.5*sigma_y;
+            lim_z = L2StkTLPz_surf{1} + 0.5*sigma_z;
+
+            %%% Spectral calculation away-surface
+            distances = 10.^(-2:-1:-5);
+            errs_x = [];
+            errs_y = [];
+            errs_z = [];
+            for i=1:numel(distances)
+                d = distances(i);
+                target_pts = cell(1, 1);
+                target_pts{1} = X_self - d*nu_self;
+                target_nu = cell(1, 1);
+                target_nu{1} = nu_self;
+                [L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+                errs_x = [errs_x norm(L2StkTLPx{1} - lim_x) ./ norm(lim_x)];
+                errs_y = [errs_y norm(L2StkTLPy{1} - lim_y) ./ norm(lim_y)];
+                errs_z = [errs_z norm(L2StkTLPz{1} - lim_z) ./ norm(lim_z)];
+            end
+        end
+
+        function testTSLNearSurfaceConvergenceFromExterior(testCase)
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false; 
+            params.centers = [0 0 0];
+            params.isReal = true;
+
+            X_self = prolate_spheroid_shape(p, params.u0, params.a);
+            nu_self = get_norm_vecs(p, params.u0, params.oblate);
+
+            [u, v] = gl_grid(p);
+            sigma_x = cos(u) .* sin(u).^2 + sin(u) .* cos(v);
+            sigma_y = cos(u).^2 + sin(u).*cos(u).*sin(v);
+            sigma_z = cos(u) .* sin(u).^2 - sin(u) .* cos(v) + exp(cos(u).^3);
+
+            %%% Spectral calculation at surface
+            target_pts = cell(1, 1);
+            target_pts{1} = X_self;
+            target_nu = cell(1, 1);
+            target_nu{1} = nu_self;
+            [L2StkTLPx_surf, L2StkTLPy_surf, L2StkTLPz_surf] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+
+            lim_x = L2StkTLPx_surf{1} - 0.5*sigma_x;
+            lim_y = L2StkTLPy_surf{1} - 0.5*sigma_y;
+            lim_z = L2StkTLPz_surf{1} - 0.5*sigma_z;
+
+            %%% Spectral calculation away-surface
+            distances = 10.^(-2:-1:-5);
+            errs_x = [];
+            errs_y = [];
+            errs_z = [];
+            for i=1:numel(distances)
+                d = distances(i);
+                target_pts = cell(1, 1);
+                target_pts{1} = X_self + d*nu_self;
+                target_nu = cell(1, 1);
+                target_nu{1} = nu_self;
+                [L2StkTLPx, L2StkTLPy, L2StkTLPz] = L2StkTLP(target_pts, target_nu, params, sigma_x, sigma_y, sigma_z, 1, false);
+                errs_x = [errs_x norm(L2StkTLPx{1} - lim_x) ./ norm(lim_x)];
+                errs_y = [errs_y norm(L2StkTLPy{1} - lim_y) ./ norm(lim_y)];
+                errs_z = [errs_z norm(L2StkTLPz{1} - lim_z) ./ norm(lim_z)];
+            end
+        end
+
+        %% Vector spherical harmonics test
+        function testActionOfVSHOnTSL(testCase)
+            %{
+                Verifies the eigenvalue relationship of vector spherical
+                harmonics with the Stokes TSL on-surface.
+
+                The coefficients for the principal-valued DLP should be the 
+                average of the exterior and interior coefficients.
+
+                Note that this emulates Test_Spharm_Stk.m.
+            %}
+            tol = 1e-6;
+            p = 16;
+            np = 2*p*(p+1);
+            params = SpheroidalParameters(); 
+            params.u0 = 10000001/sqrt(20000001); % AR = 1+1e-7
+            params.a = 1/params.u0;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
+            params.sigma = ones(np, 1);
+            params.isReal = false;
+
+            X_src = params.get_X();
+            Nu_src = params.get_Norm();
+            Sc = SurfaceSph(X_src);
+
+            %% Setup n and m
+            n = 4; m = 3;
+            [u,v]=gl_grid(p);
+
+            %% Vnm
+            V = Vnm('Vnm', Sc, n, m, u, v);
+            V = reshape(V,3,[]).';
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkTLP({X_src}, {Nu_src}, params, V(:,1), V(:,2), V(:,3), 1, 0);
+            L2Stk_result = [L2Stkx{1}, L2Stky{1}, L2Stkz{1}];
+
+            Vnm_eigval = (3/2)/((2*n+1)*(2*n+3));
+            Vnm_rel_err = norm(L2Stk_result - Vnm_eigval*V) / norm(L2Stk_result);
+            testCase.verifyLessThan(Vnm_rel_err, tol, ...
+                'Spectral relationship failed to meet tolerance for Vnm.');
+
+            %% Wnm
+            W = Vnm('Wnm', Sc, n, m, u, v);
+            W = reshape(W,3,[]).';
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkTLP({X_src}, {Nu_src}, params, W(:,1), W(:,2), W(:,3), 1, 0);
+            L2Stk_result = [L2Stkx{1}, L2Stky{1}, L2Stkz{1}];
+
+            Wnm_eigval = 3/(2 - 8*n^2);
+            Wnm_rel_err = norm(L2Stk_result - Wnm_eigval*W) / norm(L2Stk_result);
+            testCase.verifyLessThan(Wnm_rel_err, tol, ...
+                'Spectral relationship failed to meet tolerance for Wnm.');
+
+            %% Xnm
+            X = Vnm('Xnm', Sc, n, m, u, v);
+            X = reshape(X,3,[]).';
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkTLP({X_src}, {Nu_src}, params, X(:,1), X(:,2), X(:,3), 1, 0);
+            L2Stk_result = [L2Stkx{1}, L2Stky{1}, L2Stkz{1}];
+
+            Xnm_eigval = -3/(4*n+2);
+            Xnm_rel_err = norm(L2Stk_result - Xnm_eigval*X) / norm(L2Stk_result);
+            testCase.verifyLessThan(Xnm_rel_err, tol, ...
+                'Spectral relationship failed to meet tolerance for Xnm.');
+        end
+    end
+end

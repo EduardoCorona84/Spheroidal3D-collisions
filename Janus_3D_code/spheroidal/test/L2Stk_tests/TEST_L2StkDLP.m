@@ -8,8 +8,8 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
         params=SpheroidalParameters;
         p = 16;
 
-        u0_prolate = 2/sqrt(3);
-        u0_oblate = 2/sqrt(3);
+        u0_prolate = 21/sqrt(41);
+        u0_oblate = 3/sqrt(5);
         a_prolate;
         a_oblate;
 
@@ -23,6 +23,7 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
 
             testCase.a_prolate = 1/testCase.u0_prolate;
             testCase.a_oblate = 1/sqrt(1 + testCase.u0_oblate^2);
+            addpath(genpath('../../.'))
         end
     end
 
@@ -146,27 +147,27 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
 
             %%% Stokes Kernel_Eval
             % Get source geometry and weights
-            X_src_orig = prolate_spheroid_shape(p, params.u0, params.a);
-            N_src_orig = params.get_Norm(p, 1);
-            normvec_x = N_src_orig(:,1); normvec_y = N_src_orig(:,2); normvec_z = N_src_orig(:,3);
+            X_src = prolate_spheroid_shape(p, params.u0, params.a);
+            N_src = params.get_Norm(p, 1);
+            normvec_x = N_src(:,1); normvec_y = N_src(:,2); normvec_z = N_src(:,3);
 
             % Quadrature weights for Kernel_Eval
-            Sns = SurfaceSph(X_src_orig);
+            Sns = SurfaceSph(X_src);
             [~, gwt_gl] = g_grid(p + 1);
             wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
             wt_gl = wt_gl(:);
-            W_src_orig = Sns.geoProp.W .* wt_gl;
-            Wv = repmat(W_src_orig,1,3)'; Wv=Wv(:);
+            W_src = Sns.geoProp.W .* wt_gl;
+            Wv = repmat(W_src,1,3)'; Wv=Wv(:);
 
             pot = 'DL_Stk_3D';
             KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
             KEparams.dim = 3;
-            Xv = reshape(repmat(X_src_orig,1,3)',3,[])';
+            Xv = reshape(repmat(X_src,1,3)',3,[])';
             KEparams.X = Xv;
             KEparams.W2 = Wv.';
-            KEparams.nor = reshape(repmat(N_src_orig,1,3)',3,[])';
+            KEparams.nor = reshape(repmat(N_src,1,3)',3,[])';
             KEparams.ci = repmat((1:3)', size(X_trg, 1), 1);
-            KEparams.cj = repmat((1:3)', size(X_src_orig, 1), 1);
+            KEparams.cj = repmat((1:3)', size(X_src, 1), 1);
 
             Xtrg_ii = reshape(repmat(X_trg,1,3)',3,[])';
             dDL_mat = Kernel_Eval(Xtrg_ii, Xv, KEparams);
@@ -188,51 +189,51 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             % examine the x-coordinate).
             KEparams_1=Kernel_Eval_parameters('dSL_L_3D',0,1,1,1,1e-8,2,400,1);
             KEparams_1.dim = 3; KEparams_1.mu=1;
-            KEparams_1.X=X_src_orig;
-            KEparams_1.W2=W_src_orig.';
+            KEparams_1.X=X_src;
+            KEparams_1.W2=W_src.';
             Nu_x=repmat([1,0,0],nt,1);
             KEparams_1.nor=Nu_x;
-            SPxker=Kernel_Eval(X_trg, X_src_orig, KEparams_1);
+            SPxker=Kernel_Eval(X_trg, X_src, KEparams_1);
 
             KEparams_2=Kernel_Eval_parameters('dSL_L_3D',0,1,1,1,1e-8,2,400,1);
             KEparams_2.dim = 3; KEparams_2.mu=1;
-            KEparams_2.X=X_src_orig;
-            KEparams_2.W2=W_src_orig.';
+            KEparams_2.X=X_src;
+            KEparams_2.W2=W_src.';
             Nu_y=repmat([0,1,0],nt,1);
             KEparams_2.nor=Nu_y;
-            SPyker=Kernel_Eval(X_trg, X_src_orig, KEparams_2);
+            SPyker=Kernel_Eval(X_trg, X_src, KEparams_2);
 
             KEparams_3=Kernel_Eval_parameters('dSL_L_3D',0,1,1,1,1e-8,2,400,1);
             KEparams_3.dim = 3; KEparams_3.mu=1;
-            KEparams_3.X=X_src_orig;
-            KEparams_3.W2=W_src_orig.';
+            KEparams_3.X=X_src;
+            KEparams_3.W2=W_src.';
             Nu_z=repmat([0,0,1],nt,1);
             KEparams_3.nor=Nu_z;
-            SPzker=Kernel_Eval(X_trg, X_src_orig, KEparams_3);
+            SPzker=Kernel_Eval(X_trg, X_src, KEparams_3);
 
             KEparams_4=Kernel_Eval_parameters('dDL_L_3D',0,1,1,1,1e-8,2,400,1);
             KEparams_4.dim = 3; KEparams_4.mu=1;
-            KEparams_4.X=X_src_orig;
-            KEparams_4.W2=W_src_orig.';
-            KEparams_4.nor=N_src_orig;
+            KEparams_4.X=X_src;
+            KEparams_4.W2=W_src.';
+            KEparams_4.nor=N_src;
             KEparams_4.targnor=Nu_x;
-            DPxker=Kernel_Eval(X_trg, X_src_orig, KEparams_4);
+            DPxker=Kernel_Eval(X_trg, X_src, KEparams_4);
 
             KEparams_5=Kernel_Eval_parameters('dDL_L_3D',0,1,1,1,1e-8,2,400,1);
             KEparams_5.dim = 3; KEparams_5.mu=1;
-            KEparams_5.X=X_src_orig;
-            KEparams_5.W2=W_src_orig.';
-            KEparams_5.nor=N_src_orig;
+            KEparams_5.X=X_src;
+            KEparams_5.W2=W_src.';
+            KEparams_5.nor=N_src;
             KEparams_5.targnor=Nu_y;
-            DPyker=Kernel_Eval(X_trg, X_src_orig, KEparams_5);
+            DPyker=Kernel_Eval(X_trg, X_src, KEparams_5);
 
             KEparams_6=Kernel_Eval_parameters('dDL_L_3D',0,1,1,1,1e-8,2,400,1);
             KEparams_6.dim = 3; KEparams_6.mu=1;
-            KEparams_6.X=X_src_orig;
-            KEparams_6.W2=W_src_orig.';
-            KEparams_6.nor=N_src_orig;
+            KEparams_6.X=X_src;
+            KEparams_6.W2=W_src.';
+            KEparams_6.nor=N_src;
             KEparams_6.targnor=Nu_z;
-            DPzker=Kernel_Eval(X_trg, X_src_orig, KEparams_6);
+            DPzker=Kernel_Eval(X_trg, X_src, KEparams_6);
             
             %%% Compute results
             sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
@@ -269,7 +270,6 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             p = testCase.p;
             np = 2*p*(p+1);
             params = testCase.params;
-            params.matvec_eta = 10; 
             params.u0 = testCase.u0_prolate;
             params.a = testCase.a_prolate;
             params.oblate = 0; 
@@ -333,21 +333,23 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
                 'Formula for Stokes DLP (z-component) does not match integration formula.');
         end
 
-        function testKernelEvalOffSurface(testCase)
+        function testKernelEvalProlateOffSurface(testCase)
             %{
                 Compares off-surface evaluation with Kernel_Eval's
                 implementation and compares error.
             %}
             %%% SETUP
-            rng(42);
             p = 16;
             np = 2*p*(p+1);
             params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
 
             % Get Cartesian coordinates from the two spheroids
-            target_u0 = params.u0 * 3;
-            X_trg = prolate_spheroid_shape(p, target_u0, params.a);
-            nu_trg = get_norm_vecs(p, target_u0, params.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = prolate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
 
             sigma_x = rand(np,1)+0.5;
             sigma_y = rand(np,1)-0.5;
@@ -358,25 +360,25 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             [L2Stkx, L2Stky, L2Stkz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
 
             %%% Kernel_Eval
-            [X_src_orig, ~] = params.get_X();
-            N_src_orig = params.get_Norm(p, 1);
+            [X_src, ~] = params.get_X();
+            N_src = params.get_Norm(p, 1);
 
-            Sns = SurfaceSph(X_src_orig);
+            Sns = SurfaceSph(X_src);
             [~, gwt_gl] = g_grid(p + 1);
             wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
             wt_gl = wt_gl(:);
-            W_src_orig = Sns.geoProp.W .* wt_gl;
+            W_src = Sns.geoProp.W .* wt_gl;
 
             pot = 'DL_Stk_3D';
             KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
             KEparams.dim = 3;
-            Xv = reshape(repmat(X_src_orig,1,3)',3,[])';
-            Wv = repmat(W_src_orig,1,3)'; Wv=Wv(:);
+            Xv = reshape(repmat(X_src,1,3)',3,[])';
+            Wv = repmat(W_src,1,3)'; Wv=Wv(:);
             KEparams.X = Xv;
             KEparams.W2 = Wv.';
-            KEparams.nor = reshape(repmat(N_src_orig,1,3)',3,[])';
+            KEparams.nor = reshape(repmat(N_src,1,3)',3,[])';
             KEparams.ci = repmat((1:3)', size(X_trg, 1), 1);
-            KEparams.cj = repmat((1:3)', size(X_src_orig, 1), 1);
+            KEparams.cj = repmat((1:3)', size(X_src, 1), 1);
 
             Xtrg_ii = reshape(repmat(X_trg,1,3)',3,[])';
             dDL_mat = Kernel_Eval(Xtrg_ii, Xv, KEparams);
@@ -397,50 +399,141 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
                 'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
         end
 
-        %%% On-surface checks
-        function testKernelDMatrixCheck(testCase)
+        function testKernelEvalOblateOffSurface(testCase)
             %{
-                Compares with kernelD.m, which produces the matvec for
-                the Stokes DLP.
-            %}
+                Compares off-surface evaluation with Kernel_Eval's
+                implementation and compares error.
 
+                The oblate case needs a higher order for better
+                convergence...
+            %}
             %%% SETUP
-            rng(42);
-            p = testCase.p;
+            p = 20;
             np = 2*p*(p+1);
             params = testCase.params;
-            params.matvec_eta = 1; 
-            params.u0 = testCase.u0_prolate;
-            params.a = testCase.a_prolate;
-            params.oblate = 0; 
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = true; 
             params.centers = [0 0 0];
+
+            % Get Cartesian coordinates from the two spheroids
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
+            X_trg = oblate_spheroid_shape(p, params.u0, params.a) + 2*nu_trg;
 
             sigma_x = rand(np,1)+0.5;
             sigma_y = rand(np,1)-0.5;
             sigma_z = rand(np,1);
 
-            %%% kernelD
-            Sc = SurfaceSph(prolate_spheroid_shape(p, params.u0, params.a));
-            DMat = kernelD([], Sc);
+            target_pts = cell(1, 1);
+            target_pts{1} = X_trg;
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
 
-            %%% Evaluation on target points (i.e. self-evaluation)
-            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, sigma_x, sigma_y, sigma_z, 1);
+            %%% Kernel_Eval
+            [X_src, ~] = params.get_X();
+            N_src = params.get_Norm(p, 1);
 
-            sig = reshape([sigma_x,sigma_y,sigma_z].', [], 1);
-            DP_res_vec = DMat * sig;
-            DP_res_vec = reshape(DP_res_vec,3,[]).';
+            Sns = SurfaceSph(X_src);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src = Sns.geoProp.W .* wt_gl;
+
+            pot = 'DL_Stk_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            Xv = reshape(repmat(X_src,1,3)',3,[])';
+            Wv = repmat(W_src,1,3)'; Wv=Wv(:);
+            KEparams.X = Xv;
+            KEparams.W2 = Wv.';
+            KEparams.nor = reshape(repmat(N_src,1,3)',3,[])';
+            KEparams.ci = repmat((1:3)', size(X_trg, 1), 1);
+            KEparams.cj = repmat((1:3)', size(X_src, 1), 1);
+
+            Xtrg_ii = reshape(repmat(X_trg,1,3)',3,[])';
+            dDL_mat = Kernel_Eval(Xtrg_ii, Xv, KEparams);
+
+            % Evaluate on density
+            sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
+            DP_kernel_eval = dDL_mat * sig;
+            DP_kernel_eval = reshape(DP_kernel_eval,3,[]).';
 
             %%% Compare results
-            testCase.verifyLessThan(norm((L2Stkx - DP_res_vec(:,1)))./norm(DP_res_vec(:,1)), testCase.tol, ...
-                'Formula for Stokes DLP (x-component) fails for on-surface evaluation.');
+            tol = 9e-8;
+            testCase.verifyLessThan(norm(L2Stkx{1} - DP_kernel_eval(:,1)) ./ norm(DP_kernel_eval(:,1)), tol, ...
+                'Formula for Stokes DLP (x-component) does not match Kernel_Eval.');
 
-            testCase.verifyLessThan(norm((L2Stky - DP_res_vec(:,2)))./norm(DP_res_vec(:,2)), testCase.tol, ...
-                'Formula for Stokes DLP (y-component) fails for on-surface evaluation.');
+            testCase.verifyLessThan(norm(L2Stky{1} - DP_kernel_eval(:,2)) ./ norm(DP_kernel_eval(:,2)), tol, ...
+                'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
 
-            testCase.verifyLessThan(norm((L2Stkz - DP_res_vec(:,3)))./norm(DP_res_vec(:,3)), testCase.tol, ...
-                'Formula for Stokes DLP (z-component) fails for on-surface evaluation.');
+            testCase.verifyLessThan(norm(L2Stkz{1} - DP_kernel_eval(:,3)) ./ norm(DP_kernel_eval(:,3)), tol, ...
+                'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
         end
 
+        %% Test rotation
+        function testKernelEvalProlateOffSurfaceRotatedBody(testCase)
+            %%% SETUP
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
+            params.thetas = pi/6;
+            params.phis = 0;
+
+            sigma_x = rand(np,1)+0.5;
+            sigma_y = rand(np,1)-0.5;
+            sigma_z = rand(np,1);
+
+            params.sigma = sigma_x; % A hack to update p.
+
+            [X_src, ~] = params.get_X();
+            N_src = params.get_Norm_rot(p);
+            X_trg = X_src + 0.3*N_src;
+            
+            target_pts = cell(1, 1);
+            target_pts{1} = X_trg;
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP(target_pts, params, sigma_x, sigma_y, sigma_z, 1);
+
+            %%% Kernel_Eval
+            Sns = SurfaceSph(X_src);
+            [~, gwt_gl] = g_grid(p + 1);
+            wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+            wt_gl = wt_gl(:);
+            W_src = Sns.geoProp.W .* wt_gl;
+
+            pot = 'DL_Stk_3D';
+            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-12,2,400,1);
+            KEparams.dim = 3;
+            Xv = reshape(repmat(X_src,1,3)',3,[])';
+            Wv = repmat(W_src,1,3)'; Wv=Wv(:);
+            KEparams.X = Xv;
+            KEparams.W2 = Wv.';
+            KEparams.nor = reshape(repmat(N_src,1,3)',3,[])';
+            KEparams.ci = repmat((1:3)', size(X_trg, 1), 1);
+            KEparams.cj = repmat((1:3)', size(X_src, 1), 1);
+
+            Xtrg_ii = reshape(repmat(X_trg,1,3)',3,[])';
+            dDL_mat = Kernel_Eval(Xtrg_ii, Xv, KEparams);
+
+            % Evaluate on density
+            sig = reshape([sigma_x,sigma_y,sigma_z].',[],1);
+            DP_kernel_eval = dDL_mat * sig;
+            DP_kernel_eval = reshape(DP_kernel_eval,3,[]).';
+
+            %%% Compare results
+            testCase.verifyLessThan(norm(L2Stkx{1} - DP_kernel_eval(:,1)) ./ norm(DP_kernel_eval(:,1)), testCase.tol, ...
+                'Formula for Stokes DLP (x-component) does not match Kernel_Eval.');
+
+            testCase.verifyLessThan(norm(L2Stky{1} - DP_kernel_eval(:,2)) ./ norm(DP_kernel_eval(:,2)), testCase.tol, ...
+                'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
+
+            testCase.verifyLessThan(norm(L2Stkz{1} - DP_kernel_eval(:,3)) ./ norm(DP_kernel_eval(:,3)), testCase.tol, ...
+                'Formula for Stokes DLP (y-component) does not match Kernel_Eval.');
+        end
+
+        %% On-surface checks
         function testProlateRigidBodyMotion(testCase)
             %{
                 For rigid body motion (translational + rotational), the 
@@ -448,7 +541,7 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
                     (-1/2 I + D)[sigma] = sigma
                 should hold.
             %}
-            p = testCase.p;
+            p = 16;
             np = 2*p*(p+1);
             params = testCase.params;
             params.matvec_eta = 10; 
@@ -540,7 +633,7 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             %%% Rotational motion
             omega = rand(1, 3) - 0.5;
             sigma_rot = cross(repmat(omega, np, 1), X_src);
-            sigma_x_rot = sigma_rot(:, 1);
+            sigma_x_rot = 4*ones(np,1) + sigma_rot(:, 1);
             sigma_y_rot = sigma_rot(:, 2);
             sigma_z_rot = sigma_rot(:, 3);
 
@@ -554,6 +647,75 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             testCase.verifyLessThan(norm(L2Stkz + 0.5*sigma_z_rot) / norm(L2Stkz), testCase.on_surface_tol, ...
                 'Rotational RBM identity failed for z-component.');
         end
+
+        function ProlateTestWithKernelD(testCase)
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = false;
+            params.centers = [0 0 0];
+            
+            [u, v] = gl_grid(p);
+
+            factor = 1/np;
+            sigma_x = sin(factor*u).*cos(factor*u).^4;
+            sigma_y = sin(factor*u).*cos(factor*u).^3;
+            sigma_z = sin(factor*u).*cos(factor*u).^2;
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, ...
+                sigma_x, sigma_y, sigma_z, 1);
+
+            Sc = SurfaceSph(prolate_spheroid_shape(p, params.u0, params.a));
+            DMat = kernelD([], Sc);
+            sig = reshape([sigma_x,sigma_y,sigma_z].', [], 1);
+            DP_res_vec = DMat * sig;
+            DP_res_vec = reshape(DP_res_vec,3,[]).';
+
+            rel_errs = [
+                norm(DP_res_vec(:,1) - L2Stkx)./norm(L2Stkx) ;
+                norm(DP_res_vec(:,2) - L2Stky)./norm(L2Stky) ;
+                norm(DP_res_vec(:,3) - L2Stkz)./norm(L2Stkz)
+            ];
+
+            testCase.verifyLessThan(rel_errs, 1e-4, "Does not match with kernelD.");
+        end
+
+        function OblateTestWithKernelD(testCase)
+            p = 16;
+            np = 2*p*(p+1);
+            params = testCase.params;
+            params.matvec_eta = 10; 
+            params.u0 = testCase.u0_oblate;
+            params.a = testCase.a_oblate;
+            params.oblate = 1;
+            params.centers = [0 0 0];
+            
+            [u, v] = gl_grid(p);
+
+            sigma_x = sin(u).^2;
+            sigma_y = cos(u).^3;
+            sigma_z = sin(u).*cos(2*u).^4;
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, ...
+                sigma_x, sigma_y, sigma_z, 1);
+
+            Sc = SurfaceSph(oblate_spheroid_shape(p, params.u0, params.a));
+            DMat = kernelD([], Sc);
+            sig = reshape([sigma_x,sigma_y,sigma_z].', [], 1);
+            DP_res_vec = DMat * sig;
+            DP_res_vec = reshape(DP_res_vec,3,[]).';
+
+            rel_errs = [
+                norm(DP_res_vec(:,1) - L2Stkx)./norm(L2Stkx) ;
+                norm(DP_res_vec(:,2) - L2Stky)./norm(L2Stky) ;
+                norm(DP_res_vec(:,3) - L2Stkz)./norm(L2Stkz)
+            ];
+
+            testCase.verifyLessThan(rel_errs, 1e-4, "Does not match with kernelD.");
+        end
         
         %%% Near-surface convergence test
         function testNearSurfaceConvergenceTest(testCase)
@@ -566,7 +728,10 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
             p = 16;
             np = 2*p*(p+1);
             params = testCase.params;
-            params.p = p;
+            params.u0 = testCase.u0_prolate;
+            params.a = testCase.a_prolate;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
 
             [X_src, ~] = params.get_X();
             N_src = params.get_Norm(p, 1);
@@ -603,6 +768,72 @@ classdef TEST_L2StkDLP < matlab.unittest.TestCase
                 
                 errors(i) = total_err / total_norm;
             end
+        end
+
+        %% VSH test on spheres
+        function testActionOfVSHOnDLP(testCase)
+            %{
+                Verifies the eigenvalue relationship of vector spherical
+                harmonics with the Stokes DLP on-surface.
+
+                The coefficients for the principal-valued DLP should be the 
+                average of the exterior and interior coefficients.
+
+                Note that this emulates Test_Spharm_Stk.m.
+            %}
+            tol = 1e-6;
+            p = 16;
+            np = 2*p*(p+1);
+            params = SpheroidalParameters(); 
+            params.u0 = 10000001/sqrt(20000001); % AR = 1+1e-7
+            params.a = 1/params.u0;
+            params.oblate = 0; 
+            params.centers = [0 0 0];
+            params.sigma = ones(np, 1);
+            params.isReal = false;
+
+            X_src = params.get_X();
+            Sc = SurfaceSph(X_src);
+
+            %% Setup n and m
+            n = 4; m = 3;
+            [u,v]=gl_grid(p);
+
+            %% Vnm
+            V = Vnm('Vnm', Sc, n, m, u, v);
+            V = reshape(V,3,[]).';
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, V(:,1), V(:,2), V(:,3), 1);
+            L2Stk_result = [L2Stkx, L2Stky, L2Stkz];
+
+            Vnm_eigval = (3/2)/((2*n+1)*(2*n+3));
+            Vnm_rel_err = norm(L2Stk_result - Vnm_eigval*V) / norm(L2Stk_result);
+            testCase.verifyLessThan(Vnm_rel_err, tol, ...
+                'Spectral relationship failed to meet tolerance for Vnm.');
+
+            %% Wnm
+            W = Vnm('Wnm', Sc, n, m, u, v);
+            W = reshape(W,3,[]).';
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, W(:,1), W(:,2), W(:,3), 1);
+            L2Stk_result = [L2Stkx, L2Stky, L2Stkz];
+
+            Wnm_eigval = 3/(2 - 8*n^2);
+            Wnm_rel_err = norm(L2Stk_result - Wnm_eigval*W) / norm(L2Stk_result);
+            testCase.verifyLessThan(Wnm_rel_err, tol, ...
+                'Spectral relationship failed to meet tolerance for Wnm.');
+
+            %% Xnm
+            X = Vnm('Xnm', Sc, n, m, u, v);
+            X = reshape(X,3,[]).';
+
+            [L2Stkx, L2Stky, L2Stkz] = L2StkDLP([], params, X(:,1), X(:,2), X(:,3), 1);
+            L2Stk_result = [L2Stkx, L2Stky, L2Stkz];
+
+            Xnm_eigval = -3/(4*n+2);
+            Xnm_rel_err = norm(L2Stk_result - Xnm_eigval*X) / norm(L2Stk_result);
+            testCase.verifyLessThan(Xnm_rel_err, tol, ...
+                'Spectral relationship failed to meet tolerance for Xnm.');
         end
     end
 end
