@@ -94,7 +94,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         end
         
         pars.centers=[0 0 0];
-        thetas=0;
+        thetas=pi/6;
         phis=0;
     end
 
@@ -148,6 +148,12 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     F_pos_vec = F_pos_vec + d;
     F_vec = rand(ns*num_pf, 3); % Point forces
 
+    % Rotate everything accordingly since the above was constructed from
+    % the perspective of an unrotated spheroid.
+    % TODO: update this for multiple spheroids.
+    F_pos_vec = F_pos_vec*Ri';
+    F_vec = F_vec*Ri';
+
     if plt
         pars.plot(F_pos_vec);
         title("Spheroids and locations of point forces");
@@ -159,7 +165,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     if ~neumann % Dirichlet
         % Find boundary condition (surface velocity induced by point forces)
-        truesolnSurf = stokeslet_velocity(F_vec, F_pos_vec, Y);
+        truesolnSurf = stokeslet_velocity(F_vec, F_pos_vec, Y)*Ri;
 
         % Construct DLP on-surface matrices
         DM = L2StkMatVecKernel(pars, 'DLP', p);
@@ -171,8 +177,8 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         if interior % Interior problem
             CM_cells = cell(1, ns);
             for i=1:ns %probably need to center?
-                NrY_i = NrY((i-1)*np+1:i*np,:);
-                % NrY_i = pars.get_Norm(p, i);
+                % NrY_i = NrY((i-1)*np+1:i*np,:);
+                NrY_i = pars.get_Norm(p, i);
                 NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
                 CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
             end
@@ -199,7 +205,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             KkernelDM = interior_factor*0.5*eye(3*ns*np) + DMkernelD;
         end
     else % Neumann problem
-        truesolnSurf = stokeslet_traction(F_vec, F_pos_vec, Y, NrY);
+        truesolnSurf = stresslet_traction(F_vec, F_pos_vec, Y, NrY);
         if usekerneldS
             TMkerneldS = kerneldS([], SurfaceSph(Y));
         end
@@ -217,8 +223,8 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             TM = L2StkMatVecKernel(pars, 'TLP', p, NrY);
             CM_cells = cell(1, ns);
             for i=1:ns %probably need to center?
-                NrY_i = NrY((i-1)*np+1:i*np,:);
-                % NrY_i = pars.get_Norm(p, i);
+                % NrY_i = NrY((i-1)*np+1:i*np,:);
+                NrY_i = pars.get_Norm(p, i);
                 NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
                 CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
             end
@@ -342,7 +348,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         [TSLterm_x, TSLterm_y, TSLterm_z] = L2StkMatVec(pars, 'TLP', sigma_x, sigma_y, sigma_z, Xeval, NrY);
         fluxsoln = [TSLterm_x, TSLterm_y, TSLterm_z];
 
-        truefluxsoln = stokeslet_traction(F_vec, F_pos_vec, Xeval, NrY);
+        truefluxsoln = stresslet_traction(F_vec, F_pos_vec, Xeval, NrY);
 
         fprintf('p=%d: flux comparison = %.6e\n',p, norm(truefluxsoln - fluxsoln) ./ norm(truefluxsoln)); 
 
@@ -361,17 +367,19 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     %% Finally, we compare our computed solutions to the true solutions.
     truesoln = stokeslet_velocity(F_vec, F_pos_vec, Xeval);
-    fprintf('p=%d: velocity comparison = %.6e\n',p, norm(truesoln - soln) ./ norm(truesoln));
+    fprintf('p=%d: velocity comparison = %.6e\n',p, norm(truesoln - soln*Ri') ./ norm(truesoln));
 
     if ns > 1
         return;
     end
 
-    %% Spurious RBM
+    %% Spurious RBM -- fails for rotated bodies
    fprintf('Examining whether the computed velocity differs by an RBM...\n');
    
     v_RBM = project_onto_RBM(pars, soln - truesoln, Xeval);
     if ~neumann && usekernelD
+        % to fix for rotation, need to pass Xeval rotated back in canonical
+        % frame?
         v_RBM_kernel = project_onto_RBM(pars, solnkD - truesoln, Xeval);
         rel_vel_error = norm(solnkD - truesoln - v_RBM_kernel);
         fprintf('p=%d: eval comparison for kernelD after RBM adjustment = %.6e\n',p, rel_vel_error);
@@ -415,7 +423,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             true_velocity = stokeslet_velocity(F_vec, F_pos_vec, X_trg);
 
             [tx, ty, tz] = L2StkMatVec(pars, 'TLP', sigma_x, sigma_y, sigma_z, X_trg, NrY);
-            true_traction = stokeslet_traction(F_vec, F_pos_vec, X_trg, NrY);
+            true_traction = stresslet_traction(F_vec, F_pos_vec, X_trg, NrY);
 
             errs_vel{i} = log10(abs([vx, vy, vz] - true_velocity) ./ abs(true_velocity));
             errs_traction{i} = log10(abs([tx, ty, tz] - true_traction) ./ abs(true_traction));
@@ -498,7 +506,7 @@ function u = stokeslet_velocity(F_vec, F_pos_vec, x)
     end
 end
 
-function t = stokeslet_traction(F_vec, F_pos_vec, x, n_x)
+function t = stresslet_traction(F_vec, F_pos_vec, x, n_x)
     %{
         Sum up Stresslets at evaluation points due to given point forces.
 
