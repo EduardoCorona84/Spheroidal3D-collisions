@@ -1,10 +1,8 @@
 function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
     %{
-        Finds the actual matrix representation of the matvec for a given Stokes
-        potential. Note that this mimics the code found in spheroidalMatVecKernel.m.
+        Finds the matrix representation of the matvec for a given Stokes
+        potential.
     %}
-
-    DEVELOPMENT_FLAG = true;
 
     if isempty(pars.u0)
         error("No surface parameter u_0 given")
@@ -55,7 +53,6 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
 
     separation = pars.separate_spheroids();
 
-    if DEVELOPMENT_FLAG
     if ns > 1
         fprintf("Generating matvec matrix for multiple bodies (%d bodies)...\n", ns);
         for i=1:ns % Source particle i
@@ -153,7 +150,6 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                 M(target_block, source_block) = M_ji;
             end % End for target spheroid j
         end % End for source spheroid i
-    end
     end
 end
 
@@ -384,35 +380,55 @@ function M = TSLmatrix_at_target(params_i, X_target, Nu_target, p)
     I = eye(np);
     Z = zeros(np);
 
+    % Essentially, reconstruct the Hessian.
     [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(params_i, I, Z, Z, X_target);
     [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(params_i, Z, I, Z, X_target);
     [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(params_i, Z, Z, I, X_target);
 
+    S_target = cart2spheroidal(X_target, params_i.a, params_i.oblate);
+    u = S_target(:,1); v = S_target(:,2); phi = S_target(:,3);
     if params_i.oblate
-        S_self = oblate_spheroid_shape(p, params_i.u0, params_i.a, 'cart');
-        u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
-        [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
-        [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
-        [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
+        [DXX, DYX, DZX] = convert_from_oblate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
+        [DXY, DYY, DZY] = convert_from_oblate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
+        [DXZ, DYZ, DZZ] = convert_from_oblate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
     else
-        S_self = prolate_spheroid_shape(p, params_i.u0, params_i.a, 'cart');
-        u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
-        [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
-        [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
-        [D3_X, D3_Y, D3_Z] = convert_from_prolate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
+        [DXX, DYX, DZX] = convert_from_prolate_basis(D1_U, D1_V, D1_PHI, u, v, phi);
+        [DXY, DYY, DZY] = convert_from_prolate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
+        [DXZ, DYZ, DZZ] = convert_from_prolate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
     end
 
-    ddS_x = [D1_X, D1_Y, D1_Z];
-    ddS_y = [D2_X, D2_Y, D2_Z];
-    ddS_z = [D3_X, D3_Y, D3_Z];
+    % ddS_x = [D1_X, D1_Y, D1_Z];
+    % ddS_y = [D2_X, D2_Y, D2_Z];
+    % ddS_z = [D3_X, D3_Y, D3_Z];
+
+    %{
+        Note that the gradient of the divergence should be represented as
+        follows. Let (F_x, F_y, F_z) denote the vector field of interest.
+        [(d^2x F_x) + (dxdy F_y) + (dxdz F_z)]
+        [(dydx F_x) + (d^2y F_y) + (dydz F_z)]
+        [(dzdx F_x) + (dzdy F_y) + (d^2z F_z)]
+
+        Alternatively,
+        [d^2x dxdy dxdz][F_x]
+        [dydx d^2y dydz][F_y]
+        [dzdx dzdy d^2z][F_z]
+
+        The matrix above is ddS_op.
+    %}
+    
+    % TODO: for memory efficiency, one can use commutativity of second-order
+    % derivatives (i.e. we should have DXY=DYX, DYZ=DZY, and DXZ = DZX).
+    % However, not sure how this relationship holds in near-singular
+    % evaluation.
+    ddS_x = [DXX, DXY, DXZ];
+    ddS_y = [DYX, DYY, DYZ];
+    ddS_z = [DZX, DZY, DZZ];
+    ddS_op = [ddS_x; ddS_y; ddS_z];
 
     %% Build TLP matvec kernel
     % Grab source points
     X_src = params_i.get_X - params_i.centers;
     Xtarget_dot_N = repmat(dot(X_target, Nu_target, 2), 3, 1); % 3np x 1 vector.
-
-    % Extract ddS terms
-    ddS_op = [ddS_x; ddS_y; ddS_z];
 
     %%%
     %%% Build matrix
@@ -601,22 +617,20 @@ function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
     [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, X_spectral);
     for i=1:ns
         if IDparams.oblate(i)
-            X_self = oblate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i));
-            S_self = cart2spheroidal(X_self, IDparams.a(i), IDparams.oblate(i));
+            S_self = oblate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i), 'spheroidal');
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
             [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
             [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
             [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
         else
-            X_self = prolate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i));
-            S_self = cart2spheroidal(X_self, IDparams.a(i), IDparams.oblate(i));
+            S_self = prolate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i), 'spheroidal');
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
             [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
             [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
             [D3_X, D3_Y, D3_Z] = convert_from_prolate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
         end
 
-        ddS_x_cells{i} = [D1_X, D1_Y, D1_Z];
+        ddS_x_cells{i} = [D1_X, D1_Y, D1_Z]; % FIX ME
         ddS_y_cells{i} = [D2_X, D2_Y, D2_Z];
         ddS_z_cells{i} = [D3_X, D3_Y, D3_Z];
     end
