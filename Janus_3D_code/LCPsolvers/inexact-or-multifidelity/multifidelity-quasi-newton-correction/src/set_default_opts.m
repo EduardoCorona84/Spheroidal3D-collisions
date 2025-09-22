@@ -58,7 +58,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
 
     %here we need to check if we have x0 = 0 for the multifidelity part. 
     %If x0 is zero and opts.outer.warm_correction == true, the update will fail
-    if x0 == zeros(n, 1) && opts.outer.warm_correction == true
+    if all(x0 == 0) && opts.outer.warm_correction == true
         opts.outer.warm_correction = false;
     end
 
@@ -72,13 +72,13 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     end
 
     %in the case with no warm start and x0 equals 0, b correction is redundant.
-    if (opts.warm.enabled == false && x0 == zeros(n, 1)) && opts.outer.b_correction == true 
+    if (opts.warm.enabled == false && all(x0 == 0)) && opts.outer.b_correction == true 
         opts.outer.b_correction = false;
     end
 
     %here we need to check if we have x0 = 0 for the multifidelity part. 
     %If x0 is zero and opts.outer.warm_correction == true, the update will fail
-    if x0 == zeros(n, 1) && opts.outer.warm_correction == true
+    if all(x0 == 0) && opts.outer.warm_correction == true
         opts.outer.warm_correction = false;
     end
     %these are out here as right now I am using the same secant directions for correction and prox. This could be changed in the future.
@@ -92,7 +92,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     end
 
     if ~isfield(opts.outer.correction_opts, 'direction')
-        opts.outer.correction_opts.direction = 'matvec';
+        opts.outer.correction_opts.direction = 'secant';
     end
 
 

@@ -67,7 +67,7 @@ function method_comparisons(A, A_low, b)
     opts.inner.solver_opts.A = @(x) A_low*x;
     opts.inner.solver_opts.b = b;
     opts.outer.max_iter = 100;
-    opts.inner.solver_opts.max_iter = 1;
+    opts.inner.solver_opts.max_iter = 3;
     x0 = zeros(problem_size, 1);
     [~, info_corr] = multifidelity_wrapper(fg, fg_low, x0, opts);
 

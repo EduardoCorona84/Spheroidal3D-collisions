@@ -129,6 +129,7 @@ function opts = update_low(k, fg_low, s_k, y_k, opts, info)
             return
         elseif k == 0 && opts.outer.warm_correction == false
             %do nothing on the first itertion if we are not correcting for a warm start (if we have 0 x0, cannot correct)
+            return
         end
     end
 

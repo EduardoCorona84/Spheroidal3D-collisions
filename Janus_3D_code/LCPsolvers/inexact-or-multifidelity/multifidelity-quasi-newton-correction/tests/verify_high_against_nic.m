@@ -38,6 +38,7 @@ for i = 1:length(matrices)
     %set my opts and run code
     opts.warm.enabled = false;
     opts.inner.enabled = false;
+    opts.outer.correction = false;
     opts.outer.max_iter = 100;
     opts.outer.solver_opts.A = @(x) A*x;
     opts.outer.solver_opts.b = b;
@@ -46,7 +47,7 @@ for i = 1:length(matrices)
 
     %find min iters from the two methods
     min_iters = min(size(info_nic.iterHist, 1), size(info_me.outer.iterHist, 1));
-    %now double check that they have the same outputs
+    %now double check that they have the same outputs7
     assert(isequal(info_nic.iterHist(1:min_iters, :), info_me.outer.iterHist(1:min_iters, :)), 'iterHist do not match');
 
 end
