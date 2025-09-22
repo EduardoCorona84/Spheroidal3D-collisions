@@ -51,11 +51,36 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
         opts.outer.warm_correction = true;
     end
 
-    %we cannot do warm correction if we are not warm starting, this should cover cases in which warm_correction is not set with or is set to true when warm start is false.
-    if opts.warm.enabled == false
+    %warm correction is used for if correcting off a warm start or correcting off a nonzero starting point
+    if opts.warm.enabled == false && ~isfield(opts.outer, 'warm_correction')
         opts.outer.warm_correction = false;
     end
 
+    %here we need to check if we have x0 = 0 for the multifidelity part. 
+    %If x0 is zero and opts.outer.warm_correction == true, the update will fail
+    if x0 == zeros(n, 1) && opts.outer.warm_correction == true
+        opts.outer.warm_correction = false;
+    end
+
+    %now add logic for correcting along b
+    if opts.warm.enabled == true && ~isfield(opts.outer, 'b_correction')
+        opts.outer.b_correction = true;
+    end
+
+    if opts.warm.enabled == false && ~isfield(opts.outer, 'b_correction')
+        opts.outer.b_correction = false;
+    end
+
+    %in the case with no warm start and x0 equals 0, b correction is redundant.
+    if (opts.warm.enabled == false && x0 == zeros(n, 1)) && opts.outer.b_correction == true 
+        opts.outer.b_correction = false;
+    end
+
+    %here we need to check if we have x0 = 0 for the multifidelity part. 
+    %If x0 is zero and opts.outer.warm_correction == true, the update will fail
+    if x0 == zeros(n, 1) && opts.outer.warm_correction == true
+        opts.outer.warm_correction = false;
+    end
     %these are out here as right now I am using the same secant directions for correction and prox. This could be changed in the future.
 
     if ~isfield(opts.outer, 'correction')
@@ -134,7 +159,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
 
 
     if ~isfield(opts.outer, 'adaptive')
-        opts.outer.adaptive = 'high';
+        opts.outer.adaptive = 'retry';
     end
 
     if ~isfield(opts.outer, 'solver_opts')

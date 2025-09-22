@@ -23,6 +23,6 @@ b = (2*rand(problem_size, 1) - 1);
 
 %pass the test matrices to the method comparison function
 %saved .fig files in the plots folder
-method_comparisons(matrices.linear50.matrix, noisy_matrices{20,1}, b)
+method_comparisons(matrices.linear50.matrix, (noisy_matrices{20,1} + noisy_matrices{20,1}')/2, b)
 
 disp(noisy_matrices{20,2}.spectral.rel*100);

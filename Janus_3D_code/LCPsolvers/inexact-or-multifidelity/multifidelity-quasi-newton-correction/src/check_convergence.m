@@ -1,4 +1,4 @@
-function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, info, opts)
+function [converged, descent, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, grad_k, grad_km1, q, eta, info, opts)
     %in this function, we have to do 3 things
     %1. Compare the recent high and low fidelity iterates and make a determination regarding if we have sufficient decrease (under some criterion). If we don't have sufficient decrease we want to adapt the high/low fidelity split in some way
     %this is under opts.outer.adaptive
@@ -6,6 +6,7 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
     %3.Update the info struct with the information used to make these decisions
 
     converged = false;
+    descent = true;
     
     if k == 0
         %for now we will do nothing. If KKT/merit function is a good measure, we could use this here.
@@ -24,12 +25,14 @@ function [converged, opts, info] = check_convergence(k, f_k, f_km1, x_k, x_km1, 
                 end
 
             elseif opts.inner.enabled == true
-                if f_k < f_km1
-                    %do nothing
+                if eta > 0
+                    descent = true;
                 else
                     switch(lower(opts.outer.adaptive))
                         case 'none'
                             %do nothing
+                        case 'retry'
+                            descent = false;
                         case 'high'
                             opts.inner.enabled = false;
 

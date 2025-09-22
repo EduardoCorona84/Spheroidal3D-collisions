@@ -24,8 +24,14 @@ function opts = get_correction_SR1(k, fg_low, s_k, y_k, opts, info)
         case 'dense limited'
             % Implement dense limited memory update, we store r amount of y_k and s_k and then use these for the update. The update will be a full dense matrix, but this lets us use limited memory. Have an option for skips.
 
+            %no skip implementation for now, very simple
+
+
         case 'compact'
             % Implement compact representation update. Not sure how to handle skips, if at all, yet.
+
+            %no skip implementation for now, very simple.
+            [~, ~, A_low_s_k] = fg_low(s_k);
 
         otherwise
             error('Unknown memory option');

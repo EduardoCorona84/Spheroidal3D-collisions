@@ -50,12 +50,14 @@ function method_comparisons(A, A_low, b)
 
 
     %alternating correction
-    opts.warm.enabled = false;
+    opts.warm.enabled = true;
     opts.inner.enabled = true;
     opts.outer.correction = true;
+    opts.outer.storeFuncs = true;
     opts.outer.correction_opts.direction = 'matvec';
+    opts.outer.correction_opts.skips = 'true';
     opts.outer.warm_correction = true;
-    opts.outer.adaptive = 'none';
+    opts.outer.adaptive = 'retry';
     %opts.outer.solver_opts.solver = 'bbpgd';
     %opts.inner.solver_opts.solver = 'bbpgd';
     opts.outer.solver_opts.tol_abs = 1e-16;
