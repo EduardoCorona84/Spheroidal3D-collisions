@@ -25,6 +25,8 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
         a=a*ones(1,ns); 
     end
 
+    assert(size(sigma_x, 3) == ns, "Density should be defined on every spheroid surface.");
+
     if nargin==4
         error("Not implemented.");
     else

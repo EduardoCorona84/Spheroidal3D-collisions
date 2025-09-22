@@ -29,14 +29,20 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     fluxsoln = []; truefluxsoln = [];
 
-    % Flags for debugging
+    %% Flags for debugging
     mix_obl = false; % Decide whether to mix oblates (or make it an oblate for the case of 1 spheroid)
     useS = true; % For exterior Dirichlet
-    usekerneldS = true; % For Neumann problems
+    usekerneldS = false; % For Neumann problems
     usekernelD = false; % For interior Dirichlet problems
-    plot_error_flag = false; % Flag for plotting error in the exterior Neumann case.
+    
+    % Flag for plotting error in the exterior Neumann case.
+    PLOT_ERROR_FLAG = false;
+   
+    % Flag for rotating the entire coordinate system (used to debug the
+    % failure of rotation for multiple bodies)
+    GLOBAL_ROTATION_FLAG = false;
 
-    %%% Set up spheroid system
+    %% Set up spheroid system
     np=2*p*(p+1);
     
     if length(u0)~=ns
@@ -75,11 +81,11 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         a(obl==1) = 1./sqrt(u0(obl==1).^2+1);
         pars.a = a;
         
-        pars.centers = [0 0 0; 10 0 0];
-        thetas = [0 0];
-        phis = [0 0];
-        % thetas = [0 pi/6];
-        % phis = [0 pi/10];
+        pars.centers = [0 0 0; 5 0 -5];
+        % thetas = [0 0];
+        % phis = [0 0];
+        thetas = [0 pi/6];
+        phis = [0 pi/10];
     else
         if ns~=1
             error("Number of spheroids given not implemented here.");
@@ -94,7 +100,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         end
         
         pars.centers=[0 0 0];
-        thetas=pi/6;
+        thetas=0;
         phis=0;
     end
 
@@ -110,13 +116,36 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     pars.thetas=thetas;
     pars.phis=phis;
     pars.sigma=zeros(np,1,ns);
-        
-    %%% Point charges
+
+    %% Global rotation (if enabled)
+    % The entire idea is to rotate the entire global coordinate system.
+    % Then, the result should stay the same--except that the resulting
+    % answer will differ by the (global) rotation.
+    if GLOBAL_ROTATION_FLAG
+        fprintf("-- Global rotation flag enabled. --\n");
+        theta_g = -pi/4;
+        phi_g = 0;
+        Riy = [cos(theta_g) 0 sin(theta_g); 0 1 0; -sin(theta_g) 0 cos(theta_g)];
+        Riz = [cos(phi_g) -sin(phi_g) 0; sin(phi_g) cos(phi_g) 0; 0 0 1];
+        R_global = Riz*Riy;
+
+        fprintf("Rotating centers...\n");
+        pars.centers = pars.centers * R_global';
+
+        fprintf("Re-orienting each spheroid...\n");
+        for i = 1:ns
+            Ri(:,:,i) = R_global * Ri(:,:,i);
+        end
+        pars.Rmat = Ri;
+
+        fprintf("-- Done re-orienting coordinate system. --\n");
+    end
+
+    %% Placement of point forces
     num_pf = 3; % Number of point forces per spheroid
     c = pars.centers;
     F_pos_vec = reshape(repmat(reshape(c',3,1,[]),1,num_pf),3,[],1)';
 
-    %%% Placement of point forces
     switch (interior)
         case true % Interior problem (place points randomly outside)
             placement_scale = 2;
@@ -150,9 +179,8 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     % Rotate everything accordingly since the above was constructed from
     % the perspective of an unrotated spheroid.
-    % TODO: update this for multiple spheroids.
-    F_pos_vec = F_pos_vec*Ri';
-    F_vec = F_vec*Ri';
+    F_pos_vec = rotate_point_forces(F_pos_vec, pars.centers, num_pf, ns, Ri);
+    F_vec = rotate_point_forces(F_vec, pars.centers, num_pf, ns, Ri);
 
     if plt
         pars.plot(F_pos_vec);
@@ -165,7 +193,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     if ~neumann % Dirichlet
         % Find boundary condition (surface velocity induced by point forces)
-        truesolnSurf = stokeslet_velocity(F_vec, F_pos_vec, Y)*Ri;
+        truesolnSurf = stokeslet_velocity(F_vec, F_pos_vec, Y);
 
         % Construct DLP on-surface matrices
         DM = L2StkMatVecKernel(pars, 'DLP', p);
@@ -175,14 +203,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         end
 
         if interior % Interior problem
-            CM_cells = cell(1, ns);
-            for i=1:ns %probably need to center?
-                % NrY_i = NrY((i-1)*np+1:i*np,:);
-                NrY_i = pars.get_Norm(p, i);
-                NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
-                CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
-            end
-            CM = blkdiag(CM_cells{:});
+            CM = nu_completion(pars, p, ns);
             K = -0.5*eye(3*ns*np) + DM + CM;
         else % Exterior problem
             % See Pozrikidis, Chapter 4.7.
@@ -221,14 +242,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             % should be the projection onto the space of surface normals
             % associated with every body.
             TM = L2StkMatVecKernel(pars, 'TLP', p, NrY);
-            CM_cells = cell(1, ns);
-            for i=1:ns %probably need to center?
-                % NrY_i = NrY((i-1)*np+1:i*np,:);
-                NrY_i = pars.get_Norm(p, i);
-                NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
-                CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
-            end
-            CM = blkdiag(CM_cells{:});
+            CM = nu_completion(pars, p, ns);
             K = -0.5*eye(3*ns*np) + TM + CM;
         end
 
@@ -251,6 +265,9 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     if (neumann && usekerneldS) || (~neumann && usekernelD)
         kernel_truesolnSurf = reshape([truesolnSurf(:,1), truesolnSurf(:,2), truesolnSurf(:,3)].', [], 1);
     end
+
+    % Move data (i.e. surface velocity/traction) to local frame
+    truesolnSurf = rotate_data(truesolnSurf, np, ns, Ri);
 
     tsSurf = [];
     for i=1:ns
@@ -367,7 +384,11 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     %% Finally, we compare our computed solutions to the true solutions.
     truesoln = stokeslet_velocity(F_vec, F_pos_vec, Xeval);
-    fprintf('p=%d: velocity comparison = %.6e\n',p, norm(truesoln - soln*Ri') ./ norm(truesoln));
+
+    % Rotate solution back to correct coordinate frame
+    soln = rotate_soln(soln, np, ns, Ri);
+
+    fprintf('p=%d: velocity comparison = %.6e\n',p, norm(truesoln - soln) ./ norm(truesoln));
 
     if ns > 1
         return;
@@ -401,7 +422,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     end
 
     % Plot error
-    if plot_error_flag && ns==1 && (~interior && neumann) % Only do this for exterior Neumann.
+    if PLOT_ERROR_FLAG && ns==1 && (~interior && neumann) % Only do this for exterior Neumann.
         distances = [10.^(0:-1:-5)];
         errs_vel = cell(1, numel(distances));
         errs_traction = cell(1, numel(distances));
@@ -628,6 +649,11 @@ end
 function plot_singular_values(mtx)
     [U, S, V] = svd(mtx);
     s_vals = diag(S);
+
+    rank_no_tol = rank(mtx);
+    rank_tol = rank(mtx, 1e-6);
+    fprintf("Rank (no given tolerance): %d -- nullspace dimension is %d\n", rank(mtx), size(mtx,1) - rank_no_tol);
+    fprintf("Rank (tolerance of 1e-6): %d -- nullspace dimension is %d\n", rank_tol, size(mtx,1) - rank_tol);
     
     figure;
     semilogy(s_vals, 'o-');
@@ -635,4 +661,66 @@ function plot_singular_values(mtx)
     xlabel('Index');
     ylabel('Singular Value');
     grid on;
+end
+
+function plot_eigenspace(mtx)
+end
+
+function res = rotate_point_forces(vec, centers, num_pf, ns, R)
+    %{
+        Helper function to apply rotation to a list of vectors (this is
+        mostly to handle the case of multiple spheroids.)
+
+        The point forces are respectively rotated around each spheroid's
+        center.
+    %}
+    res = zeros(size(vec));
+    for i=1:ns
+        pf_indices = (i-1)*num_pf+1:i*num_pf;
+        res(pf_indices,:) = (vec(pf_indices,:) - centers(i))*R(:,:,i)' + centers(i);
+    end
+end
+
+function res = rotate_data(vec, np, ns, R)
+    %{
+        In the case of rotated bodies, one must also rotate the data (i.e.
+        the velocity and traction) to the local frame of the associated
+        spheroid (i.e. upright).
+
+        This is why we multiply on the right by R, and not the transpose
+        R^T.
+    %}
+    res = zeros(size(vec));
+    for i=1:ns
+        spheroid_block = (i-1)*np+1:i*np;
+        res(spheroid_block,:) = vec(spheroid_block,:)*R(:,:,i);
+    end
+end
+
+function res = rotate_soln(vec, np, ns, R)
+    %{
+        The solution that is calculated is in the local frame, so we need
+        to bring it back to the correct frame by rotating the solutions
+        back.
+    %}
+    res = zeros(size(vec));
+    for i=1:ns
+        spheroid_block = (i-1)*np+1:i*np;
+        res(spheroid_block,:) = vec(spheroid_block,:)*R(:,:,i)';
+    end
+end
+
+function CM = nu_completion(pars, p, ns)
+    %{
+        Returns the completion term that corresponds to the space spanned
+        by the normals on every spheroid.
+    %}
+    np = 2*p*(p+1);
+    CM_cells = cell(1, ns);
+    for i=1:ns
+        NrY_i = get_norm_vecs(p, pars.u0(i), pars.oblate(i));
+        NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
+        CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
+    end
+    CM = blkdiag(CM_cells{:});
 end

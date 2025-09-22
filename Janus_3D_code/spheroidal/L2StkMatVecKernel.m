@@ -46,7 +46,7 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
         M = DLPmatrix_dev(IDparams, [], np, ns);
         M = blkdiag(M{:});
     elseif strcmp(pot, 'TLP')
-        M = TSLmatrix(IDparams, [], [], p, ns);
+        M = TSLmatrix(IDparams, p, ns);
     else
         error("Invalid potential given: should be 'SLP', 'DLP', or 'TLP'.");
     end
@@ -54,11 +54,15 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
     separation = pars.separate_spheroids();
 
     if ns > 1
-        fprintf("Generating matvec matrix for multiple bodies (%d bodies)...\n", ns);
+        fprintf("Generating off-diagonal blocks for multiple bodies (%d bodies)...\n", ns);
         for i=1:ns % Source particle i
             % This is necessary due to how the spheroidal LPs are setup.
             % Otherwise, we would have to do something similar to
             % spheroidalMatVecKernel's code.
+            %
+            % The idea is to make a SpheroidalParameters that only has
+            % knowledge of the source particle. The other particles are
+            % then just arbitrary information for the points and normals.
             params_i = IDparams.copy();
             params_i.u0 = IDparams.u0(i);
             params_i.a = IDparams.a(i);
@@ -71,13 +75,14 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
             params_i.centers = [0 0 0];
             params_i.thetas = 0;
             params_i.phis = 0;
+            params_i.Rmat = eye(3);
 
-            % Get all coordinates of other spheroids
+            % Get all coordinates of other spheroids with respect to
+            % spheroid i
             [X_all_targets, X_self] = IDparams.get_X(i);
             [Nu_all_targets, Nu_self] = IDparams.get_Norm_rot(p,i);
 
             spheroid_index = 0;
-
             for j=1:ns % Target particle j
                 if i==j % Self-interaction already handled above.
                     continue;
@@ -136,18 +141,27 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                         KEparams.nor = reshape(repmat(Nu_self,1,3)',3,[])';
                     end
         
-                    LP_smooth = Kernel_Eval(Xtrg_ii,Xv,KEparams);
+                    M_ji = Kernel_Eval(Xtrg_ii,Xv,KEparams);
 
                     prm = zeros(1,3*np); 
                     prm(1:np) = 1:3:3*np; prm(np+1:2*np) = 2:3:3*np; prm(2*np+1:3*np)=3:3:3*np;
-                    LP_smooth = LP_smooth(prm, prm);
+                    M_ji = M_ji(prm, prm);
                 end
 
+                % Rotation matrix: move from frame i to frame j
+                % Note that it should not be kron(eye(np), R) as this
+                % assumes a different format for the vectors (i.e. we want
+                % the x, y, and z's separately blocked together).
+                R = kron(IDparams.Rmat(:,:,j)' * IDparams.Rmat(:,:,i), eye(np));
+
                 % Rows are targets, columns are source
-                % M_ji(x_j) = \int_{\Gamma_i} K(x_j, y_i) * \sigma_i(y_i) dS(y_i)
+                % Thus, column i represents the block from the perspective
+                % of spheroid i. However, we don't want this: we want row i
+                % to correspond to spheroid i. This is why we multiply by
+                % R.
                 target_block = (j-1)*(3*np) + (1:3*np);
                 source_block = (i-1)*(3*np) + (1:3*np);
-                M(target_block, source_block) = M_ji;
+                M(target_block, source_block) = R*M_ji;
             end % End for target spheroid j
         end % End for source spheroid i
     end
@@ -396,11 +410,7 @@ function M = TSLmatrix_at_target(params_i, X_target, Nu_target, p)
         [DXY, DYY, DZY] = convert_from_prolate_basis(D2_U, D2_V, D2_PHI, u, v, phi);
         [DXZ, DYZ, DZZ] = convert_from_prolate_basis(D3_U, D3_V, D3_PHI, u, v, phi);
     end
-
-    % ddS_x = [D1_X, D1_Y, D1_Z];
-    % ddS_y = [D2_X, D2_Y, D2_Z];
-    % ddS_z = [D3_X, D3_Y, D3_Z];
-
+    
     %{
         Note that the gradient of the divergence should be represented as
         follows. Let (F_x, F_y, F_z) denote the vector field of interest.
@@ -512,127 +522,43 @@ function M = SLPmatrix(IDparams, X_spectral, np, ns)
     M = 0.5 * blkdiag(M_cells{:});
 end
 
-function M = DLPmatrix(IDparams, np, ns)
-    %{
-        Calculates self-interaction blocks. Note that the target and source
-        points should be the same.
-    %}
-    M_cells = cell(1, ns);
-    nu_x_all = repmat([1,0,0], np, 1, ns);
-    nu_y_all = repmat([0,1,0], np, 1, ns);
-    nu_z_all = repmat([0,0,1], np, 1, ns);
-
-    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_all, nu_y_all, nu_z_all);
-    [DP_x_cells, DP_y_cells, DP_z_cells] = spheroidalDP(IDparams, [], nu_x_all, nu_y_all, nu_z_all);
-
-    if ns==1
-        % Ideally, should have a different function for doing this.
-        SP_x_cells = {SP_x_cells}; SP_y_cells = {SP_y_cells}; SP_z_cells = {SP_z_cells};
-        DP_x_cells = {DP_x_cells}; DP_y_cells = {DP_y_cells}; DP_z_cells = {DP_z_cells};
-    end
-    
-    for i=1:ns
-        if ns==1
-            X_src_i = IDparams.get_X();
-        else
-            X_src_i = IDparams.get_X(i);
-        end
-        N_src_i = IDparams.get_Norm(IDparams.p, i);
-
-        % Extract SP terms
-        SP_x_i = SP_x_cells{i};
-        SP_y_i = SP_y_cells{i};
-        SP_z_i = SP_z_cells{i};
-
-        % Extract DP terms
-        DP_x_i = DP_x_cells{i};
-        DP_y_i = DP_y_cells{i};
-        DP_z_i = DP_z_cells{i};
-
-        % Extract DP sum term
-        % [ x*DPx y*DPx z*DPx ] [ sigma_x ]
-        % [ x*DPy y*DPy z*DPy ] [ sigma_y ]
-        % [ x*DPz y*DPz z*DPz ] [ sigma_z ]
-        M1_11 = diag(X_src_i(:,1)) * DP_x_i; M1_12 = diag(X_src_i(:,2)) * DP_x_i; M1_13 = diag(X_src_i(:,3)) * DP_x_i;
-        M1_21 = diag(X_src_i(:,1)) * DP_y_i; M1_22 = diag(X_src_i(:,2)) * DP_y_i; M1_23 = diag(X_src_i(:,3)) * DP_y_i;
-        M1_31 = diag(X_src_i(:,1)) * DP_z_i; M1_32 = diag(X_src_i(:,2)) * DP_z_i; M1_33 = diag(X_src_i(:,3)) * DP_z_i;
-        M1 = [
-            M1_11, M1_12, M1_13;
-            M1_21, M1_22, M1_23;
-            M1_31, M1_32, M1_33
-        ];
-
-        % Extract individual DP term; i.e. DP[y \cdot \sigma]
-        % [ DPx ]                        [ sigma_x ]
-        % [ DPy ][ Xsrc_x Xsrc_y Xsrc_z ][ sigma_y ]
-        % [ DPz ]                        [ sigma_z ]
-        M2 = [DP_x_i; DP_y_i; DP_z_i] * [diag(X_src_i(:,1)), diag(X_src_i(:,2)), diag(X_src_i(:,3))];
-
-        % Extract SP sum term
-        % [ SPx ][ Nx Nx Nx ][ sigma_x ]
-        % [ SPy ][ Ny Ny Ny ][ sigma_y ]
-        % [ SPz ][ Nz Nz Nz ][ sigma_z ]
-        M3_11 = SP_x_i * diag(N_src_i(:,1)); M3_12 = SP_y_i * diag(N_src_i(:,1)); M3_13 = SP_z_i * diag(N_src_i(:,1));
-        M3_21 = SP_x_i * diag(N_src_i(:,2)); M3_22 = SP_y_i * diag(N_src_i(:,2)); M3_23 = SP_z_i * diag(N_src_i(:,2));
-        M3_31 = SP_x_i * diag(N_src_i(:,3)); M3_32 = SP_y_i * diag(N_src_i(:,3)); M3_33 = SP_z_i * diag(N_src_i(:,3));
-        M3 = [
-            M3_11, M3_12, M3_13;
-            M3_21, M3_22, M3_23;
-            M3_31, M3_32, M3_33
-        ];
-
-        M_cells{i} = -M1 + M2 - M3;
-    end
-
-    M = blkdiag(M_cells{:});
-end
-
-function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
+function M = TSLmatrix(IDparams, p, ns)
     np = 2*p*(p + 1);
     M_cells = cell(1, ns);
-    is_self_interaction = true;
 
     for i = 1:ns
-        if is_self_interaction
-            num_trg = np;
-        else
-            num_trg = size(X_spectral{i}, 1);
-        end
-        
-        if num_trg > 0
-            nu_x_cells{i} = repmat([1,0,0], num_trg, 1);
-            nu_y_cells{i} = repmat([0,1,0], num_trg, 1);
-            nu_z_cells{i} = repmat([0,0,1], num_trg, 1);
-        end
+        nu_x_cells{i} = repmat([1,0,0], np, 1);
+        nu_y_cells{i} = repmat([0,1,0], np, 1);
+        nu_z_cells{i} = repmat([0,0,1], np, 1);
     end
 
-    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, X_spectral, nu_x_cells, nu_y_cells, nu_z_cells);
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_cells, nu_y_cells, nu_z_cells);
 
     % Build spheroidalgraddiv operator
     I = repmat(eye(np),1,1,ns);
     Z = repmat(zeros(np),1,1,ns);
     ddS_x_cells = cell(1, ns); ddS_y_cells = ddS_x_cells; ddS_z_cells = ddS_x_cells;
-    [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, X_spectral);
-    [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, X_spectral);
-    [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, X_spectral);
+    [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, []);
+    [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, []);
+    [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, []);
     for i=1:ns
         if IDparams.oblate(i)
             S_self = oblate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i), 'spheroidal');
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
-            [D1_X, D1_Y, D1_Z] = convert_from_oblate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
-            [D2_X, D2_Y, D2_Z] = convert_from_oblate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
-            [D3_X, D3_Y, D3_Z] = convert_from_oblate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
+            [DXX, DYX, DZX] = convert_from_oblate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
+            [DXY, DYY, DZY] = convert_from_oblate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
+            [DXZ, DYZ, DZZ] = convert_from_oblate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
         else
             S_self = prolate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i), 'spheroidal');
             u = S_self(:,1); v = S_self(:,2); phi = S_self(:,3);
-            [D1_X, D1_Y, D1_Z] = convert_from_prolate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
-            [D2_X, D2_Y, D2_Z] = convert_from_prolate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
-            [D3_X, D3_Y, D3_Z] = convert_from_prolate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
+            [DXX, DYX, DZX] = convert_from_prolate_basis(D1_U(:,:,i), D1_V(:,:,i), D1_PHI(:,:,i), u, v, phi);
+            [DXY, DYY, DZY] = convert_from_prolate_basis(D2_U(:,:,i), D2_V(:,:,i), D2_PHI(:,:,i), u, v, phi);
+            [DXZ, DYZ, DZZ] = convert_from_prolate_basis(D3_U(:,:,i), D3_V(:,:,i), D3_PHI(:,:,i), u, v, phi);
         end
 
-        ddS_x_cells{i} = [D1_X, D1_Y, D1_Z]; % FIX ME
-        ddS_y_cells{i} = [D2_X, D2_Y, D2_Z];
-        ddS_z_cells{i} = [D3_X, D3_Y, D3_Z];
+        ddS_x_cells{i} = [DXX, DXY, DXZ];
+        ddS_y_cells{i} = [DYX, DYY, DYZ];
+        ddS_z_cells{i} = [DZX, DZY, DZZ];
     end
 
     % Build TLP matvec kernel
@@ -641,11 +567,7 @@ function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
         %%% Setup
         %%%
         % Grab source points
-        if ns==1
-            X_src_i = IDparams.get_X();
-        else
-            X_src_i = IDparams.get_X(i);
-        end
+        [~, X_src_i] = IDparams.get_X(i);
         N_src_i = IDparams.get_Norm(IDparams.p, i);
         Xi_dot_Ni_vec = repmat(dot(X_src_i, N_src_i, 2), 3, 1); % 3np x 1 vector.
 
@@ -682,4 +604,18 @@ function M = TSLmatrix(IDparams, X_spectral, Nu_spectral, p, ns)
     end
 
     M = blkdiag(M_cells{:});
+end
+
+%% Helper code
+function kerneldSmtx = generate_kerneldS_mtx(X_self, np, permute_flag)
+    %{
+        Verify that the diagonal blocks are indeed correct.
+    %}
+    kerneldSmtx = kerneldS([], SurfaceSph(X_self));
+    % Permute
+    if permute_flag
+        prm = zeros(1,3*np); 
+        prm(1:np) = 1:3:3*np; prm(np+1:2*np) = 2:3:3*np; prm(2*np+1:3*np)=3:3:3*np;
+        kerneldSmtx = kerneldSmtx(prm, prm);
+    end
 end
