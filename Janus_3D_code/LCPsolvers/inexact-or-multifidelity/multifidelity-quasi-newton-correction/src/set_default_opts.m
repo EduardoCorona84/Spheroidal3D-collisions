@@ -76,11 +76,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
         opts.outer.b_correction = false;
     end
 
-    %here we need to check if we have x0 = 0 for the multifidelity part. 
-    %If x0 is zero and opts.outer.warm_correction == true, the update will fail
-    if all(x0 == 0) && opts.outer.warm_correction == true
-        opts.outer.warm_correction = false;
-    end
+
     %these are out here as right now I am using the same secant directions for correction and prox. This could be changed in the future.
 
     if ~isfield(opts.outer, 'correction')
@@ -114,7 +110,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
             opts.outer.correction_opts.memory = 'dense full';
         end
 
-        %make storage matrices for the different types of memory
+        %make storage matrices for the different types of memory, also depends on the update type
 
         switch(opts.outer.correction_opts.memory)
             case 'dense full'
@@ -126,12 +122,19 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
                     opts.outer.correction_opts.r = min(20, n);
                 end
 
+                opts.outer.correction_opts.curr_mem = 0;
+
                 if ~isfield(opts.outer.correction_opts, 'S')
                     opts.outer.correction_opts.S = zeros(n, opts.outer.correction_opts.r);
                 end
 
                 if ~isfield(opts.outer.correction_opts, 'Y')
                     opts.outer.correction_opts.Y = zeros(n, opts.outer.correction_opts.r);
+                end
+
+                %add an additional flag if we want to store the first update persistently. This is in the case that we want to store along the direction b consistently.
+                if ~isfield(opts.outer.correction_opts, 'persistent_first_update')
+                    opts.outer.correction_opts.persistent_first_update = false;
                 end
 
             case 'compact'
@@ -139,14 +142,26 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
                     opts.outer.correction_opts.r = min(20, n);
                 end
 
+                opts.outer.correction_opts.curr_mem = 0;
+
                 if ~isfield(opts.outer.correction_opts, 'S')
                     opts.outer.correction_opts.S = zeros(n, opts.outer.correction_opts.r);
                 end
 
-                if ~isfield(opts.outer.correction_opts, 'Y')
+                if ~isfield(opts.outer.correction_opts, 'utility_matrix')
+                    opts.outer.correction_opts.utility_matrix = zeros(n, opts.outer.correction_opts.r);
+                end
+
+                %if we are using BFGS or DFP, we need to store an additional matrix for the compact representation (kinda, should go over this)
+                if strcmpi(opts.outer.correction_opts.update, 'dfp') || strcmpi(opts.outer.correction_opts.update, 'bfgs')
                     opts.outer.correction_opts.Y = zeros(n, opts.outer.correction_opts.r);
                 end
-                
+
+                %add an additional flag if we want to store the first update persistently
+                if ~isfield(opts.outer.correction_opts, 'persistent_first_update')
+                    opts.outer.correction_opts.persistent_first_update = true;
+                end
+
             otherwise
                 error('Unknown memory option');
         end

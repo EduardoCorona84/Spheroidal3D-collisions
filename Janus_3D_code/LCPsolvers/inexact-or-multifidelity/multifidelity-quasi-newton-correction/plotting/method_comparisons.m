@@ -50,14 +50,17 @@ function method_comparisons(A, A_low, b)
 
 
     %alternating correction
-    opts.warm.enabled = true;
+    opts.warm.enabled = false;
     opts.inner.enabled = true;
     opts.outer.correction = true;
     opts.outer.storeFuncs = true;
-    opts.outer.correction_opts.direction = 'matvec';
+    opts.outer.correction_opts.direction = 'secant';
+    opts.outer.correction_opts.r = 50;
+    opts.outer.correction_opts.update = 'dfp';
     opts.outer.correction_opts.skips = 'true';
+    opts.outer.correction_opts.memory = 'compact';
     opts.outer.warm_correction = true;
-    opts.outer.adaptive = 'retry';
+    opts.outer.adaptive = 'none';
     %opts.outer.solver_opts.solver = 'bbpgd';
     %opts.inner.solver_opts.solver = 'bbpgd';
     opts.outer.solver_opts.tol_abs = 1e-16;
@@ -67,7 +70,7 @@ function method_comparisons(A, A_low, b)
     opts.inner.solver_opts.A = @(x) A_low*x;
     opts.inner.solver_opts.b = b;
     opts.outer.max_iter = 100;
-    opts.inner.solver_opts.max_iter = 3;
+    opts.inner.solver_opts.max_iter = 2;
     x0 = zeros(problem_size, 1);
     [~, info_corr] = multifidelity_wrapper(fg, fg_low, x0, opts);
 

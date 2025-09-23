@@ -1,8 +1,43 @@
-function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k)
+function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k, info)
 
     %This is a wrapper function for calling a desired inner solver.
     %create corrected gradient
-    grad_inner = @(x) opts.inner.solver_opts.A(x) + opts.outer.correction_opts.update_matrix*x + opts.inner.solver_opts.b;
+    switch(opts.outer.correction_opts.memory)
+        case 'dense full'
+            grad_inner = @(x) opts.inner.solver_opts.A(x) + opts.outer.correction_opts.update_matrix*x + opts.inner.solver_opts.b;
+        
+        case 'dense limited'
+
+        case 'compact'
+            switch lower(opts.outer.correction_opts.update)
+                case 'sr1'
+                    %use the compact representation
+                    S = opts.outer.correction_opts.S(:, 1:opts.outer.correction_opts.curr_mem);
+                    utility_matrix = opts.outer.correction_opts.utility_matrix(:, 1:opts.outer.correction_opts.curr_mem);
+
+                    %compute the gradient using the compact representation
+                    grad_inner = @(x) opts.inner.solver_opts.A(x) + utility_matrix*((utility_matrix'*S)\(utility_matrix'*x)) + opts.inner.solver_opts.b;
+                case 'bfgs'
+                    S = opts.outer.correction_opts.S(:, 1:opts.outer.correction_opts.curr_mem);
+                    Y = opts.outer.correction_opts.Y(:, 1:opts.outer.correction_opts.curr_mem);
+                    utility_matrix = opts.outer.correction_opts.utility_matrix(:, 1:opts.outer.correction_opts.curr_mem);
+
+                    %using multisecant update
+                    grad_inner = @(x) opts.inner.solver_opts.A(x) + Y*((Y'*S)\(Y'*x)) - utility_matrix*((S'*utility_matrix)\(utility_matrix'*x)) + opts.inner.solver_opts.b;
+
+                case 'dfp'
+                    S = opts.outer.correction_opts.S(:, 1:opts.outer.correction_opts.curr_mem);
+                    Y = opts.outer.correction_opts.Y(:, 1:opts.outer.correction_opts.curr_mem);
+                    utility_matrix = opts.outer.correction_opts.utility_matrix(:, 1:opts.outer.correction_opts.curr_mem);
+
+                    %using multisecant update
+                    grad_inner = @(x) opts.inner.solver_opts.A(x) + (Y - utility_matrix)*((Y'*S)\(Y'*x)) + Y*((Y'*S)\((Y - utility_matrix)'*x)) - Y*((Y'*S)\((Y - utility_matrix)'*S*((Y'*S)\(Y'*x)))) + opts.inner.solver_opts.b;
+
+                otherwise
+                    error('Unknown update option');
+            end
+
+    end
 
     switch lower(opts.inner.solver_opts.solver)
         case 'outer preconditioned prox'

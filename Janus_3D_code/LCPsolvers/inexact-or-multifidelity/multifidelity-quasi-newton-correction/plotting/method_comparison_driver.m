@@ -8,7 +8,7 @@ problem_size = 100;
 matrices = construct_test_matrices(problem_size);
 
 %create noisy versions of a test matrix, we'll just use the linear50 for this.
-noise_levels = linspace(1, 20, 20); %no idea what relative error this will actually produce
+noise_levels = linspace(1, 40, 40); %no idea what relative error this will actually produce
 noisy_matrices = cell(length(noise_levels), 2);
 for i = 1:length(noise_levels)
     %create the noisy matrices for each noise level, with the associated error struct.

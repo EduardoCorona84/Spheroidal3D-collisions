@@ -47,12 +47,13 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts, 
         %update the low fidelity operator using the high fidelity information 
         opts = update_low(k, fg_low, s_k, y_k, opts, info);
 
+
         %we have all the logic for the outer (high fidelity solver) in here. Return an intermediate step x_k_half and update opts associated with the outer solver
         [x_k_half, opts] = outer_solver(k, x_km1, grad_km1, Ax_km1, s_k, y_k, opts);
 
         %now take the next step with the inner solver
         if opts.inner.enabled == true && (k > 0 || opts.outer.warm_correction == true) && descent == true
-            [x_k, info_inner, opts] = inner_solver(x_k_half, opts, s_k, y_k);
+            [x_k, info_inner, opts] = inner_solver(x_k_half, opts, s_k, y_k, info);
             info.inner{k + 1} = info_inner;
         else
             %if no inner iteration, we leave the info struct empty
@@ -137,6 +138,10 @@ function opts = update_low(k, fg_low, s_k, y_k, opts, info)
     switch lower(opts.outer.correction_opts.update)
         case 'sr1'
             opts.outer.correction_opts = get_correction_SR1(k, fg_low, s_k, y_k, opts.outer.correction_opts, info);
+        case 'bfgs'
+            opts.outer.correction_opts = get_correction_BFGS(k, fg_low, s_k, y_k, opts.outer.correction_opts, info);
+        case 'dfp'
+            opts.outer.correction_opts = get_correction_DFP(k, fg_low, s_k, y_k, opts.outer.correction_opts, info);
         otherwise
             error('Unknown correction option');
     end
