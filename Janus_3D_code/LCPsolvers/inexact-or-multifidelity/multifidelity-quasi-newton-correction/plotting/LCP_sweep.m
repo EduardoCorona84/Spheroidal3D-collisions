@@ -1,4 +1,4 @@
-function LCP_sweep(target_rel_errors)
+function LCP_sweep(noise_level)
     %this function sweeps through different test/example matrices of the LCP, creates a low fidelity version, and runs various high/multi fidelity methods to compare performance
     addpath('../../utilities/');
     addpath('../src/');
@@ -12,9 +12,11 @@ function LCP_sweep(target_rel_errors)
     load([fname '.mat'], ...
         'A_list',  'b_list');
 
+
+    load('../data/noisy_matrices_rel_error_1.00e-02.mat', 'A_noisy_list', 'errors_list', 'noise_level');
     total_runs = length(A_list);
     methods = {'High Fidelity Only', 'Low Fidelity Only', 'Warm Start High Fidelity', 'Alternating Low/High No Correction', 'Alternating Low/High with Correction (SR1, Full)', 'Alternating Low/High with Correction (SR1, 2)', 'Warm Alternating Low/High with Correction (SR1, Full)', 'Warm Alternating Low/High with Correction (SR1, 2)'};
-    noise_levels = [1e0, 1e-2, 1e-4, 1e-6, 1e-8];
+    tolerance_levels = [1e0, 1e-2, 1e-4, 1e-6, 1e-8];
     errors = struct(methods);
 
     %create a min_iters array, with dimensions (total_runs, methods, tolerances)
@@ -26,34 +28,21 @@ function LCP_sweep(target_rel_errors)
         %get the matrix and vector
         Amat = A_list{runs};
         Amat = (Amat + Amat')/2; %symmetrize the matrix
-        %now create noisy Ahats, low fidelity version of A
-        A_hats = cell(1, length(target_rel_errors));
-        A_hat_errors = cell(1, length(target_rel_errors));
-        for i = 1:length(target_rel_errors)
-            noise_level = target_rel_errors(i);
-            [Ahat_mat, errors] = construct_noisy_matrix(Amat, noise_level);
-            if isempty(Ahat_mat)
-                fprintf('Could not construct a noisy matrix for run %d with noise level %1.2e\n', runs, noise_level);
-                break;
-            else
-                A_hats{i} = Ahat_mat;
-                A_hat_errors{i} = errors;
-            end
-        end
-        b = b_list{runs};
-        %{
-        objective = @(x) (1/2)*x'*Amat*x + b'*x;
-        A = @(x) Amat*x;
-        Ahat = @(x) Ahat_mat*x;
-        %}
+        %now get noisy A
+        Ahat_mat = A_noisy_list{runs};
+        Ahat_mat = (Ahat_mat + Ahat_mat')/2; %symmetrize the matrix
 
-        fg = create_fg(A, b);
+        b = b_list{runs};
+
+        fg = create_fg(Amat, b);
+        fg_low = create_fg(Ahat_mat, b);
         problem_size = length(b);
 
         %1. High Fidelity Only
         opts.warm.enabled = false;
         opts.inner.enabled = false;
         opts.outer.correction = false;
+        opts.outer.storeIts = true;
         opts.outer.storeFuncs = true;
         opts.outer.solver_opts.tol_abs = 1e-16;
         opts.outer.solver_opts.tol_rel = 1e-16;
@@ -63,58 +52,54 @@ function LCP_sweep(target_rel_errors)
 
         [~, info_high] = multifidelity_wrapper(fg, fg, x0, opts);
         %find x_ref
-       [~ , f_ref_ind] = min(info_high.outer.funcHist);
+        [~ , f_ref_ind] = min(info_high.outer.funcHist);
         x_ref = info_high.outer.iterHist(f_ref_ind, :)';
 
-        %add the min iter for the high fidelity only method
-        min_iters(runs, 1, :) = f_ref_ind;
+        %create error history for high, the construction has it so that every iteration is one matvec
+        errors.HighFidelityOnly = vecnorm(info_high.outer.iterHist' - x_ref)/norm(x_ref);
 
-        %for the rest of the methods, we will loop through each noise level
-        for noise_level = 1:length(target_rel_errors)
-            %2 Low Fidelity Only/Sovling with CVX
-
-            cvx_begin 
-                variable x_warm(problem_size)
-                minimize(1/2 * quad_form(x_warm, A_hats{noise_level}) + b'*x_warm)
-                subject to
-                    x_warm >= 0
-            cvx_end
-            %compute the error for the low fidelity only method
-
-            
-        end
-
-
+   
+        clear opts;
+        %2 Low Fidelity Only/Sovling with CVX
+        cvx_begin 
+            variable x_warm(problem_size)
+            minimize(1/2 * quad_form(x_warm, A_hats{noise_level}) + b'*x_warm)
+            subject to
+                x_warm >= 0
+        cvx_end
         %compute error for the final low fidelity warm start iterate
-        error_cell{2} = norm(x_warm - x_ref)/norm(x_ref);
+        errors.LowFidelityOnly = norm(x_warm - x_ref)/norm(x_ref);
 
-
-        %3. Warm Start into High Fidelity Only, can just do this by passing x_warm
-        opts.outer.warm_start.enabled = false;
-        opts.outer.warm_start.only = false;
-        opts.outer.correction = false;
+        clear opts;
+        %3. Warm Start into High Fidelity Only, can just do this by passing x_warm or using the wrapper to call a warm start solver. We will just pass x_warm to save cost.
+        opts.warm.enabled = false;
         opts.inner.enabled = false;
-        [~, info] = multi_fidelity_solver(A, Ahat, b, x_warm, opts);
-
+        opts.outer.correction = false;
+        opts.outer.storeIts = true;
+        opts.outer.solver_opts.tol_abs = 1e-16;
+        opts.outer.solver_opts.tol_rel = 1e-16;
+        opts.outer.solver_opts.A = @(x) Amat*x;
+        opts.outer.solver_opts.b = b;
+        [~, info] = multifidelity_wrapper(fg, fg, x_warm, opts);
         %compute error for all the high fidelity iterates
-        error_cell{3} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
+        errors.WarmStartHighFidelity = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
+        clear opts;
         %4. Alternating low and high fidelity with no correction
-        %disable adaptive high fidelity switching
-        opts.outer.adaptive = 'none';
+        opts.warm.enabled = false;
         opts.inner.enabled = true;
         opts.inner.max_iter = 1; %take 1 low fidelity step between high fidelities
+        opts.outer.correction = false;
+        opts.outer.storeIts = true;
+        opts.outer.solver_opts.tol_abs = 1e-16;
+        opts.outer.solver_opts.tol_rel = 1e-16;
+        opts.outer.solver_opts.A = @(x) Amat*x;
+        opts.outer.solver_opts.b = b;
+        [~, info] = multifidelity_wrapper(fg, fg_low, zeros(problem_size, 1), opts);
 
-        [~, info] = multi_fidelity_solver(A, Ahat, b, zeros(problem_size, 1), opts);
+        errors. = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
-        %compute error for all the high fidelity iterates.
-        error_cell{4} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
-
-        %5. Alternating low and high fidelity with correction (SR1)
-        opts.outer.correction = true;
-        opts.outer.store_updates = true;
-        opts.outer.low_update = 'sr1';
-
+        clear opts;
         [~, info] = multi_fidelity_solver(A, Ahat, b, zeros(problem_size, 1), opts);
 
 
