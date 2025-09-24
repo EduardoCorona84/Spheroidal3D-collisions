@@ -12,7 +12,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     end
 
     if ~isfield(opts.warm, 'enabled')
-        opts.warm.enabled = true;
+        opts.warm.enabled = false;
     end
 
     if ~isfield(opts.warm, 'solver_opts')
