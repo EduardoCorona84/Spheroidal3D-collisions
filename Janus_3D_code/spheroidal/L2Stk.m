@@ -56,7 +56,7 @@ function [Stk_x,Stk_y,Stk_z]=L2Stk(Xeval,pars,sigma_x,sigma_y,sigma_z,ns)
 
         % i=1
         pars.sigma=sigma_x; pars.get_shc;
-        SL1=spheroidalSL(pars,Xeval); % CHECKED: same as MatVec('SL') when all near.
+        SL1=spheroidalSL(pars,Xeval);
         [SP1dx,SP1dy,SP1dz] = spheroidalSP(pars,Xeval,nu_x_spectral,nu_y_spectral,nu_z_spectral);
         
         % i=2

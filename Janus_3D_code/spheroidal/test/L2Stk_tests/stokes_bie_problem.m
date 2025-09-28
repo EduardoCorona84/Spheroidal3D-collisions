@@ -27,6 +27,10 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             - condK -> condition number of BIE matrix
     %}
 
+    if nargin==0
+        error("Arguments must be passed in.")
+    end
+
     fluxsoln = []; truefluxsoln = [];
 
     %% Flags for debugging
@@ -84,8 +88,8 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         pars.centers = [0 0 0; 5 0 -5];
         % thetas = [0 0];
         % phis = [0 0];
-        thetas = [0 pi/6];
-        phis = [0 pi/10];
+        thetas = [0 pi/4];
+        phis = [0 0];
     else
         if ns~=1
             error("Number of spheroids given not implemented here.");
@@ -100,8 +104,10 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         end
         
         pars.centers=[0 0 0];
-        thetas=0;
-        phis=0;
+        % thetas = 0;
+        % phis = 0;
+        thetas=pi/6;
+        phis=pi/4;
     end
 
     Ri=zeros(3,3,ns);
@@ -180,7 +186,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     % Rotate everything accordingly since the above was constructed from
     % the perspective of an unrotated spheroid.
     F_pos_vec = rotate_point_forces(F_pos_vec, pars.centers, num_pf, ns, Ri);
-    F_vec = rotate_point_forces(F_vec, pars.centers, num_pf, ns, Ri);
+    % F_vec = rotate_point_forces(F_vec, pars.centers, num_pf, ns, Ri);
 
     if plt
         pars.plot(F_pos_vec);
@@ -384,9 +390,6 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     %% Finally, we compare our computed solutions to the true solutions.
     truesoln = stokeslet_velocity(F_vec, F_pos_vec, Xeval);
-
-    % Rotate solution back to correct coordinate frame
-    soln = rotate_soln(soln, np, ns, Ri);
 
     fprintf('p=%d: velocity comparison = %.6e\n',p, norm(truesoln - soln) ./ norm(truesoln));
 
@@ -647,7 +650,7 @@ function [total_force, total_torque] = calculate_force_and_torque(pars, traction
 end
 
 function plot_singular_values(mtx)
-    [U, S, V] = svd(mtx);
+    [~, S, ~] = svd(mtx);
     s_vals = diag(S);
 
     rank_no_tol = rank(mtx);
@@ -677,7 +680,7 @@ function res = rotate_point_forces(vec, centers, num_pf, ns, R)
     res = zeros(size(vec));
     for i=1:ns
         pf_indices = (i-1)*num_pf+1:i*num_pf;
-        res(pf_indices,:) = (vec(pf_indices,:) - centers(i))*R(:,:,i)' + centers(i);
+        res(pf_indices,:) = (vec(pf_indices,:) - centers(i,:))*R(:,:,i)' + centers(i,:);
     end
 end
 
@@ -694,19 +697,6 @@ function res = rotate_data(vec, np, ns, R)
     for i=1:ns
         spheroid_block = (i-1)*np+1:i*np;
         res(spheroid_block,:) = vec(spheroid_block,:)*R(:,:,i);
-    end
-end
-
-function res = rotate_soln(vec, np, ns, R)
-    %{
-        The solution that is calculated is in the local frame, so we need
-        to bring it back to the correct frame by rotating the solutions
-        back.
-    %}
-    res = zeros(size(vec));
-    for i=1:ns
-        spheroid_block = (i-1)*np+1:i*np;
-        res(spheroid_block,:) = vec(spheroid_block,:)*R(:,:,i)';
     end
 end
 

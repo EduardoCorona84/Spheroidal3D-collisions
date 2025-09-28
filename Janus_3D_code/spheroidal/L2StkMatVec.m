@@ -1,4 +1,9 @@
 function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X, nu_trg)
+    %{
+        X -> global frame
+        nu_trg -> global frame
+        densities are in local frame
+    %}
     if isempty(pars.u0)
         error("No surface parameter u_0 given")
     end
@@ -72,10 +77,13 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
 
         % Calculate effect from each particle on each target point
         for i=1:ns
-            % Add contributions from spectral method
-            Stk_x(sep(:,i)==0,:) = Stk_x(sep(:,i)==0,:) + L2Stk_spectral_cell_x{i}; 
-            Stk_y(sep(:,i)==0,:) = Stk_y(sep(:,i)==0,:) + L2Stk_spectral_cell_y{i}; 
-            Stk_z(sep(:,i)==0,:) = Stk_z(sep(:,i)==0,:) + L2Stk_spectral_cell_z{i}; 
+            L2Stk_local_i = [L2Stk_spectral_cell_x{i}, L2Stk_spectral_cell_y{i}, L2Stk_spectral_cell_z{i}];
+            L2Stk_global_i = L2Stk_local_i * pars.Rmat(:,:,i)';
+
+            % Add contributions from near interactions
+            Stk_x(sep(:,i)==0,:) = Stk_x(sep(:,i)==0,:) + L2Stk_global_i(:,1); 
+            Stk_y(sep(:,i)==0,:) = Stk_y(sep(:,i)==0,:) + L2Stk_global_i(:,2); 
+            Stk_z(sep(:,i)==0,:) = Stk_z(sep(:,i)==0,:) + L2Stk_global_i(:,3); 
         
             % Get targets for smooth quadrature
             X_smooth = Xt(sep(:,i)==1,:,i);
