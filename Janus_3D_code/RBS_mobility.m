@@ -1015,6 +1015,7 @@ if saveLCPs
         );
     end 
     saveFile = [LCP_file_path '.prt_' num2str(save_iter) '.mat'];
+    disp(['Saving LCP data to ' saveFile])
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');
 end

@@ -5,13 +5,28 @@ denseMV=false;
 denseforce=1;
 gamma=1; 
 parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false);  
-ix = 2
-F = A_list{2}.F;
-Ck = A_list{2}.Ck;
-SD = A_list{2}.SD;
-TD = A_list{2}.TD;
-Bk = A_list{2}.Bk;
-Lk = A_list{2}.Lk;
-Bf = @(x) (Bk.')*(F*x);
+mfilePath = mfilename('fullpath');
+if contains(mfilePath,'LiveEditorEvaluationHelper')
+    mfilePath = matlab.desktop.editor.getActiveFilename;
+end
+[dirname, ~,~] = fileparts(mfilePath);
+basedir = fullfile(dirname, '..','..');
+addpath(basedir); 
+addpath(fullfile(basedir,'support')); 
+addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
+addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
+addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
 
-A = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
+load(fullfile(dirname, '../data/amphiLCPs.n_5.p_8.cDist_2.3.prt_0.mat'), 'Fparams', 'lcp_list');
+mc = 2;
+F = lcp_list(mc).F;
+nc = size(F,2);
+C = lcp_list(mc).C;
+p = 8;
+A = getMatVec(Fparams, F, C, p);
+disp(['Mat Vec for ix ' num2str(mc)])
+disp('run time ')
+tic
+A(ones(nc,1));
+toc
+disp(' seconds')
