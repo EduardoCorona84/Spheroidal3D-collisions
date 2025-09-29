@@ -136,130 +136,26 @@ if ~isempty(V) && isnumeric(V)
     end
 
     V = reshape(V,N,[]);
-    Y = zeros(N,size(V,2));
+    Y = zeros(N,size(V,2)); % N x 1
+    Ynear = cell(n3,1);
+    Yfar = cell(n3,1);
+    IXnear = cell(n3, 1);
+    IXfar = cell(n3, 1);
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    parfor nbox=1:n3
+        [Ynear{nbox}, Yfar{nbox}, IXnear{nbox}, IXfar{nbox}] = computeNearAndFar(...
+            nbox, Xv, C, V, Vh, params, MRot, neigh, pMat, rd, rda, rdif1, dense, rot, nortrg, out, N, Nb, np, kerd);
+    end
 
-    for nbox=1:n3
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Near interactions
-        I_box = (1:Nb)+Nb*(nbox-1);
-        num_ngh = length(neigh{nbox});
-        % Build neighbor sphere index
-        neigh{nbox} = reshape(neigh{nbox},1,[]);
-        I_nghv   = repmat((1:Nb)',1,num_ngh)+Nb*(repmat(neigh{nbox},Nb,1)-1);
-        I_nghv = I_nghv(:);
-
-        Xbv = Xv(I_nghv,:); %box pts
-        %nghidx = reshape(repmat(neigh{nbox},np,1),[],1);
-        % target points relative to source neighbor box centers
-        Xtrg = (1/rd(nbox))*(Xbv(1:kerd:end,:) - repmat(C(nbox,:),num_ngh*np,1));
-        Nrtrg = params.nor(I_nghv,:);
-
-        % rotate back to reference
-        if rot
-            Xtrg = Xtrg*MRot{nbox}';
+    for nbox = 1:n3 
+        Y(IXnear{nbox},:) = Y(IXnear{nbox},:) + Ynear{nbox};
+        if dense 
+            Y(IXfar{nbox},:) = Y(IXfar{nbox},:) + Yfar{nbox};
         end
-
-        % spherical coordinates
-        [th,phi,rho] = cart2sph(Xtrg(:,1),Xtrg(:,2),Xtrg(:,3));
-        th(th<0)=th(th<0)+2*pi; phi=pi/2-phi;
-
-        %boolean index for far away points
-        faridxv = true(N,1);
-        faridxv(I_nghv)=false;
-        Vh_ngh = Vh(:,nbox);
-
-        if kerd==1
-            if num_ngh>1
-                slf = find(neigh{nbox}==nbox);
-                ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
-
-                Ynear = zeros(np*num_ngh,1);
-                Ynear(np*(slf-1)+1:np*slf) = Sh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
-                Ynear(ind_off) = Sh_Kernel_Eval_off(Vh_ngh,pMat,0,out,rho(ind_off),phi(ind_off),th(ind_off),Nrtrg(ind_off,:));
-            else
-                Ynear = Sh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
-            end
-        elseif kerd==3
-            if num_ngh>1
-                slf = find(neigh{nbox}==nbox);
-                indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
-                ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
-
-                Ynear = zeros(Nb*num_ngh,1);
-                Ynear(Nb*(slf-1)+1:Nb*slf) = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
-
-                Ynear(indv_off) = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,rho(ind_off),phi(ind_off),th(ind_off),Nrtrg(indv_off,:));
-            else
-                Ynear = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
-                %Ynear = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,rho,phi,th,Nrtrg);
-            end
-        end
-
-        if size(Ynear,2)>1
-            Ynear = sum(Ynear,2);
-        end
-
-        if rot && kerd==3
-            %Rotate back
-            Ynear = [Ynear(1:3:end,:);Ynear(2:3:end,:);Ynear(3:3:end,:)];
-            Ynear = reshape(Ynear,[],3)*MRot{nbox};
-            Ynear = reshape(reshape(Ynear,[],3).',[],1);
-        end
-
-        if rdif1
-            Ynear = rda(nbox)*Ynear;
-        end
-
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % add far-away interactions
-        parnear = params;
-        parnear.nor = params.nor(I_box,:);
-
-        if dense
-            if nortrg
-                parnear.nor = params.nor(faridxv,:);
-            elseif strcmp(parnear.flag_pot(1:3),'dDL')
-                parnear.targnor=Nrtrg(faridxv,:);
-            end
-
-            parnear.W2 = params.W2(I_box);
-            if isfield(parnear,'ci')
-                parnear.ci = repmat((1:kerd)',sum(faridxv)/kerd,1);
-            end
-            if isfield(parnear,'cj')
-                parnear.cj = params.cj(I_box);
-            end
-
-            Y(I_nghv,:) = Y(I_nghv,:) + Ynear;
-
-            % if dense, we add direct kernel evaluation
-            if sum(faridxv)>0
-                Y(faridxv,:) =  Y(faridxv,:) + Kernel_Eval(Xv(faridxv,:),Xv(I_box,:),parnear)*V(I_box,:);
-            end
-        else
-            if nortrg
-                parnear.nor = params.nor(I_nghv,:);
-            end
-            parnear.W2 = params.W2(I_box);
-            if isfield(parnear,'ci')
-                parnear.ci = repmat((1:kerd)',sum(~faridxv)/3,1);
-            end
-            if isfield(parnear,'cj')
-                parnear.cj = params.cj(I_box);
-            end
-            parnear.a = 0;
-
-            % if not dense, we subtract neighbor kernel evaluation (to
-            % cancel that contribution from FMM apply)
-            %Kngh = Kernel_Eval(Xv(I_nghv,:),Xv(I_box,:),parnear);
-            Y(I_nghv,:) = (Y(I_nghv,:) + Ynear) - Kernel_Eval(Xv(I_nghv,:),Xv(I_box,:),parnear)*V(I_box,:);
-        end
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     end
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Add FMM / corrections
-
     if ~dense
         % Setup and add FMM
         Nr = params.nor(1:kerd:end,:);
@@ -338,7 +234,6 @@ elseif strcmp(V,'Mat')
             Ynear = reshape(Ynear,[],Nb);
             %Ynear = reshape(reshape(Ynear,[],3).',[],Nb);
         end
-
         Y(I_nghv,I_box) = rda(nbox)*Ynear;
     end
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -370,6 +265,122 @@ else
 end
 
 end
+%% for a particular particle (indexed by nbox) compute the near and far field forces
+function [Ynear, Yfar, I_nghv, faridxv] = computeNearAndFar(nbox, Xv, C, V, Vh, params, MRot, neigh, pMat, rd, rda, rdif1, dense, rot, nortrg, out, N, Nb, np, kerd)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Near interactions
+I_box = (1:Nb)+Nb*(nbox-1);
+num_ngh = length(neigh{nbox});
+% Build neighbor sphere index
+neigh{nbox} = reshape(neigh{nbox},1,[]);
+I_nghv   = repmat((1:Nb)',1,num_ngh)+Nb*(repmat(neigh{nbox},Nb,1)-1);
+I_nghv = I_nghv(:);
+
+Xbv = Xv(I_nghv,:); %box pts
+%nghidx = reshape(repmat(neigh{nbox},np,1),[],1);
+% target points relative to source neighbor box centers
+Xtrg = (1/rd(nbox))*(Xbv(1:kerd:end,:) - repmat(C(nbox,:),num_ngh*np,1));
+Nrtrg = params.nor(I_nghv,:);
+
+% rotate back to reference
+if rot
+    Xtrg = Xtrg*MRot{nbox}';
+end
+
+% spherical coordinates
+[th,phi,rho] = cart2sph(Xtrg(:,1),Xtrg(:,2),Xtrg(:,3));
+th(th<0)=th(th<0)+2*pi; phi=pi/2-phi;
+
+%boolean index for far away points
+faridxv = true(N,1);
+faridxv(I_nghv)=false; % This says everyone who is not me is far away
+Vh_ngh = Vh(:,nbox);
+
+if kerd==1
+    if num_ngh>1
+        slf = find(neigh{nbox}==nbox);
+        ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+        Ynear = zeros(np*num_ngh,1);
+        Ynear(np*(slf-1)+1:np*slf) = Sh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
+        Ynear(ind_off) = Sh_Kernel_Eval_off(Vh_ngh,pMat,0,out,rho(ind_off),phi(ind_off),th(ind_off),Nrtrg(ind_off,:));
+    else
+        Ynear = Sh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
+    end
+elseif kerd==3
+    if num_ngh>1
+        slf = find(neigh{nbox}==nbox);
+        indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+        ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+        Ynear = zeros(Nb*num_ngh,1);
+        Ynear(Nb*(slf-1)+1:Nb*slf) = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
+
+        Ynear(indv_off) = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,rho(ind_off),phi(ind_off),th(ind_off),Nrtrg(indv_off,:));
+    else
+        Ynear = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,1,[],[],[]);
+        %Ynear = Vsh_Kernel_Eval_off(Vh_ngh,pMat,0,out,rho,phi,th,Nrtrg);
+    end
+end
+
+if size(Ynear,2)>1
+    Ynear = sum(Ynear,2);
+end
+
+if rot && kerd==3
+    %Rotate back
+    Ynear = [Ynear(1:3:end,:);Ynear(2:3:end,:);Ynear(3:3:end,:)];
+    Ynear = reshape(Ynear,[],3)*MRot{nbox};
+    Ynear = reshape(reshape(Ynear,[],3).',[],1);
+end
+
+if rdif1
+    Ynear = rda(nbox)*Ynear;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% add far-away interactions
+parnear = params;
+parnear.nor = params.nor(I_box,:);
+if dense
+    if nortrg
+        parnear.nor = params.nor(faridxv,:);
+    elseif strcmp(parnear.flag_pot(1:3),'dDL')
+        parnear.targnor=Nrtrg(faridxv,:);
+    end
+
+    parnear.W2 = params.W2(I_box);
+    if isfield(parnear,'ci')
+        parnear.ci = repmat((1:kerd)',sum(faridxv)/kerd,1);
+    end
+    if isfield(parnear,'cj')
+        parnear.cj = params.cj(I_box);
+    end
+
+    % if dense, we add direct kernel evaluation
+    if sum(faridxv)>0
+        Yfar = Kernel_Eval(Xv(faridxv,:),Xv(I_box,:),parnear)*V(I_box,:);
+    end
+else
+    if nortrg
+        parnear.nor = params.nor(I_nghv,:);
+    end
+    parnear.W2 = params.W2(I_box);
+    if isfield(parnear,'ci')
+        parnear.ci = repmat((1:kerd)',sum(~faridxv)/3,1);
+    end
+    if isfield(parnear,'cj')
+        parnear.cj = params.cj(I_box);
+    end
+    parnear.a = 0;
+
+    % if not dense, we subtract neighbor kernel evaluation (to
+    % cancel that contribution from FMM apply)
+    %Kngh = Kernel_Eval(Xv(I_nghv,:),Xv(I_box,:),parnear);
+    Ynear = Ynear - Kernel_Eval(Xv(I_nghv,:),Xv(I_box,:),parnear)*V(I_box,:);
+    Yfar = [];
+end
+end % computeNearAndFar
 
 function Y = LOCAL_FMM_Eval(Q,W,kerd,pot,Xtrg,Xsrc,Nr)
 
@@ -410,15 +421,22 @@ end
 
 % precision for FMM, roughly 3*iprec digits of acc
 iprec=2;
-
+% disp('here')
 if kerd==1
     % Laplace particle FMM
     U=lfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
         sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);
 else
     % Stokes particle FMM
+    % disp('old run time')
+    % tic
     U=stfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
         sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);
+    % toc
+    % Utest=callNewFMM(iprec,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
+    %     sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);
+    % save('callNewFMM.mat', "Utest", "U");
+    % assert(false);
 end
 
 % Evaluate depending on pot
