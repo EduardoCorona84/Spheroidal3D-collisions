@@ -31,8 +31,6 @@ FSRCS = \
      legeexps.f rotviarecur3.f \
      lfmm3dpartquad.f 
 
-
-
 # object files list
 OBJS    = $(FSRCS:.f=.$(OBJSUF)) 
 all: $(OBJS) 
