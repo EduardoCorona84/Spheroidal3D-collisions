@@ -55,7 +55,12 @@ function [graddivSL_x, graddivSL_y, graddivSL_z]=spheroidalgraddivSL(params, sig
     end
 
     if isempty(X)
-        X = params.get_X();
+        np = 2*p*(p+1);
+        X = zeros(np, 3, ns);
+        for i=1:ns
+            [~, X_self] = params.get_X(i);
+            X(:,:,i) = X_self;
+        end
     end
 
     %%% Input processing and input validation
@@ -127,7 +132,7 @@ function [graddivSL_x, graddivSL_y, graddivSL_z]=spheroidalgraddivSL(params, sig
                     end
                     v_x_r=v_x_r_real;
 
-                    [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0(k),a,u_x_r,v_x_r,phi_x_r,Gshc_x_k,Gshc_y_k,Gshc_z_k,oblate(k));
+                    [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0(k),a(k),u_x_r,v_x_r,phi_x_r,Gshc_x_k,Gshc_y_k,Gshc_z_k,oblate(k));
                     
                     % Now, we are done, so store the information for the associated region.
                     GDSL_regions{r, 1} = Ucomponent;
