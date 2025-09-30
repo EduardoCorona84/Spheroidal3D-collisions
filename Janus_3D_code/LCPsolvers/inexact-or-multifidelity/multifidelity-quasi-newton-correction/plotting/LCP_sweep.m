@@ -1,4 +1,4 @@
-function LCP_sweep(noise_level)
+function LCP_sweep()
     %this function sweeps through different test/example matrices of the LCP, creates a low fidelity version, and runs various high/multi fidelity methods to compare performance
     addpath('../../utilities/');
     addpath('../src/');
@@ -8,23 +8,23 @@ function LCP_sweep(noise_level)
         rng('default')
     end
     rng(2);
-    fname = '../data/all_data.mat';
+    fname = '../data/all_data';
     load([fname '.mat'], ...
         'A_list',  'b_list');
 
 
-    load('../data/noisy_matrices_rel_error_1.00e-02.mat', 'A_noisy_list', 'errors_list', 'noise_level');
+    load('../data/noisy_matrices_rel_error_5.00e-02.mat', 'A_noisy_list', 'errors_list', 'noise_level');
     total_runs = length(A_list);
     methods = {'High Fidelity Only', 'Low Fidelity Only', 'Warm Start High Fidelity', 'Alternating Low/High No Correction', 'Alternating Low/High with Correction (SR1, Full)', 'Alternating Low/High with Correction (SR1, 2)', 'Warm Alternating Low/High with Correction (SR1, Full)', 'Warm Alternating Low/High with Correction (SR1, 2)'};
     tolerance_levels = [1e0, 1e-2, 1e-4, 1e-6, 1e-8];
-    errors = struct(methods);
+    errors = cell(8, 1);
 
     %create a min_iters array, with dimensions (total_runs, methods, tolerances)
-    min_iters = zeros(total_runs, length(methods), length(noise_levels));
+    min_iters = zeros(total_runs, length(methods), length(tolerance_levels));
 
 
     good_runs = [];
-    for runs = 101:105
+    for runs = 1:total_runs
         %get the matrix and vector
         Amat = A_list{runs};
         Amat = (Amat + Amat')/2; %symmetrize the matrix
@@ -56,19 +56,24 @@ function LCP_sweep(noise_level)
         x_ref = info_high.outer.iterHist(f_ref_ind, :)';
 
         %create error history for high, the construction has it so that every iteration is one matvec
-        errors.HighFidelityOnly = vecnorm(info_high.outer.iterHist' - x_ref)/norm(x_ref);
+        % Find exact match, ignoring case
+        index = find(strcmpi(methods, 'High Fidelity Only'));
+        errors{index} = vecnorm(info_high.outer.iterHist' - x_ref)/norm(x_ref);
+        disp(cond(Amat));
+        disp(eig(Amat));
+        disp(eig(Ahat_mat));
 
-   
         clear opts;
         %2 Low Fidelity Only/Sovling with CVX
         cvx_begin 
             variable x_warm(problem_size)
-            minimize(1/2 * quad_form(x_warm, A_hats{noise_level}) + b'*x_warm)
+            minimize(1/2 * quad_form(x_warm, Ahat_mat) + b'*x_warm)
             subject to
                 x_warm >= 0
         cvx_end
         %compute error for the final low fidelity warm start iterate
-        errors.LowFidelityOnly = norm(x_warm - x_ref)/norm(x_ref);
+        index = find(strcmpi(methods, 'Low Fidelity Only'));
+        errors{index} = norm(x_warm - x_ref)/norm(x_ref);
 
         clear opts;
         %3. Warm Start into High Fidelity Only, can just do this by passing x_warm or using the wrapper to call a warm start solver. We will just pass x_warm to save cost.
@@ -82,92 +87,154 @@ function LCP_sweep(noise_level)
         opts.outer.solver_opts.b = b;
         [~, info] = multifidelity_wrapper(fg, fg, x_warm, opts);
         %compute error for all the high fidelity iterates
-        errors.WarmStartHighFidelity = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
+        index = find(strcmpi(methods, 'Warm Start High Fidelity'));
+        errors{index} = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
         clear opts;
         %4. Alternating low and high fidelity with no correction
         opts.warm.enabled = false;
         opts.inner.enabled = true;
         opts.inner.max_iter = 1; %take 1 low fidelity step between high fidelities
+        %no correction
         opts.outer.correction = false;
         opts.outer.storeIts = true;
         opts.outer.solver_opts.tol_abs = 1e-16;
         opts.outer.solver_opts.tol_rel = 1e-16;
         opts.outer.solver_opts.A = @(x) Amat*x;
         opts.outer.solver_opts.b = b;
+        opts.inner.solver_opts.A = @(x) A_hat_mat*x;
+        opts.inner.solver_opts.b = b;
         [~, info] = multifidelity_wrapper(fg, fg_low, zeros(problem_size, 1), opts);
 
-        errors. = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
+        index = find(strcmpi(methods, 'Alternating Low/High No Correction'));
+        errors{index} = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
         clear opts;
-        [~, info] = multi_fidelity_solver(A, Ahat, b, zeros(problem_size, 1), opts);
+        %5 Alternating low and high fidelity with correction (SR1, full)
+        opts.warm.enabled = false;
+        opts.inner.enabled = true;
+        opts.inner.max_iter = 1; %take 1 low fidelity step between high fidel
+        opts.outer.correction = true;
+        opts.outer.correction_opts.update = 'SR1';
+        opts.outer.correction_opts.memory = 'dense full';
+        opts.outer.storeIts = true;
+        opts.outer.solver_opts.tol_abs = 1e-16;
+        opts.outer.solver_opts.tol_rel = 1e-16;
+        opts.outer.solver_opts.A = @(x) Amat*x;
+        opts.outer.solver_opts.b = b;
+        opts.inner.solver_opts.A = @(x) A_hat_mat*x;
+        opts.inner.solver_opts.b = b;
 
+        index = find(strcmpi(methods, 'Alternating Low/High with Correction (SR1, Full)'));
+        errors{index} = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
+        clear opts;
+        %6. Alternating low and high fidelity with (SR1, 2)
+        opts.warm.enabled = false;
+        opts.inner.enabled = true;
+        opts.inner.max_iter = 1; %take 1 low fidelity step between high fidel
+        opts.outer.correction = true;
+        opts.outer.correction_opts.update = 'SR1';
+        opts.outer.correction_opts.memory = 'compact';
+        opts.outer.correction_opts.direction = 'matvec';
+        opts.outer.correction_opts.persistent_first_update = true;
+        opts.outer.correction_opts.r = 2;
+        opts.outer.storeIts = true;
+        opts.outer.solver_opts.tol_abs = 1e-16;
+        opts.outer.solver_opts.tol_rel = 1e-16;
+        opts.outer.solver_opts.A = @(x) Amat*x;
+        opts.outer.solver_opts.b = b;
+        opts.inner.solver_opts.A = @(x) A_hat_mat*x;
+        opts.inner.solver_opts.b = b;
 
-        %compute error for all the high fidelity iterates.
-        error_cell{5} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
+        [~, info] = multifidelity_wrapper(fg, fg_low, zeros(problem_size, 1), opts);
 
-        %6. Alternating low and high fidelity with correction and warm start (100 iters).
-        %We just do this by passing x_warm as the starting iterate
+        index = find(strcmpi(methods, 'Alternating Low/High with Correction (SR1, 2)'));
+        errors{index} = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
-        [~, info] = multi_fidelity_solver(A, Ahat, b, x_warm, opts);
+        clear opts;
+        %7. Warm Alternating Low/High with Correction (SR1, Full)
+        opts.warm.enabled = true;
+        opts.outer.warm_correction = true;
+        opts.outer.b_correction = true;
+        opts.inner.enabled = true;
+        opts.inner.max_iter = 1; %take 1 low fidelity step between high fidel
+        opts.outer.correction = true;
+        opts.outer.correction_opts.update = 'SR1';
+        opts.outer.correction_opts.memory = 'dense full';
+        opts.outer.correction_opts.direction = 'secant';
+        opts.outer.storeIts = true;
+        opts.outer.solver_opts.tol_abs = 1e-16;
+        opts.outer.solver_opts.tol_rel = 1e-16;
+        opts.outer.solver_opts.A = @(x) Amat*x;
+        opts.outer.solver_opts.b = b;
+        opts.inner.solver_opts.A = @(x) A_hat_mat*x;
+        opts.inner.solver_opts.b = b;
 
-        %compute error for all the high fidelity iterates.
-        error_cell{6} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
+        [~, info] = multifidelity_wrapper(fg, fg_low, zeros(problem_size, 1), opts);
 
-        %7. Alternating low and high fidelity with correction, warm start, and adaptive high fidelity switching
-        opts.outer.adaptive = 'high';
+        index = find(strcmpi(methods, 'Warm Alternating Low/High with Correction (SR1, Full)'));
+        errors{index} = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
-        [~, info] = multi_fidelity_solver(A, Ahat, b, x_warm, opts);
+        clear opts
+        %8 Warm Alternating Low/High with Correction (SR1, 2)
+        opts.warm.enabled = true;
+        opts.outer.warm_correction = true;
+        opts.outer.b_correction = true;
+        opts.inner.enabled = true;
+        opts.inner.max_iter = 1; %take 1 low fidelity step between high fidel
+        opts.outer.correction = true;
+        opts.outer.correction_opts.update = 'SR1';
+        opts.outer.correction_opts.memory = 'compact';
+        opts.outer.correction_opts.direction = 'matvec';
+        opts.outer.correction_opts.persistent_first_update = true;
+        opts.outer.correction_opts.r = 2;
+        opts.outer.storeIts = true;
+        opts.outer.solver_opts.tol_abs = 1e-16;
+        opts.outer.solver_opts.tol_rel = 1e-16;
+        opts.outer.solver_opts.A = @(x) Amat*x;
+        opts.outer.solver_opts.b = b;
+        opts.inner.solver_opts.A = @(x) A_hat_mat*x;
+        opts.inner.solver_opts.b = b;
 
-        %compute error for all the high fidelity iterates.
-        error_cell{7} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
+        [~, info] = multifidelity_wrapper(fg, fg_low, zeros(problem_size, 1), opts);
 
-        %8. Four low fidelities for every 1 high fidelity, with adaptive halving of low fidelity evals once criterion is reached. With warm start and correction
-        opts.outer.adaptive = 'halving';
-        opts.inner.max_iter = 4; %take 4 low fidelity steps between high fidelity
-
-        [~, info] = multi_fidelity_solver(A, Ahat, b, x_warm, opts);
-
-        %compute error for all the high fidelity iterates.
-        error_cell{8} = vecnorm(info.outer.x_iters - x_ref)/norm(x_ref);
-
+        index = find(strcmpi(methods, 'Warm Alternating Low/High with Correction (SR1, 2)'));
+        errors{index} = vecnorm(info.outer.iterHist' - x_ref)/norm(x_ref);
 
         %Now from each run find the min iteration corresponding to a specific error level
         %i corresponds to the method, j the tolerance to reach
         %for each method, check over each noise level if it met that level
-        for i = 1:8
-            for j = 1:length(noise_levels)
-                %find the iters of method i that reached less than noise level j
-                valid_iters = find(error_cell{i} < noise_levels(j));
+        for i = 1:length(methods)
+            for j = 1:length(tolerance_levels)
+                %find the iters of method i that reached less than tolerance level j
+                valid_iters = find(errors{i} < tolerance_levels(j));
                 if isempty(valid_iters)
                     %if no iters, we assign inf to that entry of min iters (it did not happen)
-                    min_iters(true_mc, i, j) = Inf;
+                    min_iters(run, i, j) = Inf;
                 else
                     %if not empty, we take the min of those iters
-                    min_iters(true_mc, i, j) = min(valid_iters);
+                    min_iters(run, i, j) = min(valid_iters);
                 end
             end
         end
 
         %we check if the min iters are greater than 0. This should always happen, unless there was no collision (for checking, I should outot the size of this on the graph. We should expect 300 (or very close to it)).
-        if all(min_iters(true_mc, :, :) > 0)
-            mcGood = [mcGood; true_mc];
+        if all(min_iters(run, :, :) > 0)
+            good_runs = [good_runs run];
         end
         %now repeat for the next mc
 
     end
 
-    method_names = {'Only High Fidelity', 'Only Low Fidelity', 'Warm Start High Fidelity', 'Alternating Low/High', 'Alternating Low/High (SR1)', 'Warm Start Alternating Low/High (SR1)', 'Warm Start Adaptive High Fidelity (SR1)', 'Warm Start Halving High Fidelity (SR1)'};
-    tolerance_names = {'1e0', '1e-2', '1e-4', '1e-6', '1e-8'};
 
     %go through each tolerance we want to meet
-    for j = 1:length(noise_levels)
-        figure('Name', ['Tolerance ' tolerance_names{j}], 'NumberTitle', 'off');
+    for j = 1:length(tolerance_levels)
+        figure('Name', sprintf('Tolerance %.0e', tolerance_levels(j)), 'NumberTitle', 'off');
 
         % Extract data for this tolerance level across all methods. This is a matrix with size mcGood x 8 (all the methods). Each row is a run, and column is the method for that run.
-        data_for_plot = squeeze(min_iters(mcGood, :, j));
-        
+        data_for_plot = squeeze(min_iters(good_runs, :, j));
+
         % Calculate success percentages for each method.
         %Create a vector with the columns corresponding to each method.
         success_percentages = zeros(1, size(data_for_plot, 2));
@@ -179,6 +246,7 @@ function LCP_sweep(noise_level)
         end
         
         % copilot did this, I don't entirely get it. We should just remove these data points?
+        %This just makes the infs NaNs, which I don't think does anything
         data_for_plot(~isfinite(data_for_plot)) = NaN;
         
         % Create boxchart, which is more modern than boxplot
@@ -186,17 +254,18 @@ function LCP_sweep(noise_level)
         
         % Set labels and colors
         ax = gca;
-        ax.XTickLabel = method_names;
+        ax.XTickLabel = methods;
         
 
-        title(['Performance at Relative Tolerance Level: ' tolerance_names{j}]);
-        ylabel('Minimum GMRES Iterations');
+        title(['Performance at Relative Tolerance Level: ' tolerance_levels{j}]);
+        subtitle(sprintf('Low Fidelity Matrix Relative Error: %.2e', errors_list{run}.spectral.rel));
+        ylabel('Minimum High Fidelity Matvecs');
         xlabel('Method');
         grid on;
         
         % Add success rate labels above each box
         ylims = ylim;
-        for method = 1:length(method_names)
+        for method = 1:length(methods)
             text(method, ylims(2) * 0.95, sprintf('%.0f%%', success_percentages(method)), ...
                 'HorizontalAlignment', 'center', 'FontSize', 8, 'FontWeight', 'bold');
         end
@@ -204,7 +273,11 @@ function LCP_sweep(noise_level)
         % Rotate x-axis labels if they overlap
         xtickangle(45);
 
-        % Save the figure as an SVG file
-        filename = ['performance_qn_tolerance_' tolerance_names{j} '.svg'];
-        saveas(gcf, filename);
+        % Save the figure as an SVG and fig
+        base_filename = sprintf('/plots/tolerance_%s_performance', tolerance_levels{j});
+        saveas(gcf, [base_filename '.svg']);
+        saveas(gcf, [base_filename '.fig']);
+
+    end
+
 end
