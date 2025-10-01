@@ -4,6 +4,7 @@
 *.svg
 *.png
 *.pdf
+*.fig
 data/*
 Janus_3D_code/LCPsolvers/data/*
 docs/*

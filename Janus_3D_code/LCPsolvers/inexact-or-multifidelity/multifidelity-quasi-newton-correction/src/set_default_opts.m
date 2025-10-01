@@ -159,7 +159,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
 
                 %add an additional flag if we want to store the first update persistently
                 if ~isfield(opts.outer.correction_opts, 'persistent_first_update')
-                    opts.outer.correction_opts.persistent_first_update = true;
+                    opts.outer.correction_opts.persistent_first_update = false;
                 end
 
             otherwise
@@ -246,6 +246,10 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
 
     if ~isfield(opts.inner.solver_opts, 'max_iter')
         opts.inner.solver_opts.max_iter = 1;
+    end
+
+    if ~isfield(opts.inner.solver_opts, 'gradient_mode')
+        opts.inner.solver_opts.gradient_mode = 'full'; %can also be 'step' or 'reuse'
     end
 
     opts.inner.solver_opts.b = opts.outer.solver_opts.b;

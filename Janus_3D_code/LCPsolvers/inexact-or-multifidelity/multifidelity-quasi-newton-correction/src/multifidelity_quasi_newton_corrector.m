@@ -53,7 +53,7 @@ function [x, info] = multifidelity_quasi_newton_corrector(x0, fg, fg_low, opts, 
 
         %now take the next step with the inner solver
         if opts.inner.enabled == true && (k > 0 || opts.outer.warm_correction == true) && descent == true
-            [x_k, info_inner, opts] = inner_solver(x_k_half, opts, s_k, y_k, info);
+            [x_k, info_inner, opts] = inner_solver(x_k_half, opts, s_k, y_k, Ax_km1, x_k_half - x_km1, info);
             info.inner{k + 1} = info_inner;
         else
             %if no inner iteration, we leave the info struct empty
