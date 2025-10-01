@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --nodes=1
-#SBATCH --ntasks=32
+#SBATCH --ntasks=100
 #SBATCH --mem=100G
 #SBATCH --time=24:00:00
 #SBATCH --account=blanca-becker
@@ -25,6 +25,6 @@ ep=.3; # distance where we consider collisions in the LCP
 Nt=500; # number of time-steps
 dt=.1; # time discretization
 tdisc="euler"; # the only working option I believe, there is some code for AB method but I think it is un tested
-saveLCPs=0; # Save the components of each LCP solve
+saveLCPs=1; # Save the components of each LCP solve
 
 LD_PRELOAD=/curc/sw/install/gcc/14.2.0/lib64/libgfortran.so.5 matlab -nodesktop -nodisplay -r "clear;clc; Test_ModLap_Mobility_Amphi($n,$rd,$Cdst,$p,$ep,$Nt,$dt,'$tdisc',$lambda,$saveLCPs); quit;"

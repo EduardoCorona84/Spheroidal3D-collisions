@@ -1,6 +1,6 @@
 function [f, g, Ax] = quadraticLoss(x, A, b, Ax, Aq, eta)
 
-if isempty(Ax) || isempty(Aq)
+if ~exist('Ax','var') || ~exist('Ax','var') || isempty(Ax) || isempty(Aq)
     Ax = A(x);
     f = 1/2*dot(x,Ax) + dot(b,x);
     if nargout == 1

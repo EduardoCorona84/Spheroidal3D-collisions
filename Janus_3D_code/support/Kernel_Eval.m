@@ -309,9 +309,9 @@ else
      J1 = CJ==1; J2 = CJ==2; J3 = CJ==3; 
      
      % N(x) dot R
-     N1 = wh.*repmat(params.nor(:,1),1,size(X2,1))./(sqrt(den+(den==0)).^3);
-     N2 = wh.*repmat(params.nor(:,2),1,size(X2,1))./(sqrt(den+(den==0)).^3);
-     N3 = wh.*repmat(params.nor(:,3),1,size(X2,1))./(sqrt(den+(den==0)).^3);
+     N1 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,1);
+     N2 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,2);
+     N3 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,3);
      NdotR = d1.*N1+d2.*N2+d3.*N3;    
      
      % diagonal part 

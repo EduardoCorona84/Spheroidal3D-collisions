@@ -4,15 +4,13 @@ if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;
 end
 [dirname, ~,~] = fileparts(mfilePath);
-root = '/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/';
-loadFile = 'all_data';
-saveFile = ['results' '.mat'];
+root = fullfile(dirname, '../data');
+loadFile = 'amphiLCPs.n_2.p_8.cDist_2.3.prt_0.mat';
+saveFile = 'results.n_2.p_8.cDist_2.3.mat';
 %% Load scenario data from file 
 load(fullfile(root, loadFile), ...
-    'Fparams',
-    'lcp_list');
+    'Fparams', 'lcp_list');
 %% Set Hyperparameters
-
 lcpOpts = struct( ...
     'max_iter',1000, ...
     'tol_rel',1e-12, ...
@@ -69,20 +67,16 @@ p_list = 2:8;
 numP = numel(p_list);
 for mc = 1:MC 
     %% Build Mat-Vec
-    %
-    A_list = cell(numP,1);
-    mc = ixTime; % TODO CHANGE
-    p = 4; % TODO CHANGE
     b = lcp_list(mc).b;
-    C = lcp_list(mc).C;
     F = lcp_list(mc).F;
-    lofi_A = getMatVec(Fparams, F, C, p);% TODO CHANGE
+    C = lcp_list(mc).C;
+    p2A = cell(numP,1);
     for ix_p = 1:numP
         p = p_list(ix_p);
-        A_list{ix_p} = getMatVec(Fparams, F, C, p);
+        p2A{ix_p} = getMatVec(Fparams, F, C, p);
     end
     %% Build cost function 
-    Acnt = @(x) Acounter(x,A, false);
+    Acnt = @(x) Acounter(x,A_list{end}, false); % HiFi p matVec
     x0 = zeros(n,1);
     fg = @(x, Ax, Aq, eta) quadraticLoss(x, Acnt,b, Ax, Aq, eta);
     %% Fill the lcpOpts with problem specific information

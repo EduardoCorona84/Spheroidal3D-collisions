@@ -135,24 +135,23 @@ if d1>1
             Ndote = [Ndotu(:) Ndotv(:) Ndotr(:)];
 
             % Radial and Tangential contributions
-            MRqh = Fr.*(reshape(repmat(qhex,ntrg,1),4*sp,[]).');
-            MGqh = SFr.*(reshape(repmat(qhex,ntrg,1),4*sp,[]).');
-
+            MRqh = Fr.*qhex.';
+            MGqh = SFr.*qhex.';
+            
             Mqh = zeros(ntrg*d2,3*sp);
-            Pqh = Mqh;
-
             for j=1:3
-                for i=1:4
-                    idq = (1:sp) + (i-1)*sp;
-                    Mqh = Mqh + repmat(Ndote(:,j),1,3*sp).*(...
-                        (ShTg{j}(:,idx(:,i))*(MGqh(:,idq).')).' ...
-                        + (ShTr{j}(:,idx(:,i))*(MRqh(:,idq).')).');
-                end
-
-                Pqh = Pqh + repmat(Ndote(:,j),1,3*sp).*(ShY{j}(:,idpr)*(MPr.')).';
+                Ndote_j = Ndote(:,j);
+                % These are sparse so transpose is fast 
+                % turns out concatenating the sparse matrices is worth the memory overhead
+                ShTg_j_T = cat(2, ShTg{j}(:,idx(:,1)), ShTg{j}(:,idx(:,2)), ShTg{j}(:,idx(:,3)), ShTg{j}(:,idx(:,4))).';
+                ShTr_j_T = cat(2, ShTr{j}(:,idx(:,1)), ShTr{j}(:,idx(:,2)), ShTr{j}(:,idx(:,3)), ShTr{j}(:,idx(:,4))).';
+                ShY_ji_T = ShY{j}(:,idpr).';
+                % Now do the mat-mat all at once for speed of computation
+                tmp1 = MGqh*ShTg_j_T;
+                tmp2 = MRqh*ShTr_j_T;
+                tmp3 = MPr*ShY_ji_T;
+                Mqh = Mqh + Ndote_j.*(tmp1+tmp2+tmp3);
             end
-
-            Mqh = Mqh + Pqh;
         end
 
         Vk = Vnm('VWX',Sc,0:p,[],u,v,er);
@@ -442,7 +441,7 @@ if(~rFlag)
     printMsg('* Stored generated Traction coefficient matrices for p=%d\n', p);
 else
     sp = (p+1)^2;
-    [TrData,rFlag] = readData('TractionCoeffsSp',p,[TrSz 5]);
+    [TrData,~] = readData('TractionCoeffsSp',p,[TrSz 5]);
     ShTg = cell(3,1); ShTr = ShTg; ShY = ShTg;
     lv = [find(TrData(:,5)>0) ; TrSz];
     sp3 = 3*sp;
