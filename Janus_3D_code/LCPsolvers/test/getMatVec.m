@@ -27,4 +27,5 @@ TD = RBS_MatVec([],Lk,'Vsh',...% typeMV,
 SD = RBS_MatVec([],[],'Vsh',...% typeMV,
     matVecParams,sdim,0,'SL_Stk_3D',prec);
 Bf = @(x) (Bk.')*(F*x);
+parslv.prec = [];
 A = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
