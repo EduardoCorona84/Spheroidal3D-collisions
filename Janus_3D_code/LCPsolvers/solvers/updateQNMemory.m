@@ -3,12 +3,13 @@ persistent rho_ S_ Y_
 
 n = numel(s);
 r = opts.r;
-if k==0 || any([isempty(rho_), isempty(S_), isempty(Y_)]) 
+if (k==1 || isempty(s) ||isempty(y) || ...
+        isempty(rho_) || isempty(S_) || isempty(Y_)) 
     rho_ = zeros(r, 1);
     S_ = zeros(n, r);
     Y_ = zeros(n, r);
 end 
-r = min(r, k);
+r = min(r, k-1);
 if r <= 0
     % Initial step we do not compute any curvature information because only
     % information about x0 is known, thus no secant equaion could be
@@ -21,7 +22,7 @@ if r <= 0
     return 
 end
 % Loose memory if the iterate is larger than memory
-if k > r
+if k-1 > r
     rho_(1:r-1) = rho_(2:r);
     S_(:,1:r-1) = S_(:,2:r);
     Y_(:,1:r-1) = Y_(:,2:r);

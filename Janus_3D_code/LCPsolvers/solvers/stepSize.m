@@ -1,8 +1,8 @@
-function [kappa, Ap] = stepSize(k, p, x, Ax, opts, s_k, y_k)
+function [kappa, Ap] = stepSize(k, p, x, Ax, opts, s_k, y_k, Ap)
 
-if k == 0
+if k == 1
     mode = opts.stepSize.init;
-elseif k > 0 %  fwd
+elseif k > 1 %  fwd
     mode = opts.stepSize.kappa;
 else % bwd
     mode = opts.stepSize.eta;
@@ -12,7 +12,9 @@ if k > 0 && (~exist('s_k','var') || ~exist('y_k','var'))
     assert(~contains(lower(mode),'bb'), ['BB steps require s_k and y_k '...
         'which are not available when k == 0']);
 end
-Ap = [];
+if ~exist('Ap','var')
+    Ap = [];
+end
 switch lower(mode)
     case 'bb1'
         kappa = (s_k'*s_k)/(s_k'*y_k);
