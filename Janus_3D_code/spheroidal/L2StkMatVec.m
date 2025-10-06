@@ -14,6 +14,7 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
         error("No matvec_eta provided.");
     end
 
+    DEVELOPMENT_FLAG = true;
     DENSE_EVALUATION_FLAG = true; % Determine if FMM is to be used
     u0=pars.u0;
     a=pars.a;
@@ -32,6 +33,7 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
 
     assert(size(sigma_x, 3) == ns, "Density should be defined on every spheroid surface.");
 
+    if ~DEVELOPMENT_FLAG
     if nargin==4
         error("Not implemented.");
     else
@@ -143,7 +145,54 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
             end
         end
     end
+    end % END DEVELOPMENT FLAG
 
+    if DEVELOPMENT_FLAG
+    nt = size(X, 1);
+    Stk_total_global = zeros(nt, 3);
+
+    % For every source spheroid...
+    for i = 1:ns
+        % Get the rotation matrix for the current source
+        Ri = pars.Rmat(:,:,i);
+
+        % Transform target points and normals into the local frame of source i
+        X_trg_local_i = (X - pars.centers(i,:)) * Ri;
+        if strcmp(pot, 'TLP')
+            nu_trg_local_i = nu_trg * Ri;
+        end
+
+        params_i = pars.copy();
+        params_i.u0 = pars.u0(i);
+        params_i.a = pars.a(i);
+        params_i.oblate = pars.oblate(i);
+        params_i.centers = [0 0 0];
+        params_i.Rmat = eye(3);
+
+        % Evaluate the potential from source i onto all targets
+        if strcmp(pot, 'SLP')
+            [vx, vy, vz] = L2Stk({X_trg_local_i}, params_i, sigma_x(:,:,i), sigma_y(:,:,i), sigma_z(:,:,i), 1);
+        elseif strcmp(pot, 'DLP')
+            [vx, vy, vz] = L2StkDLP({X_trg_local_i}, params_i, sigma_x(:,:,i), sigma_y(:,:,i), sigma_z(:,:,i), 1);
+        elseif strcmp(pot, 'TLP')
+            % NOTE: The L2StkTLP function needs to accept normals as an argument
+            [vx, vy, vz] = L2StkTLP({X_trg_local_i}, {nu_trg_local_i}, params_i, sigma_x(:,:,i), sigma_y(:,:,i), sigma_z(:,:,i), 1, false);
+        else
+            error("Invalid potential given.");
+        end
+
+        Stk_contribution_local_i = [vx{1}, vy{1}, vz{1}];
+
+        % Rotate from local frame i to global frame
+        Stk_contribution_global_i = Stk_contribution_local_i * Ri';
+        
+        Stk_total_global = Stk_total_global + Stk_contribution_global_i;
+    end
+
+    Stk_x = Stk_total_global(:,1);
+    Stk_y = Stk_total_global(:,2);
+    Stk_z = Stk_total_global(:,3);
+    end % END DEVELOPMENT FLAG
 
     if pars.isReal
         Stk_x = real(Stk_x);
