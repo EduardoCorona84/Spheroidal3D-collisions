@@ -1,4 +1,4 @@
-function [kappa, Ap] = stepSize(k, p, x, Ax, opts, s_k, y_k, Ap)
+function [kappa, Ap] = stepSize(k, p, x, Ax, opts, s_k, y_k)
 
 if k == 1
     mode = opts.stepSize.init;
@@ -12,9 +12,8 @@ if k > 0 && (~exist('s_k','var') || ~exist('y_k','var'))
     assert(~contains(lower(mode),'bb'), ['BB steps require s_k and y_k '...
         'which are not available when k == 0']);
 end
-if ~exist('Ap','var')
-    Ap = [];
-end
+
+Ap = [];
 switch lower(mode)
     case 'bb1'
         kappa = (s_k'*s_k)/(s_k'*y_k);
@@ -55,4 +54,8 @@ switch lower(mode)
         % use 1?
         error([mode ' is not a valid step size rule'])
 end
+if nargout == 2 && isempty(Ap)
+    Ap = opts.A(p);
+end
+
 end

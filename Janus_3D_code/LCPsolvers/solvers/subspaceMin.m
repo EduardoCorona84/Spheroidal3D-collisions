@@ -153,17 +153,17 @@ case 'cgs'
 case 'qr'
     P(:,k) = p;
     AP(:,k) = Ap;
-    [Pk,R] = qr(P(:,1:k),'econ');
+    [Pk,R] = qr(P(:,1:k),0);%'econ');
     APk = AP(:,1:k) / R;
 end
 
 
-B = Pk'*APk; 
-Bt = B';
-if norm(B-Bt) / norm(B) > 1e-6
-    warning('We are losing condition of the problem.')
-    APk = opts.AA*Pk;
-end
+% B = Pk'*APk; 
+% Bt = B';
+% if norm(B-Bt) / norm(B) > 1e-6
+%     warning('We are losing condition of the problem.')
+%     APk = opts.AA*Pk;
+% end
 
 end
 
@@ -196,6 +196,7 @@ if ~exist('debug','var') || isempty(debug)
 end
 %% Precompute some stuff
 B = P'*AP; 
+B = 0.5*(B+B');
 dB = decomposition(B);
 c = P'*(b + Axprime); 
 d = -xprime;
@@ -292,6 +293,7 @@ if ~exist('debug','var') || isempty(debug)
     debug = false;
 end
 B = P'*AP; 
+B = 0.5*(B+B');
 c = P'*(b + Axprime); 
 d = -xprime;
 k = size(P, 2); %#ok<NASGU>

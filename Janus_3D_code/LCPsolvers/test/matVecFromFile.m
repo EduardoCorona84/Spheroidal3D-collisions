@@ -1,10 +1,3 @@
-% misc extra parameters
-tol=1e-4; 
-mdist=3; 
-denseMV=false; 
-denseforce=1;
-gamma=1; 
-parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false);  
 mfilePath = mfilename('fullpath');
 if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;

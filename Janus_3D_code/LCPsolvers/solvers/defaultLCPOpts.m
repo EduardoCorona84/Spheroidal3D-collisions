@@ -16,12 +16,24 @@ if ~isfield(opts, 'max_iter')
     opts.max_iter = 100;
 end
 
-if ~isfield(opts, 'tol_rel')
-    opts.tol_rel = 1e-4;
+if ~isfield(opts, 'kkt_rel')
+    opts.kkt_rel = 1e-4;
 end
 
-if ~isfield(opts, 'tol_abs')
-    opts.tol_abs = 1e-6;
+if ~isfield(opts, 'kkt_abs')
+    opts.kkt_abs = 1e-6;
+end
+
+if ~isfield(opts, 'arg_rel')
+    opts.arg_rel = [];
+end
+
+if ~isfield(opts, 'arg_abs')
+    opts.arg_abs = [];
+end
+
+if ~isfield(opts, 'step_abs')
+    opts.step_abs = [];
 end
 
 if ~isfield(opts, 'gamma')
@@ -102,5 +114,15 @@ if ~isfield(opts, 'storeIts') || isempty(opts.storeIts)
     opts.storeIts = false;
 elseif opts.storeIts
     info.iterHist = zeros(opts.max_iter+1, n);
+end
+
+if ~isfield(opts, 'subspaceMin') 
+    opts.subSpaceMin = struct( ...
+        'innerStepSelection', 'pqn', ...
+        'innerSolver','cvx', ...
+        'orthoMethod','qr', ...
+        'kThresh', 1, ...
+        'useOneStepIter', false ...
+    );
 end
 end % defaultLCPOpts
