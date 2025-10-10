@@ -612,7 +612,7 @@ function [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, 
     end
 end
 
-%% Collision methods
+%% Collision resolution
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
     %{
     Calculates the force and the resulting densities due to the collision.
@@ -808,14 +808,11 @@ function [colevent,collist,dt,Ctp] = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,M
     
     if colevent
         % If mindst<<eps, or <0, we need to adjust timestep
-        bis=0; maxbis=3; shell = isfield(Fparams,'parsh');
+        bis=0;
+        maxbis=3;
         
         cond = mindst < 0.1*eps;
-        if shell
-            sheps = Fparams.parsh.eps;
-            cond = cond || mindstsh < 0.1*sheps;
-        end
-        
+
         while cond && bis<=maxbis
         
             % Recompute dt and Ct{i+1} to avoid collision
@@ -835,27 +832,24 @@ function [colevent,collist,dt,Ctp] = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,M
             
             % update condition
             cond = mindst < 0.1*eps;
-            if shell
-                sheps = Fparams.parsh.eps;
-                cond = cond || mindstsh < 0.1*sheps;
-            end
         end
         
         fprintf('\n Min pairwise relative distance after collision detection: %2.4f ',mindst);
-        if shell
-            fprintf('\n Min distance to geometry after collision detection: %2.4f ',mindstsh);
-        end 
-        
     else
         collist=[]; 
         fprintf('\n Min pairwise relative distance: %2.4f',mindst);
-        if isfield(Fparams,'parsh')
-            fprintf('\n Min relative distance to geometry: %2.4f, absolute distance: %2.4f ',mindstsh,mindstsh*Fparams.parsh.rd);
-        end
     end
 end
     
 function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparams)
+    %{
+    Calculates distance between spheres using their centers and radius.
+
+    Inputs
+        -
+
+    Outputs
+    %}
     n3 = size(C,1); 
     
     rd = Fparams.parbd.rd; 

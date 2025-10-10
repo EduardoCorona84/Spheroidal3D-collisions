@@ -4,20 +4,22 @@ function [Kernels,Nullsp,Fparams,timings] = SpheroidalMS_UpdateOperators(Xt,Ct,M
     each layer potential (and also update the nullspace operator L_k).
 
     Inputs:
-    - Xt : 
-    - Ct : 
-    - Mt : rotation matrices for each body at timestep t=i
-    - nrmW : norm of rotational velocity for each body
-    - Kernels : matvec matrices for operators
-    - Fparams : parameter struct associated with mobility problem
-    - timings : timings struct for mobility problem (for debugging)
-    - i : current timestep in mobility problem (starts at i=0)
+    Xt : discretization points of bodies at timestep t=i
+    Ct : centers of bodies at timestep t=i
+    Mt : rotation matrices for each body at timestep t=i
+    nrmW : norm of rotational velocity for each body
+    Kernels : matvec matrices for operators
+    Fparams : parameter struct associated with mobility problem
+    timings : timings struct for mobility problem (for debugging)
+    i : current timestep in mobility problem (starts at i=0)
 
     Outputs:
-    - Kernels
-    - Nullsp
-    - Fparams
-    - timings
+    Kernels : BIE operators (either matrix/matrix-free depending on params passed)
+        Kernels.TSSD0
+        Kernels.ITSSD0
+    Nullsp : nullspace completion terms
+    Fparams : simulation parameters; see spheroidal_mobility.m.
+    timings : timings struct for debugging purposes
 
     %%%%%%%%%%%%%%%%
     CODE ANNOTATIONS
@@ -139,7 +141,6 @@ if bld_bkdiag
             Kernels.SSDd = Rotate_Operator(Kernels.SSD0,Mt{k},np);   
         end
     end
-        
         if abs(rk-1)>0
             Kernels.SSDd = rk*Kernels.SSDd;
         end

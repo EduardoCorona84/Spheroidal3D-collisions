@@ -96,9 +96,9 @@ function [graddivSL_x, graddivSL_y, graddivSL_z]=spheroidalgraddivSL(params, sig
             S=cart2spheroidal(Xt_k,a(k),oblate(k));
             u_x=S(:,1);
 
-            indices_interior = (u_x < u0(k) - 1e-14);
-            indices_surface = (abs(u_x-u0(k)) <= 1e-14);
-            indices_exterior = (u_x > u0(k) + 1e-14);
+            indices_interior = (u_x < u0(k) - 1e-12);
+            indices_surface = (abs(u_x-u0(k)) <= 1e-12);
+            indices_exterior = (u_x > u0(k) + 1e-12);
             
             % Split up interior/surface/exterior
             S_int=S(indices_interior,:);
@@ -208,14 +208,20 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
         Yr(2*nt_r+1:end, n^2+1:(n+1)^2) = Yn2;
     end
 
+    DEVELOPMENT_FLAG = false;
+    if DEVELOPMENT_FLAG
+        Yr(nt_r+1:2*nt_r, p^2+1:(p+1)^2) = zeros(size(Yn1));
+        Yr(2*nt_r+1:end, p^2+1:(p+1)^2) = zeros(size(Yn1));
+    end
+
     %%% Calculate fnm and fnm' and fnm''
     ii = (1:sp)'; nn=floor(sqrt(ii-1)); mm=ii-nn.^2-nn-1;
     if oblate
         cnm = 1j.*a.*factorial(nn-mm)./factorial(nn+mm).*((-1).^mm).*sqrt(u0.^2+1);
         L = legendre_otc(p,1j*u0,1,1,1);
-        if abs(u)-u0 < -1e-14 % interior
+        if abs(u)-u0 < -1e-12 % interior
             gnm = L{2}; % Q(iu_0)
-        elseif abs(u)-u0 > 1e-14 % exterior
+        elseif abs(u)-u0 > 1e-12 % exterior
             gnm = L{1}; % P(iu_0)
         else % on-surface (handled in solid_harmonic_prime)
             gnm = ones(size(L{1}));
@@ -225,11 +231,11 @@ function [Ucomponent, Vcomponent, PHIcomponent] = graddivSL_away(p,u0,a,u,v,phi,
     else
         bnm = a .* factorial(nn-mm)./factorial(nn+mm) .* ((-1) .^ (mm)) .* sqrt(u0.^2 - 1);
         L = legendre_otc(p,u0,1,1,1);
-        if abs(u)-u0 < -1e-14 % interior
+        if abs(u)-u0 < -1e-12 % interior
             gnm = L{2}; % Q(u_0)
-        elseif abs(u)-u0 > 1e-14 % exterior
+        elseif abs(u)-u0 > 1e-12 % exterior
             gnm = L{1}; % P(u_0)
-        else % on-surface (handled in solid_harmonic_prime)
+        else % on-surface (handled in solid_harmonic_prime--should be average of interior/exterior)
             gnm = ones(size(L{1}));
         end
         [Fr, Fp, Fpp] = solid_harmonic_prime(p, u0, u);
@@ -300,15 +306,11 @@ function [Fr, Fp, Fpp]=solid_harmonic_prime(p, u0, u_x)
         This function returns what Fr = f_n^m is (and its derivative as Fp), depending 
         on whether we are in the exterior or interior (or on the surface).
     %}
-    Fr = ones(size(u_x,1),(p+1)^2);
-    Fp = ones(size(u_x,1),(p+1)^2);
-    Fpp = ones(size(u_x,1),(p+1)^2);
-
-    if abs(u_x)-u0 < -1e-14 % Interior
+    if abs(u_x)-u0 < -1e-12 % Interior
         PQ=legendre_otc(p,u_x,1,2,2);
         P=PQ{1}; dP=PQ{3}; ddP=PQ{5};
         Fr=P.'; Fp=dP.'; Fpp=ddP.';
-    elseif abs(u_x)-u0 > 1e-14 % Exterior
+    elseif abs(u_x)-u0 > 1e-12 % Exterior
         PQ=legendre_otc(p,u_x,1,2,2);
         Q=PQ{2}; dQ=PQ{4}; ddQ=PQ{6};
         Fr=Q.'; Fp=dQ.'; Fpp=ddQ.';
