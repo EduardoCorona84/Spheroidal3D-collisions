@@ -1,8 +1,10 @@
 function [val rFlag] = readData(fileInit, suffix, dim)
 % READDATA(fileInit, suffix, dim) - Project specific interface to read binary files
-try
-    root = getenv('SLURM_SCRATCH');
-catch
+global DATA_DIR
+
+if ~isempty(DATA_DIR) 
+    root = DATA_DIR;
+else
     root = '../data';
 end
 nd = prod(dim); % number of entries to be read

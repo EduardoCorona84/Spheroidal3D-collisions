@@ -1,23 +1,23 @@
 #!/bin/bash
 
 #SBATCH --nodes=1
-#SBATCH --ntasks=100
+#SBATCH --ntasks=50
 #SBATCH --mem=100G
 #SBATCH --time=24:00:00
 #SBATCH --account=blanca-becker
 #SBATCH --qos=preemptable                          
-#SBATCH --job-name=amphi.n_5.p_8.cDist_2.3%j
-#SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/results/amphi.n_5.p_8.cDist_2.3.%j.out
-#SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/results/amphi.n_5.p_8.cDist_2.3.%j.err 
+#SBATCH --job-name=amphi.n_4.p_8.cDist_2.3%j
+#SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/results/amphi.n_4.p_8.cDist_2.3.%j.out
+#SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/results/amphi.n_4.p_8.cDist_2.3.%j.err 
 
 module purge
 
 module load matlab
 cd /projects/niru8088/Spheroidal3D-collisions/Janus_3D_code
 # These parameters are the main ones that change the scenario
-n=5; # size of the lattice
+n=4; # size of the lattice
 p=8; # number of spherical harmonics
-Cdst=2.3; # initial distance of the particle centers
+Cdst=2.5; # initial distance of the particle centers
 # These parameters should stay the same for the most part
 lambda=0.1;
 rd=1; # radius of each of the particles

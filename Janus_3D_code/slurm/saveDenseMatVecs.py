@@ -1,20 +1,29 @@
 import subprocess
 import os 
-def _script(prefix, min, max):
-    return f"""#!/bin/bash
+import glob
+def _script(prefix, min, max, alpine=False):
+    header = f"""#!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --ntasks=12
-#SBATCH --qos=preemptable                        
+#SBATCH --ntasks=12                       
 #SBATCH --time=6:00:00
 #SBATCH --array={min}-{max}
-#SBATCH --account=blanca-becker
+"""
+    if alpine:
+        header += """#SBATCH --account=ucb289_asc3
+#SBATCH --partition=amilan
+#SBATCH --qos=normal"""
+    else: 
+        header += """#SBATCH --account=blanca-becker
+#SBATCH --qos=preemptable"""
+    return header + f"""
 #SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.%j.out-%N
 #SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.%j.err-%N
 
 
 ## Slurm crap
 module purge
-module load matlab gcc
+module load matlab
+module load gcc
 export LD_PRELOAD="/curc/sw/install/gcc/14.2.0/lib64/libgfortran.so /curc/sw/install/gcc/14.2.0/lib64/libstdc++.so $HOME/lib/libfmm3d.so"
 
 ## Define list of parameters
@@ -48,6 +57,7 @@ for prefix in [
     # 'amphiLCPs.n_5.p_8.cDist_2.3'
 ]:
     print(f'{prefix}')
+    # Nt = 1
     Nt = 499
     print(f' Nt={Nt}')
     _min = None
@@ -57,6 +67,13 @@ for prefix in [
         _min = _max + 1
         _max = min(_max + 1000, Nt)
         dataDir = f"/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}"
+        # Remove old slurm files
+        for old_err in glob.glob(os.path.join(dataDir, "*.err*")):
+            os.remove(old_err)
+        for old_out in glob.glob(os.path.join(dataDir, "*.out*")):
+            os.remove(old_out)
+        for old_sh in glob.glob(os.path.join(dataDir, "*.sh")):
+            os.remove(old_sh)
         os.makedirs(dataDir, exist_ok=True)
         slurmFile = os.path.join(dataDir, f"slurm.{cnt}.sh")
         script = _script(prefix, _min, _max)

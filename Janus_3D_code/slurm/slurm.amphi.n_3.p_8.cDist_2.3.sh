@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --nodes=1
-#SBATCH --ntasks=100
+#SBATCH --ntasks=50
 #SBATCH --mem=100G
 #SBATCH --time=24:00:00
 #SBATCH --account=blanca-becker

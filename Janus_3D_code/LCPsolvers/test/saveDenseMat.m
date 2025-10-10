@@ -1,21 +1,12 @@
 function saveDenseMat(srcFile, dstDir, ix)
+global DATA_DIR
 %% Params (perhaps these should be inputs?)
 ps = 8:-1:2; 
 gmresTols = 10 .^(-(8:-1:4));
 % ps = [2]; % 2:8;
 % gmresTols = [10 .^(-4)];
 %% set path
-mfilePath = mfilename('fullpath');
-if contains(mfilePath,'LiveEditorEvaluationHelper')
-    mfilePath = matlab.desktop.editor.getActiveFilename;
-end
-[dirname, ~,~] = fileparts(mfilePath);
-basedir = fullfile(dirname, '..','..');
-addpath(basedir);
-addpath(fullfile(basedir,'support'));
-addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
-addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
-addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
+[dirname, ~] = setPaths();
 %% set defaults
 if ~exist('srcFile', 'var') || isempty(srcFile)
     srcFile = fullfile(dirname, '../data/amphiLCPs.n_2.p_8.cDist_2.3.mat');
@@ -25,6 +16,11 @@ if ~exist('dstDir', 'var') || isempty(dstDir)
 end
 if ~exist('ix', 'var') || isempty(ix)
     ix = 1;
+end
+%% Set DATA_DIR 
+DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), num2str(ix));
+if ~exist(DATA_DIR, 'dir')
+    mkdir(DATA_DIR)
 end
 %% Load from file
 disp(['Loading ' srcFile])
@@ -40,17 +36,41 @@ nc = size(F,2);
 C = lcp_list(ix).C;
 numPs = numel(ps);
 numTols = numel(gmresTols);
-out = cell(numPs,numTols);
+
 disp(['nc = ' num2str(nc)])
-for l = 1:numPs
+try 
+    load(dstFile, 'out');
+    disp(['Loaded precomputed result from ' dstFile])
+    ll = 1;
+    kk = 1;
+    for l = 1:numPs
+        for k = 1:numTols
+            if isempty(out{l,k})
+                ll = l; kk=k;
+                break;
+            end
+        end 
+        if isempty(out{ll,kk})
+            break;
+        end
+    end
+    disp([' Found results up to ' num2str([ll,kk])])
+catch 
+    disp('No intermediate result found. Initializing with empty')
+    out = cell(numPs,numTols);
+    ll = 1;
+    kk = 1;
+end
+for l = ll:numPs
     p = ps(l);
-    disp(['p = ' num2str(p)])
-    for k = 1:numTols
+    disp(['l = ' num2str(l) ' <= ' num2str(numPs) ', p = ' num2str(p)])
+    for k = kk:numTols
         gmresTol = gmresTols(k);
+        disp(['  k = ' num2str(l) ' <= ' num2str(numTols) ', gmresTol = ' num2str(gmresTol)])
         Amatvec = getMatVec(Fparams, F, C, p, gmresTol);
         A = zeros(nc,nc);
         for i = 1:nc
-            disp(['  i = ' num2str(i)])
+            disp(['    i = ' num2str(i)])
             ei = zeros(nc,1);
             ei(i) = 1;
             tic

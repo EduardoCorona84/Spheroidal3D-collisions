@@ -1,9 +1,10 @@
 function count = writeData(fileName, suffix, data)
 % WRITEDATA(fileName, data) - Project specific interface to write binary files
+global DATA_DIR
 
-try 
-    root = getenv('SLURM_SCRATCH');
-catch
+if ~isempty(DATA_DIR) 
+    root = DATA_DIR;
+else
     root = '../data';
 end
 if(isstr(suffix))
