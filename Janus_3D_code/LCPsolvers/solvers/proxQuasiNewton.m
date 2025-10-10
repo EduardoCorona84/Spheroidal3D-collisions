@@ -2,27 +2,29 @@ function [x, info] = proxQuasiNewton(fg, x0, opts)
 [opts, info] = defaultLCPOpts(opts, x0);
 checkOpts(opts)
 n = numel(x0);
-eta = 1;
 x_k = x0;
-x_km1 = NaN*ones(n,1);
-grad_km1 = NaN*ones(n,1);
-Ax_km1 = [];
-Aq = [];
+if all(x0 == 0)
+    Ax_k = zeros(n,1);
+else 
+    Ax_k = opts.A(x_k);
+end
+[f_k, grad_k] = fg(x_k, Ax_k);
+eta = 1;
+s = [];
+y = [];
 k = 0;
 while true
-    [f_k, grad_k, Ax_k] = fg(x_k, Ax_km1, Aq, eta);
     [converged, info] = checkConvergence(k, f_k, x_k, ...
         grad_k, eta, info, opts);
     if converged
         x = x_k;
         break
     end
-    s_k = x_k - x_km1;
-    y_k = grad_k - grad_km1;
+    k = k + 1;
     x_km1 = x_k;
     grad_km1 = grad_k;
     Ax_km1 = Ax_k;
-    [H, h0, U, V] = updateHk(k, s_k, y_k, opts);
+    [H, h0, U, V] = updateHk(k, s, y, opts);
     % quasi-newton step direction
     p = -H(grad_k);
     % step size direction
@@ -33,8 +35,12 @@ while true
     q = x_k - x_km1;
     [eta, Aq] = stepSize(-1, q, x_km1, Ax_km1, opts);
     x_k = x_km1 + eta*q;
+    Ax_k = Ax_km1 + eta*Aq;
     % Increment the number of iterations
-    k = k + 1;
+    
+    [f_k, grad_k] = fg(x_k, Ax_k);
+    s = x_k - x_km1;
+    y = grad_k - grad_km1;
 end
 
 end % proxQuasiNewton

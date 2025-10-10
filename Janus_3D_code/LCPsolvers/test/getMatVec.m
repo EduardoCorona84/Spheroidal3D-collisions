@@ -1,4 +1,4 @@
-function A = getMatVec(Fparams, F, C, p)
+function A = getMatVec(Fparams, F, C, p, gmresTol)
 
 parslv = Fparams.parslv;
 sdim = 3;
@@ -21,6 +21,9 @@ Wg = matVecParams.Wg;
 [Ck,Bk,~, Lk] = Build_AuxMats(Wg,Xt,[],np,n3);
 % TODO: Preconditioner?
 prec = [];
+if exist('gmresTol', 'var') && ~isempty(gmresTol)
+    parslv.tol = gmresTol;
+end
 % Traction of Single Layer stokes
 TD = RBS_MatVec([],Lk,'Vsh',...% typeMV,
     matVecParams,sdim,0.5,'TSL_Stk_3D',prec);

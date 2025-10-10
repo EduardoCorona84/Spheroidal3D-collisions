@@ -1,68 +1,72 @@
 function results = testLCPWrappers()
-try %#ok<TRYNC>
-    rng('default')
-end
-rng(2);
 mfilePath = mfilename('fullpath');
 if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;
 end
 [dirname, ~,~] = fileparts(mfilePath);
-addpath(genpath(fileparts(dirname)))
-fname = 'all_data';
-load([fname '.mat'], ...
-    'A_list', 'b_list');
-minSz = 100; 
+basedir = fullfile(dirname, '..','..');
+addpath(basedir); 
+addpath(fullfile(basedir,'support')); 
+addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
+addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
+addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
+run(fullfile('/projects', getenv('USER'), 'cvx', 'cvx_startup.m'))
+minSz = 100;
 maxSz = 150;
 
 opts = struct( ...
-    'max_iter',1000, ...
-    'tol_rel',1e-12, ...
-    'tol_abs',1e-12, ... 
-    'stepSize',struct('init','uniform',...
-        'kappa','uniform',...
-        'eta','opt'),... 
-    'prox',struct( ...
-        'maxiter', 1000, ...
-        'res_abstol', 0, ...
-        'res_reltol', 0, ...
-        'alp_abstol', 0, ...
-        'alp_reltol', 1e-12, ...
-        'verbose', false, ...
-        'runCVX', false), ...
-    'r', 20, ...
-    'qnUpdate', 'bfgs', ...
-    'storeIts', true...
+    'max_iter',50, ...
+    'kkt_rel',1e-12, ...
+    'kkt_abs',1e-12, ...
+    'storeIts', true, ...
+    'subSpaceMin', struct( ...
+        'innerStepSelection', 'pqn', ...
+        'innerSolver','cvx', ...
+        'orthoMethod','qr', ...
+        'kThresh', 1, ...
+        'useOneStepIter', false ...
+    ) ...
 );
 algoNames = {
-    'PGD (\kappa = \tau_{bb_1}, \eta = 1)'; 
-    'PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)'; 
+    % 'PGD (\kappa = \tau_{bb_1}, \eta = 1)';
+    'PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
     % 'Optimal Diagonal Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
     % 'Online Preconditioned PGD (\kappa = \tau_{bb_1}, \eta = \eta^*)';
-    'zeroSR1 (\kappa = 1, \eta = \eta^*)';
-    'L-BFGS-B';
-    'Projected QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)';
-    'Proximal QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)';
+    % 'zeroSR1 (\kappa = 1, \eta = \eta^*)';
+    % 'L-BFGS-B';
+    % 'Projected QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)';
+    'PQN (BFGS, \kappa = 1, \eta = \eta^*)';
+    'Subspace Minimization (PGD)';
+    'Subspace Minimization (PQN)';
     % 'Binding Proximal QuasiNewton (BFGS, \kappa = 1, \eta = \eta^*)'
-};
+    };
 algoHndls = {
-    @projectedGradientDescent; @projectedGradientDescent; 
+    @projectedGradientDescent; %@projectedGradientDescent;
     % @optDiagPrecond;
     % @onlineScaledGradient;
-    @zeroSr1_nic; 
-    @L_BFGS_B; 
-    @projectQuasiNewton_nic;  
+    % @zeroSr1_nic;
+    % @L_BFGS_B;
+    % @projectQuasiNewton_nic;
     @proxQuasiNewton;%
+    @subspaceMin;
+    @subspaceMin;
     % @bindingProxQuasiNewton
-};
+    };
 numAlgo = numel(algoNames);
 assert(numel(algoNames) == numel(algoHndls));
 fromFile = false;
 diagDom = false;
-if fromFile 
+if fromFile
+    fname = 'all_data'; %#ok<UNRCH> 
+    load([fname '.mat'], ...
+        'A_list', 'b_list');
     MC = length(A_list);
-else 
-    MC = 500;
+else
+    try %#ok<TRYNC>
+        rng('default')
+    end
+    rng(2);
+    MC = 10;
 end
 results = repmat(...
     struct( ...
@@ -74,7 +78,7 @@ results = repmat(...
         'errHist', {cell(MC,1)}, ...
         'iterHist', {cell(MC,1)} ...
     ), [1,numAlgo] ...
-);
+    );
 mcGood = [];
 for mc = 1:MC
     if fromFile
@@ -87,11 +91,12 @@ for mc = 1:MC
             continue;
         end
     else
-        %% Generate random problem 
-        condNum = 1e4;
+        %% Generate random problem
+        condNum = 1e2;
         n = minSz + int64(round((maxSz-minSz)*rand(1)));
+        numLarge = 50;
         B = randn(n,n);
-        vv = 1 + condNum * rand(n,1);
+        vv = [1; 1 + rand(n-numLarge-1,1); 1 + condNum * rand(numLarge-1,1); condNum];
         if diagDom
             A = (B+B') + diag(vv);
         else
@@ -102,15 +107,15 @@ for mc = 1:MC
         vals = max(1,diag(vals));
         A = vecs*diag(vals)*vecs';
         x_unconstrained = randn(n,1);
-        while ~any(x_unconstrained < 0)
+        while ~any(x_unconstrained)
             x_unconstrained = randn(n,1);
         end
         b = -A*x_unconstrained;
     end
-    %% Build cost function 
+    %% Build cost function
     Acnt = @(x) Acounter(x,A, false);
     x0 = zeros(n,1);
-    fg = @(x, Ax, Aq, eta) quadraticLoss(x, Acnt,b, Ax, Aq, eta);
+    fg = @(x, Ax) quadraticLoss(x, Acnt, b, Ax);
     %% Fill the opts with problem specific information
     opts.A = Acnt;
     opts.b = b;
@@ -119,18 +124,18 @@ for mc = 1:MC
     evals = eig(A);
     opts.L = max(evals);
     opts.mu = min(evals);
-    opts.AA = A; 
+    opts.AA = A;
     mcGoodFlag = true;
-    try 
+    try
         [xstar,~] = callCVX([], x0, opts);
         opts.errFcn = {
-            @(x) abs_kkt(x, A, b); 
+            @(x) abs_kkt(x, A, b);
             @(x) rel_kkt(x, A, b);
             @(x) Acnt('cnt');
             @(x) rel_iter(x,xstar);
-            @(x) abs_iter(x,xstar); 
-        };
-    catch 
+            @(x) abs_iter(x,xstar);
+            };
+    catch
         mcGoodFlag = false;
     end
     %% Run all the algorithms
@@ -139,15 +144,24 @@ for mc = 1:MC
             break
         end
         name = algoNames{ixAlgo};
-        this_opts = opts;
-        if contains(name, 'kappa') && contains(name, 'bb') 
+        [this_opts,~] = defaultLCPOpts(opts, x0);
+        if contains(name, 'kappa') && contains(name, 'bb')
             this_opts.stepSize.kappa = 'bb1';
-        elseif contains(name, 'kappa = 1') 
+        elseif contains(name, 'kappa = 1')
             this_opts.stepSize.kappa = 'uniform';
-        elseif contains(name, 'kappa^*') 
-            this_opts.stepSize.kappa = 'opt';
+        elseif contains(name, 'kappa^*')
+        elseif contains(lower(name), 'subspace') 
+            if contains(lower(name), 'pgd')
+                this_opts.subSpaceMin.innerStepSelection = 'pgd';
+                this_opts.stepSize.kappa = 'opt';
+            else
+                this_opts.subSpaceMin.innerStepSelection = 'pqn';
+                this_opts.stepSize.kappa = 'uniform';
+            end
+        else    
+             this_opts.stepSize.kappa = 'uniform';
         end
-        if contains(name, 'eta = 1') 
+        if contains(name, 'eta = 1')
             this_opts.stepSize.eta = 'uniform';
         elseif strcmpi(name, 'eta^*')
             this_opts.stepSize.eta = 'opt';
@@ -172,39 +186,52 @@ for mc = 1:MC
     if mcGoodFlag
         mcGood = [mcGood mc]; %#ok<AGROW>
         disp(['mc ' num2str(mc)])
-        linespec = {"-", "--",":","-."};
-        figure() 
+        linespec = {"-o", "--s",":*","-.diamond"};
+        
+        objVal = cell(numAlgo,1);
+        for ixAlgo = 1:numAlgo
+            iterHist = results(ixAlgo).iterHist{mc};
+            errHist = results(ixAlgo).errHist{mc};
+            numIter = size(errHist,1)-1;
+            try
+                objVal{ixAlgo} = arrayfun(@(i) fg(iterHist(i,:)',[]), 1:numIter+1);
+            catch
+                objVal{ixAlgo} = errHist(:,end);
+            end
+        end
+        minObjVal = min(cellfun(@min, objVal));
+        figure()
         for ixAlgo = 1:numAlgo
             name = algoNames{ixAlgo};
             subplot(3,1,1)
-            iterHist = results(ixAlgo).iterHist{mc};
             errHist = results(ixAlgo).errHist{mc};
-            numIter = size(errHist,1);
-            try
-                objVal = arrayfun(@(i) fg(iterHist(i,:)',[],[],[]), 1:numIter);
-            catch 
-                objVal = errHist(:,end);
-            end
-            matVecs = errHist(:,3);
+            numIter = size(errHist,1)-1;
+            % matVecs = errHist(:,3);
             kk = mod(ixAlgo-1, numel(linespec)) + 1;
-            semilogy(1:numIter, objVal - min(objVal) + 1e-12, linespec{kk}, 'LineWidth',4) % abs(objVal - cvxObjVal) / abs(cvxObjVal))
-            hold on 
+            semilogy(0:numIter, objVal{ixAlgo} - minObjVal + 1e-12, linespec{kk}, 'LineWidth',4,'MarkerSize',10) % abs(objVal - cvxObjVal) / abs(cvxObjVal))
+            hold on
             xlabel('Iteration','FontSize', 20)
             ylabel('$f(x_k)$','interpreter', 'latex', 'FontSize', 25)
-            subplot(3,1,2)
-            semilogy(1:numIter, errHist(:,4), linespec{kk},'LineWidth',4);
+            subplot(3,2,3)
+            semilogy(0:numIter, errHist(:,4), linespec{kk},'LineWidth',4,'MarkerSize',10);
             hold on
             ylabel('$\frac{\|x_k - x^*\|}{\|x^*\|}$', 'interpreter', 'latex', 'FontSize', 30)
-             xlabel('Iteration','FontSize', 20)
+            xlabel('Iteration','FontSize', 20)
             subplot(3,1,3)
-            semilogy(1:numIter, errHist(:,1), linespec{kk}, 'LineWidth',4);
-            hold on 
+            semilogy(0:numIter, errHist(:,1), linespec{kk}, 'LineWidth',4, 'MarkerSize',10);
+            hold on
             xlabel('Iteration','FontSize', 20)
             ylabel('$\varphi(x_k)$','interpreter', 'latex','FontSize', 25)
         end
+        subplot(3,2,4)
+        plot(sort(vals,1,'descend'), '-o', 'Color', '#808080', ...
+            'LineWidth',4, 'MarkerSize',10)
+        ylabel('Eigen Values of $A$', 'interpreter', 'latex','FontSize', 25)
         subplot(3,1,1)
         legend(algoNames,'FontSize', 20,'Location','northeastoutside')
-        sgtitle(['Deep Dive for MC = ' num2str(mc)],'FontSize', 30)
+        sgtitle({['Deep Dive for MC = ' num2str(mc)], ...
+            sprintf('n = %d, n^\\prime = %d, \\kappa(A) = %.2g', ...
+            n, numLarge, cond(A))},'FontSize', 30)
     end
 end
 %%
@@ -226,38 +253,38 @@ if fromFile
     fname = ['results_n_' num2str(minSz) '_' num2str(maxSz)];
 elseif diagDom
     fname = ['results_randProblems_diagDom_n_' num2str(minSz) '_' num2str(maxSz)];
-else 
-        fname = ['results_randProblems_noStructure_updateStepSize_n_' num2str(minSz) '_' num2str(maxSz)];
+else
+    fname = ['results_randProblems_noStructure_updateStepSize_n_' num2str(minSz) '_' num2str(maxSz)];
 end
 save(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/' fname '.mat'], ...
     'results', 'mcGood', 'minSz', 'maxSz', 'opts');
 end
 
 function Ax = Acounter(x, A, transpose)
-persistent matVecCnt 
+persistent matVecCnt
 
 if isempty(matVecCnt)
     matVecCnt = 0;
 end
 if ~exist('transpose','var') || isempty(transpose)
-    transpose = false; 
+    transpose = false;
 end
 
-if ischar(x) 
+if ischar(x)
     if strcmpi(x, 'cnt')
-        Ax = matVecCnt; 
-        return 
+        Ax = matVecCnt;
+        return
     elseif strcmpi(x, 'reset')
-        Ax = matVecCnt; 
+        Ax = matVecCnt;
         matVecCnt = 0;
-        return 
+        return
     else
         assert(false, ['Option: ' x ' not recognized'])
     end
 end
 if transpose
     Ax = A'*x;
-else 
+else
     Ax = A*x;
 end
 matVecCnt = matVecCnt + 1;
@@ -268,11 +295,11 @@ n = length(x0); %#ok<NASGU>
 % f = @(x) 1/2*sum_square(opts.A(x)+opts.b);
 f = @(x) 1/2*dot(x,opts.A(x)) + dot(opts.b,x); %#ok<NASGU>
 cvx_begin quiet
-        variable x(n)
-        minimize f(x)
-        subject to 
-        0 <= x %#ok<NODEF,NOPRT>
-cvx_end 
+variable x(n)
+minimize f(x)
+subject to
+0 <= x %#ok<NODEF,NOPRT>
+cvx_end
 
 info.iter = NaN;
 info.kkt = NaN;
@@ -281,25 +308,25 @@ info.iterHist = NaN;
 end
 
 function e = abs_kkt(x, A, b)
-    phi = min(x,A*x + b);
-    e = 1/2*dot(phi, phi);
+phi = min(x,A*x + b);
+e = 1/2*dot(phi, phi);
 end % abs_kkt
 
 function diff = rel_kkt(x, A, b)
-    persistent olde 
-    if ischar(x) && strcmpi(x,'reset')
-        olde = [];
-        diff = NaN;
-        return
-    end
-    phi = min(x,A*x + b);
-    e = 1/2*dot(phi, phi);
-    if isempty(olde) 
-        diff = NaN;
-    else 
-        diff = abs(e - olde) / abs(e);
-    end
-    olde = e;
+persistent olde
+if ischar(x) && strcmpi(x,'reset')
+    olde = [];
+    diff = NaN;
+    return
+end
+phi = min(x,A*x + b);
+e = 1/2*dot(phi, phi);
+if isempty(olde)
+    diff = NaN;
+else
+    diff = abs(e - olde) / abs(e);
+end
+olde = e;
 end % rel_kkt
 
 function e = abs_iter(x, xstar)

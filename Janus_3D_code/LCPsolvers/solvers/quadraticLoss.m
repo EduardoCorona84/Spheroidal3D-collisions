@@ -1,18 +1,10 @@
-function [f, g, Ax] = quadraticLoss(x, A, b, Ax, Aq, eta)
-
-if ~exist('Ax','var') || ~exist('Ax','var') || isempty(Ax) || isempty(Aq)
+function [f, g] = quadraticLoss(x, A, b, Ax)
+if ~exist('Ax', 'var') || isempty(Ax)
     Ax = A(x);
-    f = 1/2*dot(x,Ax) + dot(b,x);
-    if nargout == 1
-        return 
-    end
-    g = Ax + b;
-    return 
 end
-assert(exist('Aq','var') && exist('eta','var'))
-assert(~isempty(Aq) && ~isempty(eta))
-Ax = Ax + eta*Aq;
+
 f = 1/2 *dot(x, Ax) + dot(x, b);
+
 if nargout == 1
     return 
 end

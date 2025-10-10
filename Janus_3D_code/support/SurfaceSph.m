@@ -75,7 +75,11 @@ classdef SurfaceSph < handle
             % Updating the rest of the params
             obj.p = (sqrt(2*size(obj.cart.x,1)+1)-1)/2; %#ok<*MCSUP>
             obj.shc = obj.cart.shAna();
-            obj.geoProp = calcGeoProp(obj);
+            try 
+                obj.geoProp = calcGeoProp(obj);
+            catch 
+                obj.geoProp = [];
+            end
             obj.stokesOpStale = true;
             obj.dblLayerOpStale = true;
         end
