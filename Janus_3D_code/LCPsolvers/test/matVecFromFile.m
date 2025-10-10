@@ -17,7 +17,7 @@ addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
 addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
 addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
 
-load(fullfile(dirname, '../data/amphiLCPs.n_2.p_8.cDist_2.3.prt_0.mat'), 'Fparams', 'lcp_list');
+load(fullfile(dirname, '../../data/amphiLCPs.n_2.p_8.cDist_2.3.prt_0.mat'), 'Fparams', 'lcp_list');
 %%
 mc = 2;
 F = lcp_list(mc).F;
