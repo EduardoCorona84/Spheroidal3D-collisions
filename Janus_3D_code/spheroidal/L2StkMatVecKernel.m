@@ -157,8 +157,8 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
                 % Rows are targets, columns are source
                 % Thus, column i represents the block from the perspective
                 % of spheroid i. However, we don't want this: we want row i
-                % to correspond to spheroid i. This is why we multiply by
-                % R.
+                % to correspond to vectors in the frame of spheroid i. This
+                % is why we multiply by R.
                 target_block = (j-1)*(3*np) + (1:3*np);
                 source_block = (i-1)*(3*np) + (1:3*np);
                 M(target_block, source_block) = R*M_ji;
@@ -541,6 +541,7 @@ function M = TSLmatrix(IDparams, p, ns)
     [D1_U, D1_V, D1_PHI] = spheroidalgraddivSL(IDparams, I, Z, Z, []);
     [D2_U, D2_V, D2_PHI] = spheroidalgraddivSL(IDparams, Z, I, Z, []);
     [D3_U, D3_V, D3_PHI] = spheroidalgraddivSL(IDparams, Z, Z, I, []);
+
     for i=1:ns
         if IDparams.oblate(i)
             S_self = oblate_spheroid_shape(p, IDparams.u0(i), IDparams.a(i), 'spheroidal');
@@ -606,6 +607,64 @@ function M = TSLmatrix(IDparams, p, ns)
     M = blkdiag(M_cells{:});
 end
 
+function M = TSL_matrix_alternative(IDparams, p, ns)
+    np = 2*p*(p + 1);
+    M_cells = cell(1, ns);
+
+    for i = 1:ns
+        nu_x_cells{i} = repmat([1,0,0], np, 1);
+        nu_y_cells{i} = repmat([0,1,0], np, 1);
+        nu_z_cells{i} = repmat([0,0,1], np, 1);
+    end
+
+    [SP_x_cells, SP_y_cells, SP_z_cells] = spheroidalSP(IDparams, [], nu_x_cells, nu_y_cells, nu_z_cells);
+    [DP_x_cells, DP_y_cells, DP_z_cells] = spheroidalDP(IDparams, X_spectral, nu_x_cells, nu_y_cells, nu_z_cells);
+
+    % Build TSL matvec kernel
+    for i=1:ns
+        %%%
+        %%% Setup
+        %%%
+        % Grab source points
+        [~, X_src_i] = IDparams.get_X(i);
+        N_src_i = IDparams.get_Norm(IDparams.p, i);
+        Xi_dot_Ni_vec = repmat(dot(X_src_i, N_src_i, 2), 3, 1); % 3np x 1 vector.
+
+        % Extract SP terms
+        SP_x_i = SP_x_cells{i};
+        SP_y_i = SP_y_cells{i};
+        SP_z_i = SP_z_cells{i};
+
+        % Extract ddS terms
+        ddS_x_i = ddS_x_cells{i};
+        ddS_y_i = ddS_y_cells{i};
+        ddS_z_i = ddS_z_cells{i};
+        ddS_op = [ddS_x_i; ddS_y_i; ddS_z_i];
+
+        %%%
+        %%% Build matrix
+        %%%
+        % Extract SP sum term
+        M1_diag_term = diag(N_src_i(:,1))*SP_x_i + diag(N_src_i(:,2))*SP_y_i + diag(N_src_i(:,3))*SP_z_i;
+        M1 = kron(eye(3), M1_diag_term);
+
+        % Extract ddS sum term
+        % The idea is that we multiply on the left by the normal vector term, on the right
+        % by the y_j term, and the ddS operator is represented by [ddS_x; ddS_y; ddS_z].
+        M2_1 = kron(eye(3), diag(N_src_i(:,1))) * ddS_op * kron(eye(3), diag(X_src_i(:,1)));
+        M2_2 = kron(eye(3), diag(N_src_i(:,2))) * ddS_op * kron(eye(3), diag(X_src_i(:,2)));
+        M2_3 = kron(eye(3), diag(N_src_i(:,3))) * ddS_op * kron(eye(3), diag(X_src_i(:,3)));
+        M2 = M2_1 + M2_2 + M2_3;
+
+        % Extract ddS term
+        M3 = diag(Xi_dot_Ni_vec) * ddS_op;
+
+        M_cells{i} = M1 + M2 - M3;
+    end
+
+    M = blkdiag(M_cells{:});
+end
+
 %% Helper code
 function kerneldSmtx = generate_kerneldS_mtx(X_self, np, permute_flag)
     %{
@@ -617,5 +676,14 @@ function kerneldSmtx = generate_kerneldS_mtx(X_self, np, permute_flag)
         prm = zeros(1,3*np); 
         prm(1:np) = 1:3:3*np; prm(np+1:2*np) = 2:3:3*np; prm(2*np+1:3*np)=3:3:3*np;
         kerneldSmtx = kerneldSmtx(prm, prm);
+    end
+end
+
+function plot_spectral_coeffs(mtx, cutoff_p)
+    np = size(mtx, 1);
+    figure;
+    stem(abs(shAna(mtx)))
+    if nargin == 2
+        
     end
 end

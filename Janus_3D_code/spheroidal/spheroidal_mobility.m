@@ -1,4 +1,4 @@
-function mobility_solver(fname,Fparams,init)
+function spheroidal_mobility(fname,Fparams,init)
     %{
     Entrypoint for the mobility solver for spheroidal suspension in Stokes flow.
     Code was adapted from the code for Janus particles.
@@ -7,20 +7,23 @@ function mobility_solver(fname,Fparams,init)
     fname - (string) filename for experiment info
     
     Fparams - (struct) parameter struct for rigid body simulation, with fields:
-    
+    ----
     type            - (string) mobility problem type (FTfun)
     typeMV          - (string) 'SSph' for (scalar) spheroidal harmonics, 'Rbs' for rotation based singular quad
     denseMV         - (bool) dense vs FMM for far-field
     num_timesteps   - (int)    number of timesteps
     dt              - (double) timestep length
     timedisc        - (string) time discretization (i.e. "euler", "trapz", or "rk4")
-    comp            - (bool) compute intermediate quantities FT and VW
+    comp            - (bool) compute intermediate quantities FT and VW (for debugging purposes?)
 
     parbd - (struct) struct with rigid body parameters:
-        Shape       - (string) rigid body shape; must be '' for now--which represents spheres and spheroids.
+        Shape       - (string) rigid body shape; must be 'spheroid' for now--which represents spheres and spheroids.
         n3          - (int) number of rigid bodies n_b
-        rd          - (double) radius (monodisperse) or array of n_b radii (polydisperse) of bodies
-        p           - (int)    spherical harmonic order (bodies) 
+        u0          - (double) n_b x 1 array of u0's for spheroids; if spherical, set it to be -1. 
+        a           - (double) n_b x 1 array of a's for spheroids; if spherical, set it to be the desired radius.
+        shape_type  - (string) n_b x 1 array of strings: should be 'prolate', 'oblate', or 'sphere'.
+            Spheres are not implemented for the time being.
+        p           - (int) spheroidal harmonic order (bodies) 
         Ct          - (double) n_b x 3 array of centers 
         eps         - (double) epsilon buffer (collision dist)
         mdist       - (double) collision buffer for body-body interactions
@@ -33,11 +36,12 @@ function mobility_solver(fname,Fparams,init)
          solver   - gmres, pcg, bicg, etc. 
          tol (tolerance), maxit (maximum iterations), rst (restart), etc.
      
-    The default 'FTfun' (force and torque prescription) requires functions 
-    Ffun,Tfun = @(t,C) with output of size 3 x n_b. 
+    Ffun, Tfun = @(t,C) with output of size 3 x n_b.
+        Force and torque prescriptions; required if type is 'FTfun'.
     
     init    - (string) optional filename to resume a simulation from last
     recorded timestep
+    ----
 
     %%%
     %%% CODE ANNOTATIONS
@@ -59,7 +63,10 @@ function mobility_solver(fname,Fparams,init)
     global ROTATIONAL_VELOCITY_TOL;     % The threshold that the norm of the angular velocity should meet in order
     ROTATIONAL_VELOCITY_TOL = 1e-10;    % to update the body's angular position.
      
-    %(0.1) (optional) Load data in init, initialize output arrays
+    %%(0.0) Input validation
+    assert(strcmp())
+
+    %%(0.1) (optional) Load data in init, initialize output arrays
     num_timesteps = Fparams.Nt; num_body=Fparams.parbd.n3; 
     tt = zeros(num_timesteps+1, 1); 
     sigma = cell(num_timesteps+1, 1); mu=sigma; U=sigma; VW=U; Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; 
