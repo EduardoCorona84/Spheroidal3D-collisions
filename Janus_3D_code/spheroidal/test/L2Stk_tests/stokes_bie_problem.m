@@ -1,30 +1,30 @@
 function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie_problem(p, eta, ns, u0, target_distances, plt, neumann, interior)
     %{
-        Inputs:
-            - p -> order
-            - eta -> matvec eta (used to distinguish points that are close/far)
-            - ns -> number of spheroids
-            - u0 -> eccentricities of spheroids
-            - target_distances -> how far away from the surface to evaluate
-            target points
-            - plt (true/false) -> whether to plot the points; a holdover 
-            from old code.
-            - neumann (true/false) -> whether to do a neumann problem or 
-            not; note that we get an integral equation of the first kind, 
-            which is known to have bad conditioning
-            - interior (true/false) -> whether to do an exterior problem or 
-            an interior problem
+    Inputs:
+        - p -> order
+        - eta -> matvec eta (used to distinguish points that are close/far)
+        - ns -> number of spheroids
+        - u0 -> eccentricities of spheroids
+        - target_distances -> how far away from the surface to evaluate
+        target points
+        - plt (true/false) -> whether to plot the points; a holdover 
+        from old code.
+        - neumann (true/false) -> whether to do a neumann problem or 
+        not; note that we get an integral equation of the first kind, 
+        which is known to have bad conditioning
+        - interior (true/false) -> whether to do an exterior problem or 
+        an interior problem
 
-        Outputs:
-            - soln -> computed SL/DL result based on Dirichlet/Neumann
-            problem selection
-            - fluxsoln -> computed SP/DP result based on Dirichlet/Neumann
-            problem selection
-            - truesoln -> analytical solution (potential induced by a 
-            number of point charges)
-            - trueflux -> analytical flux
-            - sigma_vec -> computed sigma vector
-            - condK -> condition number of BIE matrix
+    Outputs:
+        - soln -> computed SL/DL result based on Dirichlet/Neumann
+        problem selection
+        - fluxsoln -> computed SP/DP result based on Dirichlet/Neumann
+        problem selection
+        - truesoln -> analytical solution (potential induced by a 
+        number of point charges)
+        - trueflux -> analytical flux
+        - sigma_vec -> computed sigma vector
+        - condK -> condition number of BIE matrix
     %}
 
     if nargin==0
@@ -38,6 +38,11 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     useS = true; % For exterior Dirichlet
     usekerneldS = false; % For Neumann problems
     usekernelD = false; % For interior Dirichlet problems
+
+    % Matrix free flag
+    % Note that the input to the BIE should be the density, and the
+    % evaluation points/normals should be the source
+    MATRIXFREE_FLAG = false;
     
     % Flag for plotting error in the exterior Neumann case.
     PLOT_ERROR_FLAG = false;
@@ -53,10 +58,10 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         error("The input u0 length does not match number of spheroids indicated.");
     end
     
-    pars=SpheroidalParameters;
-    pars.matvec_eta = eta;
-    pars.isReal = true;
-    pars.u0=u0;
+    params=SpheroidalParameters;
+    params.matvec_eta = eta;
+    params.isReal = true;
+    params.u0=u0;
 
     if ns==3
         if mix_obl
@@ -64,12 +69,12 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         else
             obl = [0,0,0];
         end
-        pars.oblate = obl;
+        params.oblate = obl;
         a = 1./u0;
         a(obl==1) = 1./sqrt(u0(obl==1).^2+1);
-        pars.a = a;
+        params.a = a;
         
-        pars.centers = [0 0 0; 5 0 0; -5 0 3];
+        params.centers = [0 0 0; 5 0 0; -5 0 3];
         thetas = [0 pi/10 5*pi/3];
         phis = [0 0 pi/5];
         % thetas = [0 0 0];
@@ -80,34 +85,34 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         else
             obl = [0,0];
         end
-        pars.oblate = obl;
+        params.oblate = obl;
         a = 1./u0;
         a(obl==1) = 1./sqrt(u0(obl==1).^2+1);
-        pars.a = a;
+        params.a = a;
         
-        pars.centers = [0 0 0; 5 0 -5];
-        % thetas = [0 0];
-        % phis = [0 0];
-        thetas = [0 pi/4];
+        params.centers = [0 0 0; 15 0 0];
+        thetas = [0 0];
         phis = [0 0];
+        % thetas = [0 pi/4];
+        % phis = [0 0];
     else
         if ns~=1
             error("Number of spheroids given not implemented here.");
         end
 
         if mix_obl
-            pars.a = 1./sqrt(u0^2+1);
-            pars.oblate=1;
+            params.a = 1./sqrt(u0^2+1);
+            params.oblate=1;
         else
-            pars.a=1./u0;
-            pars.oblate=0;
+            params.a=1./u0;
+            params.oblate=0;
         end
         
-        pars.centers=[0 0 0];
-        % thetas = 0;
-        % phis = 0;
-        thetas=pi/6;
-        phis=pi/4;
+        params.centers=[0 0 0];
+        thetas = 0;
+        phis = 0;
+        % thetas=pi/6;
+        % phis=pi/4;
     end
 
     Ri=zeros(3,3,ns);
@@ -118,10 +123,10 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         Riz=[cos(phii) -sin(phii) 0; sin(phii) cos(phii) 0; 0 0 1];
         Ri(:,:,i)=Riz*Riy;
     end
-    pars.Rmat=Ri;
-    pars.thetas=thetas;
-    pars.phis=phis;
-    pars.sigma=zeros(np,1,ns);
+    params.Rmat=Ri;
+    params.thetas=thetas;
+    params.phis=phis;
+    params.sigma=zeros(np,1,ns);
 
     %% Global rotation (if enabled)
     % The entire idea is to rotate the entire global coordinate system.
@@ -136,20 +141,20 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         R_global = Riz*Riy;
 
         fprintf("Rotating centers...\n");
-        pars.centers = pars.centers * R_global';
+        params.centers = params.centers * R_global';
 
         fprintf("Re-orienting each spheroid...\n");
         for i = 1:ns
             Ri(:,:,i) = R_global * Ri(:,:,i);
         end
-        pars.Rmat = Ri;
+        params.Rmat = Ri;
 
         fprintf("-- Done re-orienting coordinate system. --\n");
     end
 
     %% Placement of point forces
     num_pf = 3; % Number of point forces per spheroid
-    c = pars.centers;
+    c = params.centers;
     F_pos_vec = reshape(repmat(reshape(c',3,1,[]),1,num_pf),3,[],1)';
 
     switch (interior)
@@ -159,18 +164,18 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
                 % Some scaling factor times the major radius of the prolate 
                 % spheroids guarantees that we shall be outside the
                 % spheroids.
-                major_radii = repelem(sqrt(pars.u0.^2 + 1), num_pf)' .* repelem(pars.a, num_pf)';
+                major_radii = repelem(sqrt(params.u0.^2 + 1), num_pf)' .* repelem(params.a, num_pf)';
                 d = placement_scale * major_radii .* generate_random_unit_vec(ns*num_pf, 3);
             else
                 d = [];
                 for i=1:num_pf
-                    d = [d ; placement_scale.*pars.a.*sqrt(pars.u0.^2 + 1).*generate_random_unit_vec(1, 3)];
+                    d = [d ; placement_scale.*params.a.*sqrt(params.u0.^2 + 1).*generate_random_unit_vec(1, 3)];
                 end
             end
         case false % Exterior problem (place points near center)
             if ns>1
                 % A multiple of the minor radius of the prolate spheroids
-                scale = repmat(0.3 .* pars.a .*sqrt(pars.u0.^2-1), num_pf, 1);
+                scale = repmat(0.3 .* params.a .*sqrt(params.u0.^2-1), num_pf, 1);
                 scale = scale(:);
                 d = repmat(scale,1,3) .* (rand(size(F_pos_vec))-.5);
             else
@@ -185,38 +190,44 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     % Rotate everything accordingly since the above was constructed from
     % the perspective of an unrotated spheroid.
-    F_pos_vec = rotate_point_forces(F_pos_vec, pars.centers, num_pf, ns, Ri);
-    % F_vec = rotate_point_forces(F_vec, pars.centers, num_pf, ns, Ri);
+    F_pos_vec = rotate_point_forces(F_pos_vec, params.centers, num_pf, ns, Ri);
+    % F_vec = rotate_point_forces(F_vec, params.centers, num_pf, ns, Ri);
 
     if plt
-        pars.plot(F_pos_vec);
+        params.plot(F_pos_vec);
         title("Spheroids and locations of point forces");
     end
 
     %% Setup BIE
-    Y = pars.get_X;
-    [NrY, ~] = pars.get_Norm_rot(p); % Necessary to account of the spheroid's rotation
+    Y = params.get_X;
+    [NrY, ~] = params.get_Norm_rot(p); % Necessary to account of the spheroid's rotation
 
+    %% Three nested if-statements
+    % Dirichlet/Neumann -> Interior/Exterior -> Matrix/matrix-free
     if ~neumann % Dirichlet
         % Find boundary condition (surface velocity induced by point forces)
         truesolnSurf = stokeslet_velocity(F_vec, F_pos_vec, Y);
 
         % Construct DLP on-surface matrices
-        DM = L2StkMatVecKernel(pars, 'DLP', p);
+        DM = L2StkMatVecKernel(params, 'DLP', p);
 
         if usekernelD
             DMkernelD = kernelD([], SurfaceSph(Y));
         end
 
         if interior % Interior problem
-            CM = nu_completion(pars, p, ns);
-            K = -0.5*eye(3*ns*np) + DM + CM;
-        else % Exterior problem
+            CM = nu_completion(params, p, ns);
+            if MATRIXFREE_FLAG
+                K = @(V) -0.5*V + LOCAL_DLP_matrixfree_operator(params, p, V) + CM*V;
+            else
+                K = -0.5*eye(3*ns*np) + DM + CM;
+            end
+       else % Exterior problem
             % See Pozrikidis, Chapter 4.7.
             if useS
-                CM = L2StkMatVecKernel(pars, 'SLP', p);
+                CM = L2StkMatVecKernel(params, 'SLP', p);
             else
-                CM = RBM_completion(pars, Y, ns);
+                CM = RBM_completion(params, Y, ns);
             end
             K = 0.5*eye(3*ns*np) + DM + CM;
         end
@@ -240,16 +251,25 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             % See Pozrikidis, Chapter 4.2. The completion term should be
             % the projection onto the space representing the 6 rigid body
             % motion operators.
-            TM = L2StkMatVecKernel(pars, 'TLP', p, NrY);
-            CM = RBM_completion(pars, Y, ns);
-            K = 0.5*eye(3*ns*np) + TM + CM;
+            CM = RBM_completion(params, Y, ns);
+
+            if MATRIXFREE_FLAG
+                K = @(V) 0.5*V + LOCAL_TSL_matrixfree_operator(params, p, V) + CM*V;
+            else
+                TM = L2StkMatVecKernel(params, 'TLP', p, NrY);
+                K = 0.5*eye(3*ns*np) + TM + CM;
+            end
         else
             % See Hsiao and Wedland, Chapter 2.3. The completion term
             % should be the projection onto the space of surface normals
             % associated with every body.
-            TM = L2StkMatVecKernel(pars, 'TLP', p, NrY);
-            CM = nu_completion(pars, p, ns);
-            K = -0.5*eye(3*ns*np) + TM + CM;
+            CM = nu_completion(params, p, ns);
+            if MATRIXFREE_FLAG
+                K = @(V) -0.5*V + LOCAL_TSL_matrixfree_operator(params, p, V) + CM*V;
+            else
+                TM = L2StkMatVecKernel(params, 'TLP', p, NrY);
+                K = -0.5*eye(3*ns*np) + TM + CM;
+            end
         end
 
         if usekerneldS
@@ -266,7 +286,11 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     end
 
     %% Processing to setup linear equation
-    condK = cond(K);
+    if ~MATRIXFREE_FLAG
+        condK = cond(K);
+    else
+        condK = -1;
+    end
 
     if (neumann && usekerneldS) || (~neumann && usekernelD)
         kernel_truesolnSurf = reshape([truesolnSurf(:,1), truesolnSurf(:,2), truesolnSurf(:,3)].', [], 1);
@@ -287,7 +311,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     end
 
     %% Solve for density
-    sigma_vec = gmres(K, tsSurf, 1000, 1e-14);
+    sigma_vec = gmres(K, tsSurf, 100, 1e-6);
     % sigma_vec = K \ tsSurf;
 
     if neumann && usekerneldS
@@ -326,28 +350,28 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     end
 
     for i=1:ns
-        if ~pars.oblate(i)
-            Yi = prolate_spheroid_shape(p, pars.u0(i), pars.a(i), 'cart');
+        if ~params.oblate(i)
+            Yi = prolate_spheroid_shape(p, params.u0(i), params.a(i), 'cart');
         else
-            Yi = oblate_spheroid_shape(p, pars.u0(i), pars.a(i), 'cart');
+            Yi = oblate_spheroid_shape(p, params.u0(i), params.a(i), 'cart');
         end
-        Xcell{i} = Yi + interior_factor * target_distances(i).*get_norm_vecs(p, pars.u0(i), pars.oblate(i));
+        Xcell{i} = Yi + interior_factor * target_distances(i).*get_norm_vecs(p, params.u0(i), params.oblate(i));
     end
-    Xeval = pars.set_X_targets(Xcell); % Re-orient target points
+    Xeval = params.set_X_targets(Xcell); % Re-orient target points
 
     if plt
-        pars.plot(Xeval);
+        params.plot(Xeval);
         title('spheroids and target points')
     end
 
     %% Now, compute the solution.
     if ~neumann % Dirichlet problem
         if interior % Interior problem
-            [Dterm_x, Dterm_y, Dterm_z] = L2StkMatVec(pars, 'DLP', sigma_x, sigma_y, sigma_z, Xeval);
+            [Dterm_x, Dterm_y, Dterm_z] = L2StkMatVec(params, 'DLP', sigma_x, sigma_y, sigma_z, Xeval);
             soln = [Dterm_x, Dterm_y, Dterm_z];
 
             if usekernelD
-                [kD_Sterm_x, kD_Sterm_y, kD_Sterm_z] = L2StkMatVec(pars, 'DLP', kD_sigma_x, kD_sigma_y, kD_sigma_z, Xeval);
+                [kD_Sterm_x, kD_Sterm_y, kD_Sterm_z] = L2StkMatVec(params, 'DLP', kD_sigma_x, kD_sigma_y, kD_sigma_z, Xeval);
                 solnkD = [kD_Sterm_x, kD_Sterm_y, kD_Sterm_z];
                 truesoln = stokeslet_velocity(F_vec, F_pos_vec, Xeval);
                 fprintf('p=%d: kernelD eval comparison = %.6e\n',p, norm(truesoln - solnkD) ./ norm(truesoln));
@@ -356,19 +380,19 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
                 fprintf('p=%d: difference between densities: %.6e\n', p, sigma_rel_err);
             end
         else % Exterior problem
-            [Dterm_x, Dterm_y, Dterm_z] = L2StkMatVec(pars, 'DLP', sigma_x, sigma_y, sigma_z, Xeval);
+            [Dterm_x, Dterm_y, Dterm_z] = L2StkMatVec(params, 'DLP', sigma_x, sigma_y, sigma_z, Xeval);
             if useS
-                [Sterm_x, Sterm_y, Sterm_z] = L2StkMatVec(pars, 'SLP', sigma_x, sigma_y, sigma_z, Xeval);
+                [Sterm_x, Sterm_y, Sterm_z] = L2StkMatVec(params, 'SLP', sigma_x, sigma_y, sigma_z, Xeval);
                 soln = [Dterm_x + Sterm_x, Dterm_y + Sterm_y, Dterm_z + Sterm_z];
             else
                 soln = [Dterm_x, Dterm_y, Dterm_z];
             end
         end
     else % Neumann problem
-        [Sterm_x, Sterm_y, Sterm_z] = L2StkMatVec(pars, 'SLP', sigma_x, sigma_y, sigma_z, Xeval);
+        [Sterm_x, Sterm_y, Sterm_z] = L2StkMatVec(params, 'SLP', sigma_x, sigma_y, sigma_z, Xeval);
         soln = [Sterm_x, Sterm_y, Sterm_z];
 
-        [TSLterm_x, TSLterm_y, TSLterm_z] = L2StkMatVec(pars, 'TLP', sigma_x, sigma_y, sigma_z, Xeval, NrY);
+        [TSLterm_x, TSLterm_y, TSLterm_z] = L2StkMatVec(params, 'TLP', sigma_x, sigma_y, sigma_z, Xeval, NrY);
         fluxsoln = [TSLterm_x, TSLterm_y, TSLterm_z];
 
         truefluxsoln = stresslet_traction(F_vec, F_pos_vec, Xeval, NrY);
@@ -376,10 +400,10 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         fprintf('p=%d: flux comparison = %.6e\n',p, norm(truefluxsoln - fluxsoln) ./ norm(truefluxsoln)); 
 
         if usekerneldS
-            [kdS_Sterm_x, kdS_Sterm_y, kdS_Sterm_z] = L2StkMatVec(pars, 'SLP', kdS_sigma_x, kdS_sigma_y, kdS_sigma_z, Xeval);
+            [kdS_Sterm_x, kdS_Sterm_y, kdS_Sterm_z] = L2StkMatVec(params, 'SLP', kdS_sigma_x, kdS_sigma_y, kdS_sigma_z, Xeval);
             solnkdS = [kdS_Sterm_x, kdS_Sterm_y, kdS_Sterm_z];
     
-            [kdS_TSLterm_x, kdS_TSLterm_y, kdS_TSLterm_z] = L2StkMatVec(pars, 'TLP', kdS_sigma_x, kdS_sigma_y, kdS_sigma_z, Xeval, NrY);
+            [kdS_TSLterm_x, kdS_TSLterm_y, kdS_TSLterm_z] = L2StkMatVec(params, 'TLP', kdS_sigma_x, kdS_sigma_y, kdS_sigma_z, Xeval, NrY);
             fluxsolnkdS = [kdS_TSLterm_x, kdS_TSLterm_y, kdS_TSLterm_z];
 
             fprintf('p=%d: kerneldS flux comparison = %.6e\n',p, norm(truefluxsoln - fluxsolnkdS) ./ norm(truefluxsoln));
@@ -400,15 +424,15 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     %% Spurious RBM -- fails for rotated bodies
    fprintf('Examining whether the computed velocity differs by an RBM...\n');
    
-    v_RBM = project_onto_RBM(pars, soln - truesoln, Xeval);
+    v_RBM = project_onto_RBM(params, soln - truesoln, Xeval);
     if ~neumann && usekernelD
         % to fix for rotation, need to pass Xeval rotated back in canonical
         % frame?
-        v_RBM_kernel = project_onto_RBM(pars, solnkD - truesoln, Xeval);
+        v_RBM_kernel = project_onto_RBM(params, solnkD - truesoln, Xeval);
         rel_vel_error = norm(solnkD - truesoln - v_RBM_kernel);
         fprintf('p=%d: eval comparison for kernelD after RBM adjustment = %.6e\n',p, rel_vel_error);
     elseif neumann && usekerneldS
-        v_RBM_kernel = project_onto_RBM(pars, solnkdS - truesoln, Xeval);
+        v_RBM_kernel = project_onto_RBM(params, solnkdS - truesoln, Xeval);
         rel_vel_error = norm(solnkdS - truesoln - v_RBM_kernel);
         fprintf('p=%d: eval comparison for kerneldS after RBM adjustment = %.6e\n',p, rel_vel_error);
     end
@@ -429,24 +453,24 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
         distances = [10.^(0:-1:-5)];
         errs_vel = cell(1, numel(distances));
         errs_traction = cell(1, numel(distances));
-        aspect_ratio = abs(pars.u0/sqrt(pars.u0.^2 - 1));
+        aspect_ratio = abs(params.u0/sqrt(params.u0.^2 - 1));
 
         %% Computation
         for i=1:numel(distances)
             d = distances(i);
-            if pars.oblate
-                X_trg = oblate_spheroid_shape(p, pars.u0, pars.a);
+            if params.oblate
+                X_trg = oblate_spheroid_shape(p, params.u0, params.a);
             else
-                X_trg = prolate_spheroid_shape(p, pars.u0, pars.a);
+                X_trg = prolate_spheroid_shape(p, params.u0, params.a);
             end
 
-            nu_trg = get_norm_vecs(p, pars.u0, pars.oblate);
+            nu_trg = get_norm_vecs(p, params.u0, params.oblate);
             X_trg = X_trg + d*nu_trg;
 
-            [vx, vy, vz] = L2StkMatVec(pars, 'SLP', sigma_x, sigma_y, sigma_z, X_trg);
+            [vx, vy, vz] = L2StkMatVec(params, 'SLP', sigma_x, sigma_y, sigma_z, X_trg);
             true_velocity = stokeslet_velocity(F_vec, F_pos_vec, X_trg);
 
-            [tx, ty, tz] = L2StkMatVec(pars, 'TLP', sigma_x, sigma_y, sigma_z, X_trg, NrY);
+            [tx, ty, tz] = L2StkMatVec(params, 'TLP', sigma_x, sigma_y, sigma_z, X_trg, NrY);
             true_traction = stresslet_traction(F_vec, F_pos_vec, X_trg, NrY);
 
             errs_vel{i} = log10(abs([vx, vy, vz] - true_velocity) ./ abs(true_velocity));
@@ -572,7 +596,7 @@ function res_vec = apply_random_rotation(pos_vecs)
     res_vec = pos_vecs * Q;
 end
 
-function v_RBM = project_onto_RBM(pars, v, Xeval)
+function v_RBM = project_onto_RBM(params, v, Xeval)
     %{
         Project onto the 6-dimensional subspace formed by the rigid body
         motion vectors.
@@ -580,7 +604,7 @@ function v_RBM = project_onto_RBM(pars, v, Xeval)
     N = size(Xeval, 1);
     
     % Center of the spheroid (for rotation)
-    center = pars.centers(1,:);
+    center = params.centers(1,:);
     R = Xeval - center;
     
     % The columns represent the basis for the 6 RBMs.
@@ -611,7 +635,7 @@ function v_RBM = project_onto_RBM(pars, v, Xeval)
     v_RBM = reshape(v_RBM, N, 3);
 end
 
-function [total_force, total_torque] = calculate_force_and_torque(pars, traction, Y, p, ns)
+function [total_force, total_torque] = calculate_force_and_torque(params, traction, Y, p, ns)
     % Note that the input "traction" here is assumed to be np x 3 (for 1
     % spheroid only).
 
@@ -636,7 +660,7 @@ function [total_force, total_torque] = calculate_force_and_torque(pars, traction
         Wns = W.*wt;
         
         % Calculate net torque for this spheroid (relative to its center)
-        ci = pars.centers(i,:);
+        ci = params.centers(i,:);
         R = Yi - ci;
         net_torque_i = sum(cross(R, traction_i) .* Wns, 1);
         total_torque = total_torque + net_torque_i;
@@ -700,7 +724,7 @@ function res = rotate_data(vec, np, ns, R)
     end
 end
 
-function CM = nu_completion(pars, p, ns)
+function CM = nu_completion(params, p, ns)
     %{
         Returns the completion term that corresponds to the space spanned
         by the normals on every spheroid.
@@ -708,9 +732,40 @@ function CM = nu_completion(pars, p, ns)
     np = 2*p*(p+1);
     CM_cells = cell(1, ns);
     for i=1:ns
-        NrY_i = get_norm_vecs(p, pars.u0(i), pars.oblate(i));
+        NrY_i = get_norm_vecs(p, params.u0(i), params.oblate(i));
         NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
         CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
     end
     CM = blkdiag(CM_cells{:});
+end
+
+function res = LOCAL_TSL_matrixfree_operator(params, p, density_vec)
+    %{
+    Helper function to implement the matrix-free version of the TSL
+    operator.
+    %}
+    np = 2*p*(p+1);
+    sigma_x = density_vec(1:np,:);
+    sigma_y = density_vec(np+1:2*np,:);
+    sigma_z = density_vec(2*np+1:end,:);
+    X_self = params.get_X;
+    Nu_self = params.get_Norm;
+    [res_x, res_y, res_z] = L2StkMatVec(params, 'TLP', sigma_x, sigma_y, sigma_z, X_self, Nu_self);
+    res = [res_x; res_y; res_z];
+end
+
+function res = LOCAL_DLP_matrixfree_operator(params, p, density_vec)
+    %{
+    Helper function to implement the matrix-free version of the TSL
+    operator.
+
+    Note that density_vec is of the form [sigma_x;sigma_y;sigma_z].
+    %}
+    np = 2*p*(p+1);
+    sigma_x = density_vec(1:np,:);
+    sigma_y = density_vec(np+1:2*np,:);
+    sigma_z = density_vec(2*np+1:end,:);
+    X_self = params.get_X;
+    [res_x, res_y, res_z] = L2StkMatVec(params, 'DLP', sigma_x, sigma_y, sigma_z, X_self);
+    res = [res_x; res_y; res_z];
 end

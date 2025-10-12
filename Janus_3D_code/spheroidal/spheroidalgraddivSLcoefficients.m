@@ -1,11 +1,11 @@
 function coeffs = spheroidalgraddivSLcoefficients(u, v, phi, n, m, is_oblate)
         %{
-            Spectral coefficients for spheroidal graddiv SL. Not designed to be
-            human readable.
+        Spectral coefficients for spheroidal graddiv SL. Not designed to be
+        human readable.
 
-            Ynm should be a cell of length 3, whose entries contain the coefficients
-            associated with Ynm, and the entries correspond to the coefficient associated
-            with f, f', and f'' IN ORDER (that is, the first entry corresponds to f's coefficients)
+        Ynm should be a cell of length 3, whose entries contain the coefficients
+        associated with Ynm, and the entries correspond to the coefficient associated
+        with f, f', and f'' IN ORDER (that is, the first entry corresponds to f's coefficients)
         %}
         coeffs = struct();
     

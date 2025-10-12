@@ -1,31 +1,31 @@
 function [Kernels,Nullsp,Fparams,timings] = SpheroidalMS_UpdateOperators(Xt,Ct,Mt,nrmW,Kernels,Fparams,timings,i)
 %{
-    For each timestep of the mobility solver, we need to update the matvecs associated with
-    each layer potential (and also update the nullspace operator L_k).
+For each timestep of the mobility solver, we need to update the matvecs associated with
+each layer potential (and also update the nullspace operator L_k).
 
-    Inputs:
-    Xt : discretization points of bodies at timestep t=i
-    Ct : centers of bodies at timestep t=i
-    Mt : rotation matrices for each body at timestep t=i
-    nrmW : norm of rotational velocity for each body
-    Kernels : matvec matrices for operators
-    Fparams : parameter struct associated with mobility problem
-    timings : timings struct for mobility problem (for debugging)
-    i : current timestep in mobility problem (starts at i=0)
+Inputs:
+Xt : discretization points of bodies at timestep t=i
+Ct : centers of bodies at timestep t=i
+Mt : rotation matrices for each body at timestep t=i
+nrmW : norm of rotational velocity for each body
+Kernels : matvec matrices for operators
+Fparams : parameter struct associated with mobility problem
+timings : timings struct for mobility problem (for debugging)
+i : current timestep in mobility problem (starts at i=0)
 
-    Outputs:
-    Kernels : BIE operators (either matrix/matrix-free depending on params passed)
-        Kernels.TSSD0
-        Kernels.ITSSD0
-    Nullsp : nullspace completion terms
-    Fparams : simulation parameters; see spheroidal_mobility.m.
-    timings : timings struct for debugging purposes
+Outputs:
+Kernels : BIE operators (either matrix/matrix-free depending on params passed)
+    Kernels.TSSD0
+    Kernels.ITSSD0
+Nullsp : nullspace completion terms
+Fparams : simulation parameters; see spheroidal_mobility.m.
+timings : timings struct for debugging purposes
 
-    %%%%%%%%%%%%%%%%
-    CODE ANNOTATIONS
-    %%%%%%%%%%%%%%%%
-    Xrp -> X rotated points
-    prtype -> block diagonal or tensor train (so format of data)?
+%%%%%%%%%%%%%%%%
+CODE ANNOTATIONS
+%%%%%%%%%%%%%%%%
+Xrp -> X rotated points
+prtype -> block diagonal or tensor train (so format of data)?
 %}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

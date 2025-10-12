@@ -175,7 +175,6 @@ function [Stk_x,Stk_y,Stk_z]=L2StkMatVec(pars, pot, sigma_x, sigma_y, sigma_z, X
         elseif strcmp(pot, 'DLP')
             [vx, vy, vz] = L2StkDLP({X_trg_local_i}, params_i, sigma_x(:,:,i), sigma_y(:,:,i), sigma_z(:,:,i), 1);
         elseif strcmp(pot, 'TLP')
-            % NOTE: The L2StkTLP function needs to accept normals as an argument
             [vx, vy, vz] = L2StkTLP({X_trg_local_i}, {nu_trg_local_i}, params_i, sigma_x(:,:,i), sigma_y(:,:,i), sigma_z(:,:,i), 1, false);
         else
             error("Invalid potential given.");
