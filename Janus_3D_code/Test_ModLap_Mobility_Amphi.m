@@ -1,4 +1,3 @@
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs)
 %{
 Sedimentation test for Stokesian suspension of n^3 spherical rigid bodies 
 inside a spherical shell.
@@ -22,37 +21,67 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs)
+%% Default parameters
+if ~exist('p','var') || isempty(p)
+    p=8; 
+end
+if ~exist('lambda','var') || isempty(lambda)
+    lambda=0.1;
+end
+if ~exist('rd','var') || isempty(rd)
+    rd=1;
+end
+if ~exist('n','var') || isempty(n)
+    n=4;
+end
+if ~exist('Cdst','var') || isempty(Cdst)
+    Cdst=2.5; % NIC: change back to 4
+end
+if ~exist('ep','var') || isempty(ep)
+    ep=.3;
+end
+if ~exist('Nt','var') || isempty(Nt)
+    Nt=500;
+end
+if ~exist('dt','var') || isempty(dt)
+    dt=.1;
+end
+if ~exist('tdisc','var') || isempty(tdisc)
+    tdisc='euler';
+end
+if ~exist('saveLCPs','var') || isempty(saveLCPs)
+    saveLCPs=true; 
+end
 %% Files to save results
 mfilePath = mfilename('fullpath');
 if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;
 end
-[mfilePath,~,~] = fileparts(mfilePath);
-lcpDataDir = fullfile(mfilePath, 'data');
+[basedir,~,~] = fileparts(mfilePath);
+lcpDataDir = fullfile(basedir, 'data');
 mkdir(lcpDataDir)
 postFix = ['.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
 fname=fullfile(lcpDataDir, ['amphi' postFix]);
-lcpResDir = fullfile(mfilePath, 'LCPsolvers/data');
+lcpResDir = fullfile(basedir, 'LCPsolvers/data');
 mkdir(lcpResDir);
-LCP_file_path=fullfile(lcpResDir, ['amphiLCPs' postFix]);
+LCP_file_path=fullfile(lcpResDir, ['amphi' postFix]);
 %% boundary_label function
 boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
 %% Make sure all the code is on the matlabpath'
 %Remove addpaths if compiling in command line (mcc)
-addpath ./; 
-addpath ./support; 
-addpath(genpath(fullfile(mfilePath, 'LCPsolvers/solvers')))
-addpath ./FMMLIB/fmmlib3d-1.2/matlab/;
-addpath ./FMMLIB/stfmmlib3d-1.2/matlab/;
-
+addpath(basedir);
+addpath(fullfile(basedir,'support'));
+addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
+addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
+addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
 %% Particle centers (cubic lattice in this example)
-Cdst=mean(rd)*Cdst; %make center distance relative to radii
+Cdst=mean(rd)*Cdst; % make center distance relative to radii
 lx=0:Cdst:Cdst*(n-1);
 lx = lx - mean(lx); 
 [xx,yy,zz] = meshgrid(lx);
 C = [xx(:) yy(:) zz(:)]; 
 display(C);
-
 % randomize centers and/or radii
 try %#ok<TRYNC>
     rng('default'); 
@@ -120,5 +149,5 @@ Fparams = struct('parbd',parbd,'parslv',parslv,'lcpOpts',lcpOpts,...
     % 'lofi', lofi);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
-RBS_mobility(fname,Fparams,[]);
+RBS_mobility(fname,Fparams,true);
 end

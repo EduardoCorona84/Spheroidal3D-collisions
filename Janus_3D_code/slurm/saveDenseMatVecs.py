@@ -1,7 +1,13 @@
 import subprocess
 import os 
 import glob
-def _script(prefix, min, max, alpine=False):
+import numpy as np
+def _script(prefix, min, max, Nt, ps, tols, alpine=False):
+    ps =  [f'{p}' for p in ps]
+    psStr = ' '.join(ps)
+    tols = [f'{nr}' for nr in tols]
+    tolsStr = ' '.join(tols)
+    numP = len(p)
     header = f"""#!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks=12                       
@@ -16,8 +22,8 @@ def _script(prefix, min, max, alpine=False):
         header += """#SBATCH --account=blanca-becker
 #SBATCH --qos=preemptable"""
     return header + f"""
-#SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.%j.out-%N
-#SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.%j.err-%N
+#SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.out-%N
+#SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.err-%N
 
 
 ## Slurm crap
@@ -26,10 +32,20 @@ module load matlab
 module load gcc
 export LD_PRELOAD="/curc/sw/install/gcc/14.2.0/lib64/libgfortran.so /curc/sw/install/gcc/14.2.0/lib64/libstdc++.so $HOME/lib/libfmm3d.so"
 
+## 
+ps=({psStr})
+tols=({tolsStr})
 ## Define list of parameters
-## specify ix's from slurm task id
-_ix=${{SLURM_ARRAY_TASK_ID}}
-ix=$(expr $_ix + 1)
+# specify ix's from slurm task id
+i=${{SLURM_ARRAY_TASK_ID}}
+mc0ix=$(expr $i % {Nt})
+ii=$(expr $i / {Nt})
+pIx=$(expr $ii % {numP})
+tolIx=$(expr $ii / {numP})
+# Set the final params
+mc=$(expr $mc0ix + 1)
+p=${{subSampleRates[$pIx]}}
+tol=${{noiseRatios[$tolIx]}}
 ## Begin script
 echo "=="
 echo "||"
@@ -41,7 +57,7 @@ srcFile="/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/dat
 dstDir="/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}"
 cd /projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/test
 ## Call matlab
-matlab -nosplash -nodesktop -noopengl -r "clear;clc; saveDenseMat('${{srcFile}}', '${{dstDir}}', ${{ix}}); quit;"
+matlab -nosplash -nodesktop -noopengl -r "clear;clc; saveDenseMat('${{srcFile}}', '${{dstDir}}', ${{ix}}, ${{p}}, ${{tol}}); quit;"
 ## Finish scripts
 echo "=="
 echo "||"
@@ -51,34 +67,32 @@ echo "=="
 """
 
 for prefix in [
-    'amphiLCPs.n_2.p_8.cDist_2.3', 
-    'amphiLCPs.n_3.p_8.cDist_2.3', 
-    # 'amphiLCPs.n_4.p_8.cDist_2.3', 
-    # 'amphiLCPs.n_5.p_8.cDist_2.3'
+    'amphi.n_2.p_8.cDist_2.3', 
+    'amphi.n_3.p_8.cDist_2.3', 
+    'amphi.n_4.p_8.cDist_2.3', 
+    # 'amphi.n_5.p_8.cDist_2.3'
 ]:
     print(f'{prefix}')
     # Nt = 1
     Nt = 499
     print(f' Nt={Nt}')
     _min = None
-    _max = -1 
+    _max = Nt 
     cnt = 0
-    while _max < Nt:
-        _min = _max + 1
-        _max = min(_max + 1000, Nt)
-        dataDir = f"/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}"
-        # Remove old slurm files
-        for old_err in glob.glob(os.path.join(dataDir, "*.err*")):
-            os.remove(old_err)
-        for old_out in glob.glob(os.path.join(dataDir, "*.out*")):
-            os.remove(old_out)
-        for old_sh in glob.glob(os.path.join(dataDir, "*.sh")):
-            os.remove(old_sh)
-        os.makedirs(dataDir, exist_ok=True)
-        slurmFile = os.path.join(dataDir, f"slurm.{cnt}.sh")
-        script = _script(prefix, _min, _max)
-        with open(slurmFile,"w") as wf:
-            wf.write(script)
-        print(f'  sbatch {slurmFile}')
-        subprocess.Popen(['sbatch', slurmFile])
-        cnt += 1
+    ps = np.arange(start=8, stop=2, step=-1)
+    gmresTols=10 ** -np.arange(start=8, stop=4, step=-1)
+    dataDir = f"/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}"
+    # Remove old slurm files
+    for old_err in glob.glob(os.path.join(dataDir, "*.err*")):
+        os.remove(old_err)
+    for old_out in glob.glob(os.path.join(dataDir, "*.out*")):
+        os.remove(old_out)
+    for old_sh in glob.glob(os.path.join(dataDir, "*.sh")):
+        os.remove(old_sh)
+    os.makedirs(dataDir, exist_ok=True)
+    slurmFile = os.path.join(dataDir, f"slurm.highLevel.sh")
+    script = _script(prefix, _min, _max)
+    with open(slurmFile,"w") as wf:
+        wf.write(script)
+    print(f'  sbatch {slurmFile}')
+    subprocess.Popen(['sbatch', slurmFile])

@@ -7,13 +7,13 @@
 #SBATCH --account=blanca-becker
 #SBATCH --qos=blanca-becker
 #SBATCH --partition=blanca-becker
-#SBATCH --job-name=amphi.n_5.p_8.cDist_2.3%j
-#SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/results/amphi.n_5.p_8.cDist_2.3.%j.out
-#SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/results/amphi.n_5.p_8.cDist_2.3.%j.err 
+#SBATCH --job-name=amphi.n_5.p_8.cDist_2.5
+#SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/amphi.n_5.p_8.cDist_2.5.out
+#SBATCH --error=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/amphi.n_5.p_8.cDist_2.5.err 
 
 module purge
 
-module load matlab
+module load matlab gcc
 cd /projects/niru8088/Spheroidal3D-collisions/Janus_3D_code
 # These parameters are the main ones that change the scenario
 n=5; # size of the lattice

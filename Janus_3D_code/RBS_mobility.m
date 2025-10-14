@@ -44,258 +44,234 @@ Depending on type, extra parameters might be required.
 The default 'FTfun' (force and torque prescription) requires functions 
 Ffun,Tfun = @(t,C) with output of size 3 x n_b. 
 
-init    - (string) optional filename to resume a simulation from last
+init    - (optional bool) Default false. Attempt to load intermediate results from previous 
+        run will use the same fname to load the results
 recorded timestep
 %}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-global timings;
+global timings DATA_DIR;
+if ~exist('init','var') || isempty(init)
+    init = false;
+end
+
+DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), [num2str(Fparams.parbd.n3) '_' num2str(Fparams.parbd.p)]);
+if ~exist(DATA_DIR, 'dir')
+    mkdir(DATA_DIR)
+end
 diaryFile = [fname '.diary.log'];
 diary(diaryFile);
 %(0.1) (optional) Load data in init, initialize output arrays
 Nt = Fparams.Nt; n3=Fparams.parbd.n3; 
-tt = zeros(Nt+1,1); 
-sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; 
-Mt = cell(Nt+1,n3);
-dt0 = Fparams.dt; 
-
-if isempty(init)
-    initfl = false; 
-    
-    % Evolution
-    t=0; tt(1)=0;  
-    Fparams.parslv.prev=[]; %initialize preconditioner params
- 
-    for k=1:n3
-    Mt{1,k}=eye(3);   
-    end
-    
-    Mt0 = Mt(1,:);
-else
-   initfl = true;  
-    
-   % Load previous file 
-   load(init);
-   
-   lid = sum(tt>0);
-   % Recover initial data at time t0 = tt(lid): 
-   T0 = tt(lid); Xt0 = Xt{lid}; Ct0 = Ct{lid}; Mt0 = Mt(lid,:);
-   VW0 = VW{lid}; 
-   
-   Fparams.parslv.prec=[]; 
-   Fparams.parslv.prev=[]; 
-  % Fparams.parslv.prtype=prtype;    
-   %Re-initialize arrays (after load)
-   tt = zeros(Nt+1,1); 
-   sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; Xt=U; Ct=Xt; FT=mu;
-   Mt = cell(Nt+1,n3);
-    
-    t=T0; tt(1)=T0; 
-    Xt{1}=Xt0; Ct{1}=Ct0; Mt(1,:) = Mt0; 
-end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %(0.2) Initialize timings and Fparams struct before simulation
-
-zN = zeros(Nt,1); 
-timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
-    'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
-    'advance',zN,...
-    'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
-
-tic;
+tic
 Fparams = RBS_Initialize_params(Fparams);
+dt0 = Fparams.dt; timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc;
+if ~init
+    lid = 1;
+    % Initial conditions
+    tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
+    Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; Mt = cell(Nt+1,n3); Energy=cell(1,Nt+1);
+    t=tt(0); nrmW = zeros(n3,1);
+    Fparams.parslv.prev=[]; %initialize preconditioner params
+    zN = zeros(Nt,1);
+    timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
+        'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
+        'advance',zN,...
+        'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
+    for k=1:n3
+        Mt{1,k}=eye(3);
+    end
+else
+    % Load previous file 
+    saveFile = [fname '.mat'];
+    load(saveFile, 'tt', 'Ct', 'Xt', 'VW', 'Mt', 'U', 'mu', ...
+        'psi_Lap', 'sigma', 'Energy', 'FT');
+    % Get the last entry that was saved
+    lid = sum(tt>0);
+    t = tt(lid);
+    % NIC: I think this initialization is in error
+    nrmW = arrayfun(@(k) norm(VW{lid}(4:6,k)), 1:n3);
+    % nrmW = zeros(n3,1);
+    % for k=1:n3
+    %    nrmW(k) = norm(VW0(4:6,k));
+    %     xind = (1:np)+np*(k-1);
+    %     Xrp(xind,:) = Xrp(xind,:)*Mt{k}';
+    % end
+    Fparams.parbd.Xrp = Xt{lid}; Fparams.parbd.C = Ct{lid}; 
+    % Set the preconditioners to empty because we do not save this well
+    Fparams.parslv.prec=[]; 
+    Fparams.parslv.prev=[]; 
+    % Load old timings file
+    timingsFile = [fname '.profile.mat'];
+    load(timingsFile,'timings');
+end
 timings.setup_surf = toc;
-
-timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc; 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %(0.3) Initialize Kernels (MatVecs) and Nullspace info
 tic; 
-Xrp = Fparams.parbd.Xrp; C0 = Fparams.parbd.C; 
-np = Fparams.parbd.np; nrmW = zeros(n3,1);  
-if initfl
-for k=1:n3
-   nrmW(k) = norm(VW0(4:6,k)); 
-   xind = (1:np)+np*(k-1);       
-   Xrp(xind,:) = Xrp(xind,:)*Mt0{k}';
-end 
-end
-
-Kernels=[]; 
-[Kernels,Nullsp,Fparams,timings] = RBS_Update_Operators(Xrp,C0,Mt0,nrmW,Kernels,Fparams,timings,0); 
-
+[Kernels,Nullsp,Fparams,timings] = RBS_Update_Operators(Xt{lid},Ct{lid},Mt(lid,:),nrmW,[],Fparams,timings,0); 
 timings.setup_kernel=toc;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % (0.4) Initialize collision info  
-[colevent,collist,~,~] = LOCAL_check_collision_sph(C0,Fparams);
-
-if ~strcmp(Fparams.parbd.Shape,'') 
+[colevent,collist,~,~] = LOCAL_check_collision_sph(Ct{lid},Fparams);
+% Model of the surface of the sphere or other geometry. 
+if ~strcmp(Fparams.parbd.Shape,'') % unit sphere
    Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); 
    % Model surface pts
-   X2 = repmat(reshape(Sc2.cart.to_array,[],3),n3,1);    
-   np2 = 2*(2*p)*(2*p+1);    
+   X2 = repmat(reshape(Sc2.cart.to_array,[],3),n3,1);       
 else  
    X2=[]; 
 end
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Rotation matrix (Rodrigues rotation formula)
-MRot = @(wh,t) RotationMat(wh,t);
 
-Xt{1}=Xrp; Ct{1}=Fparams.parbd.C;
-for i=1:Nt
+for i=lid:Nt
     Fparams.ixTime = i;
-    if i == Nt 
-        Fparams.endFlag = true; 
-    else 
-        Fparams.endFlag = false; 
+    Fparams.endFlag = i == Nt;
+    dt=dt0;
+    if strcmp(timedisc,'euler')
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (1) Explicit euler step \n')
+        [Xt{i+1},Mt(i+1,:),Ct{i+1},U{i},FT{i},sigma{i},mu{i},VW{i},Kernels,Nullsp,...
+            Fparams,colevent,collist,dt,psi_Lap{i},Energy(i)] = ...
+            LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t,dt,i);
+
+    elseif strcmp(timedisc,'trapz')
+        % (1) Predictor step:
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (1) Trapezoidal, predictor step \n')
+        [Xt1,Mt1,Ct1,U1,FT1,sigma1,mu1,VW1,Kernels,Nullsp,...
+            Fparams,colevent,collist,dt] = ...
+            LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t,dt,i);
+
+        % (2) Corrector step:
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (2) Trapezoidal, corrector step \n')
+        % Get incoming force distribution:
+        tic;
+        [FT2,sigma2,VW2,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t+dt,dt,Kernels,Nullsp,Xt1,Sc);
+        fprintf('\n Time to compute incoming force: %e',toc);
+        timings.incoming(i) = timings.incoming(i)+toc;
+        fprintf('\n Fluid Solve at time %.2f',t)
+        tic;
+        [sigma2,mu2,U2,VW2] = LOCAL_compute_velocities(sigma2,VW2,Ct1,Kernels,Nullsp,Fparams,colevent,collist,i,dt);
+        timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i);
+        fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(i));
+
+        % Correct VW{i} as average of VW0 and VW1 (and associated quantities)
+        VW{i}    = 0.5*(VW1+VW2);
+        sigma{i} = 0.5*(sigma1+sigma2);
+        mu{i}    = 0.5*(mu1+mu2);
+        U{i}     = 0.5*(U1+U2);
+        FT{i}    = 0.5*(FT1+FT2);
+
+        [Xt{i+1},Mt(i+1,:),Ct{i+1},Kernels,Nullsp,Fparams,colevent,collist,dt] = ...
+            LOCAL_advance_step(VW{i},mu{i},sigma{i},Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt,i);
+
+    elseif strcmp(timedisc,'rk4')
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Explicit Runge-Kutta 4th order method
+        % (1) First step, f1 = f(t0,u0)
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (1) Runge-Kutta 4th order, t=t0, x=x(t0) \n')
+        dt41 = 0.5*dt;
+        t41 = t;
+
+        [Xt41,Mt41,Ct41,U41,FT41,sigma41,mu41,VW41,Ker41,Null41,...
+            Fpar41,cev41,clst41,dt41] = ...
+            LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t41,dt41,i);
+
+        % (2) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (2) Runge-Kutta 4th order, t_{1/2}=t0+(dt/2), x=x(t_0)+(dt/2)*v1 \n')
+        t42 = t+dt41;
+        dt42 = 0.5*dt;
+
+        % Get incoming force distribution:
+        tic;
+        [FT42,sigma42,VW42,psi_Lap, Energy] = LOCAL_get_incoming_Fc(Fpar41,t42,dt42,Ker41,Null41,Xt41,Sc);
+        fprintf('\n Time to compute incoming force: %e',toc);
+        timings.incoming(i) = timings.incoming(i)+toc;
+        fprintf('\n Fluid Solve at time %.2f',t)
+        tic;
+        [sigma42,mu42,U42,VW42] = LOCAL_compute_velocities(sigma42,VW42,Ct41,Ker41,Null41,Fpar41,cev41,clst41,i,dt42);
+        timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i);
+        fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(i));
+
+        % Advance Xt42 ~ X(t) + (dt/2)*V42
+        [Xt42,Mt42,Ct42,Ker42,Null42,Fpar42,cev42,clst42,dt42] = ...
+            LOCAL_advance_step(VW42,mu42,sigma42,Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt42,i);
+
+        % (3) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (3) Runge-Kutta 4th order, t_{1/2}=t0+0.5*dt, x=x(t_{1/2}) \n')
+        t43 = t+dt42;
+        dt43 = dt;
+
+        % Get incoming force distribution:
+        tic;
+        [FT43,sigma43,VW43] = LOCAL_get_incoming_Fc(Fpar42,t43,dt43,Ker42,Null42,Xt42,Sc);
+        fprintf('\n Time to compute incoming force: %e',toc);
+        timings.incoming(i) = timings.incoming(i)+toc;
+        fprintf('\n Fluid Solve at time %.2f',t)
+        tic;
+        [sigma43,mu43,U43,VW43] = LOCAL_compute_velocities(sigma43,VW43,Ct42,Ker42,Null42,Fpar42,cev42,clst42,i,dt43);
+        timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i);
+        fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(i));
+
+        % Advance Xt43 ~ X(t) + (dt)*V43
+        [Xt43,Mt43,Ct43,Ker43,Null43,Fpar43,cev43,clst43,dt43] = ...
+            LOCAL_advance_step(VW43,mu43,sigma43,Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt43,i);
+
+        % (4) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        fprintf('\n ---------------------------------------------------------- \n')
+        fprintf('\n (4) Runge-Kutta 4th order, t_{1}=t0+dt, x=x(t_{1}) \n')
+        t44 = t+dt43;
+        dt44 = dt;
+        % Get incoming force distribution:
+        tic;
+        [FT44,sigma44,VW44] = LOCAL_get_incoming_Fc(Fpar43,t44,dt44,Ker43,Null43,Xt43,Sc);
+        timings.incoming(i) = timings.incoming(i)+toc;
+        fprintf('\n Fluid Solve at time %.2f \n',t)
+        [sigma44,mu44,U44,VW44] = LOCAL_compute_velocities(sigma44,VW44,Ct43,Ker43,Null43,Fpar43,cev43,clst43,i,dt44);
+
+        timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i);
+        fprintf('\n Time to compute velocities / fluid solve %.2f \n',timings.velocities.total(i));
+
+        % Average velocities and related quantities using RK4 weights
+        VW{i}    = (1/6)*(VW41+2*VW42+2*VW43+VW44);
+        sigma{i} = (1/6)*(sigma41+2*sigma42+2*sigma43+sigma44);
+        mu{i}    = (1/6)*(mu41+2*mu42+2*mu43+mu44);
+        U{i}     = (1/6)*(U41+2*U42+2*U43+U44);
+        FT{i}    = (1/6)*(FT41+2*FT42+2*FT43+FT44);
+
+        % Advance Xtp ~ X(t) + (dt/6)*(V41 + 2*V42 + 2*V43 + V44)
+        [Xt{i+1},Mt(i+1,:),Ct{i+1},Kernels,Nullsp,Fparams,colevent,collist,dt] = ...
+            LOCAL_advance_step(VW{i},mu{i},sigma{i},Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt,i);
+
     end
-dt=dt0; 
 
-if strcmp(timedisc,'euler')
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (1) Explicit euler step \n')
-[Xt{i+1},Mt(i+1,:),Ct{i+1},U{i},FT{i},sigma{i},mu{i},VW{i},Kernels,Nullsp,...
-    Fparams,colevent,collist,dt,psi_Lap{i},Energy(i)] = ...
-    LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t,dt,i);
+    timings.total(i) = timings.velocities.total(i) + timings.operator.total(i) + ...
+        timings.advance(i) + timings.incoming(i);
+    fprintf('\n Total computing time for timestep %d : %e ',i,timings.total(i))
+    fprintf('\n -------------------------------------------------------------\n');
 
-elseif strcmp(timedisc,'trapz')
-% (1) Predictor step: 
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (1) Trapezoidal, predictor step \n')
-[Xt1,Mt1,Ct1,U1,FT1,sigma1,mu1,VW1,Kernels,Nullsp,...
-    Fparams,colevent,collist,dt] = ...
-    LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t,dt,i);
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    t = t+dt;
+    tt(i+1)=t;
+    fprintf('\n dt: %2.2f ',dt)
+    if mod(i,2)==1
+        saveFile = [fname '.mat'];
+        save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
+    else
+        saveFile = [fname '.2.mat'];
+        save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
+    end
 
-% (2) Corrector step: 
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (2) Trapezoidal, corrector step \n')
-% Get incoming force distribution: 
-tic; 
-[FT2,sigma2,VW2,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t+dt,dt,Kernels,Nullsp,Xt1,Sc); 
-fprintf('\n Time to compute incoming force: %e',toc);
-timings.incoming(i) = timings.incoming(i)+toc;  
-fprintf('\n Fluid Solve at time %.2f',t)
-tic; 
-[sigma2,mu2,U2,VW2] = LOCAL_compute_velocities(sigma2,VW2,Ct1,Kernels,Nullsp,Fparams,colevent,collist,i,dt); 
-timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i); 
-fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(i)); 
-
-% Correct VW{i} as average of VW0 and VW1 (and associated quantities)
-VW{i}    = 0.5*(VW1+VW2); 
-sigma{i} = 0.5*(sigma1+sigma2); 
-mu{i}    = 0.5*(mu1+mu2);
-U{i}     = 0.5*(U1+U2); 
-FT{i}    = 0.5*(FT1+FT2); 
-
-[Xt{i+1},Mt(i+1,:),Ct{i+1},Kernels,Nullsp,Fparams,colevent,collist,dt] = ...
-    LOCAL_advance_step(VW{i},mu{i},sigma{i},Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt,i);
-
-elseif strcmp(timedisc,'rk4')
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    
-% Explicit Runge-Kutta 4th order method
-% (1) First step, f1 = f(t0,u0)
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (1) Runge-Kutta 4th order, t=t0, x=x(t0) \n')
-dt41 = 0.5*dt; 
-t41 = t;
-
-[Xt41,Mt41,Ct41,U41,FT41,sigma41,mu41,VW41,Ker41,Null41,...
-    Fpar41,cev41,clst41,dt41] = ...
-    LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t41,dt41,i);
-
-% (2) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (2) Runge-Kutta 4th order, t_{1/2}=t0+(dt/2), x=x(t_0)+(dt/2)*v1 \n')
-t42 = t+dt41; 
-dt42 = 0.5*dt; 
-
-% Get incoming force distribution: 
-tic; 
-[FT42,sigma42,VW42,psi_Lap, Energy] = LOCAL_get_incoming_Fc(Fpar41,t42,dt42,Ker41,Null41,Xt41,Sc); 
-fprintf('\n Time to compute incoming force: %e',toc);
-timings.incoming(i) = timings.incoming(i)+toc;  
-fprintf('\n Fluid Solve at time %.2f',t)
-tic; 
-[sigma42,mu42,U42,VW42] = LOCAL_compute_velocities(sigma42,VW42,Ct41,Ker41,Null41,Fpar41,cev41,clst41,i,dt42); 
-timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i); 
-fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(i));
-
-% Advance Xt42 ~ X(t) + (dt/2)*V42 
-[Xt42,Mt42,Ct42,Ker42,Null42,Fpar42,cev42,clst42,dt42] = ...
-    LOCAL_advance_step(VW42,mu42,sigma42,Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt42,i);
-
-% (3) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (3) Runge-Kutta 4th order, t_{1/2}=t0+0.5*dt, x=x(t_{1/2}) \n')
-t43 = t+dt42; 
-dt43 = dt; 
-
-% Get incoming force distribution: 
-tic; 
-[FT43,sigma43,VW43] = LOCAL_get_incoming_Fc(Fpar42,t43,dt43,Ker42,Null42,Xt42,Sc); 
-fprintf('\n Time to compute incoming force: %e',toc);
-timings.incoming(i) = timings.incoming(i)+toc;  
-fprintf('\n Fluid Solve at time %.2f',t)
-tic; 
-[sigma43,mu43,U43,VW43] = LOCAL_compute_velocities(sigma43,VW43,Ct42,Ker42,Null42,Fpar42,cev42,clst42,i,dt43); 
-timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i); 
-fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(i));
-
-% Advance Xt43 ~ X(t) + (dt)*V43 
-[Xt43,Mt43,Ct43,Ker43,Null43,Fpar43,cev43,clst43,dt43] = ...
-    LOCAL_advance_step(VW43,mu43,sigma43,Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt43,i);
-
-% (4) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-fprintf('\n ---------------------------------------------------------- \n')
-fprintf('\n (4) Runge-Kutta 4th order, t_{1}=t0+dt, x=x(t_{1}) \n')
-t44 = t+dt43; 
-dt44 = dt; 
-% Get incoming force distribution: 
-tic; 
-[FT44,sigma44,VW44] = LOCAL_get_incoming_Fc(Fpar43,t44,dt44,Ker43,Null43,Xt43,Sc); 
-timings.incoming(i) = timings.incoming(i)+toc;
-fprintf('\n Fluid Solve at time %.2f \n',t)
-[sigma44,mu44,U44,VW44] = LOCAL_compute_velocities(sigma44,VW44,Ct43,Ker43,Null43,Fpar43,cev43,clst43,i,dt44); 
-
-timings.velocities.total(i) = timings.velocities.total(i) + timings.velocities.solve(i) + timings.velocities.apply(i) + timings.velocities.vw(i) + timings.velocities.col(i); 
-fprintf('\n Time to compute velocities / fluid solve %.2f \n',timings.velocities.total(i));
-
-% Average velocities and related quantities using RK4 weights
-VW{i}    = (1/6)*(VW41+2*VW42+2*VW43+VW44); 
-sigma{i} = (1/6)*(sigma41+2*sigma42+2*sigma43+sigma44); 
-mu{i}    = (1/6)*(mu41+2*mu42+2*mu43+mu44); 
-U{i}     = (1/6)*(U41+2*U42+2*U43+U44); 
-FT{i}    = (1/6)*(FT41+2*FT42+2*FT43+FT44);
-
-% Advance Xtp ~ X(t) + (dt/6)*(V41 + 2*V42 + 2*V43 + V44) 
-[Xt{i+1},Mt(i+1,:),Ct{i+1},Kernels,Nullsp,Fparams,colevent,collist,dt] = ...
-    LOCAL_advance_step(VW{i},mu{i},sigma{i},Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt,i);
+    saveFile = [fname '.profile.mat'];
+    save(saveFile,'timings');
+    diary off;
 
 end
-
-timings.total(i) = timings.velocities.total(i) + timings.operator.total(i) + ...
-    timings.advance(i) + timings.incoming(i); 
-fprintf('\n Total computing time for timestep %d : %e ',i,timings.total(i))
-fprintf('\n -------------------------------------------------------------\n'); 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-t = t+dt;
-tt(i+1)=t;
-fprintf('\n dt: %2.2f ',dt)
-if mod(i,2)==1    
-    saveFile = [fname '.mat'];
-    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
-else    
-    saveFile = [fname '.2.mat'];
-    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                   
-end  
-
-saveFile = [fname '.profile.mat'];
-save(saveFile,'timings'); 
-diary off;
-
-end
-
-
 end
 
 function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist,t,dt,it)
@@ -975,7 +951,7 @@ lcpOpts = Fparams.lcpOpts;
 % Give the solvers access to the mat vec alone
 lcpOpts.A = A; 
 lcpOpts.b = bvec; 
-fg = @(x, Ax, Aq, eta) quadraticLoss(x, A, bvec, Ax, Aq, eta);
+fg = @(x, Ax) quadraticLoss(x, A, bvec, Ax);
 switch lower(lcpOpts.solver)  
     case 'bbpgd'
         [lam, info] = projectedGradientDescent(fg, x0, lcpOpts);    
@@ -1014,7 +990,11 @@ if saveLCPs
             ), [1, Fparams.Nt] ...
         );
     end 
-    saveFile = [LCP_file_path '.prt_' num2str(save_iter) '.mat'];
+    if save_iter > 0
+        saveFile = [LCP_file_path '.prt_' num2str(save_iter) '.mat'];
+    else 
+        saveFile = [LCP_file_path '.mat'];
+    end
     disp(['Saving LCP data to ' saveFile])
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');
