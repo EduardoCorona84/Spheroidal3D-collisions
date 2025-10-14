@@ -35,7 +35,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
 
     %% Flags for debugging
     mix_obl = false; % Decide whether to mix oblates (or make it an oblate for the case of 1 spheroid)
-    useS = true; % For exterior Dirichlet
+    useS = false; % For exterior Dirichlet
     usekerneldS = false; % For Neumann problems
     usekernelD = false; % For interior Dirichlet problems
 
@@ -153,7 +153,7 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
     end
 
     %% Placement of point forces
-    num_pf = 3; % Number of point forces per spheroid
+    num_pf = 2; % Number of point forces per spheroid
     c = params.centers;
     F_pos_vec = reshape(repmat(reshape(c',3,1,[]),1,num_pf),3,[],1)';
 
@@ -254,7 +254,8 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             CM = RBM_completion(params, Y, ns);
 
             if MATRIXFREE_FLAG
-                K = @(V) 0.5*V + LOCAL_TSL_matrixfree_operator(params, p, V) + CM*V;
+                fprintf("Matrix-free solve being used. This may take a while...\n");
+                K = @(V) 0.5*V + LOCAL_TSL_matrixfree_operator_highp(params, p, V) + CM*V;
             else
                 TM = L2StkMatVecKernel(params, 'TLP', p, NrY);
                 K = 0.5*eye(3*ns*np) + TM + CM;
@@ -265,7 +266,8 @@ function [soln, fluxsoln, truesoln, truefluxsoln, sigma_vec, condK] = stokes_bie
             % associated with every body.
             CM = nu_completion(params, p, ns);
             if MATRIXFREE_FLAG
-                K = @(V) -0.5*V + LOCAL_TSL_matrixfree_operator(params, p, V) + CM*V;
+                fprintf("Matrix-free solve being used. This may take a while...\n");
+                K = @(V) -0.5*V + LOCAL_TSL_matrixfree_operator_highp(params, p, V) + CM*V;
             else
                 TM = L2StkMatVecKernel(params, 'TLP', p, NrY);
                 K = -0.5*eye(3*ns*np) + TM + CM;
@@ -732,9 +734,17 @@ function CM = nu_completion(params, p, ns)
     np = 2*p*(p+1);
     CM_cells = cell(1, ns);
     for i=1:ns
+        [~, X_src] = params.get_X(i);
+        Sns = SurfaceSph(X_src);
+        [~, gwt_gl] = g_grid(p + 1);
+        wt_gl = pi/p * repmat(gwt_gl', 2*p, 1) ./ sin(gl_grid(p));
+        wt_gl = wt_gl(:);
+        W_src = Sns.geoProp.W .* wt_gl;
+        W = kron(eye(3), diag(W_src));
+
         NrY_i = get_norm_vecs(p, params.u0(i), params.oblate(i));
-        NrY_i_stacked = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
-        CM_cells{i} = 1/(norm(NrY_i_stacked)^2) * (NrY_i_stacked*NrY_i_stacked.');
+        v = [NrY_i(:,1) ; NrY_i(:,2) ; NrY_i(:,3)];
+        CM_cells{i} = 1/(v.' * W * v) * (v * (v.' * W));
     end
     CM = blkdiag(CM_cells{:});
 end
@@ -751,6 +761,21 @@ function res = LOCAL_TSL_matrixfree_operator(params, p, density_vec)
     X_self = params.get_X;
     Nu_self = params.get_Norm;
     [res_x, res_y, res_z] = L2StkMatVec(params, 'TLP', sigma_x, sigma_y, sigma_z, X_self, Nu_self);
+    res = [res_x; res_y; res_z];
+end
+
+function res = LOCAL_TSL_matrixfree_operator_highp(params, p, density_vec)
+    np = 2*p*(p+1);
+    sigma_x = density_vec(1:np,:);
+    sigma_y = density_vec(np+1:2*np,:);
+    sigma_z = density_vec(2*np+1:end,:);
+    X_self = params.get_X;
+    Nu_self = params.get_Norm;
+    fine_p = p+4;
+    [res_x, res_y, res_z] = L2StkMatVec(params, 'TLP', interpsh(sigma_x, fine_p), interpsh(sigma_y, fine_p), interpsh(sigma_z, fine_p), X_self, Nu_self);
+    res_x = interpsh(res_x, p);
+    res_y = interpsh(res_y, p);
+    res_z = interpsh(res_z, p);
     res = [res_x; res_y; res_z];
 end
 
