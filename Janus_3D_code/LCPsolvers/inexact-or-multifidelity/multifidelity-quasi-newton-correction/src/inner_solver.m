@@ -35,8 +35,18 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
 
                     case 'dfp'
                         S = opts.outer.correction_opts.S(:, 1:opts.outer.correction_opts.curr_mem);
+                        %Perform Column Selection to ensure numerical stability
+                        [Q, R, idx] = qr(S, 0);
+                        %determine columns to keep uisng a tolerance and the diagonal of R
+                        tol = 1e-6;
+                        diagR = abs(diag(R));
+                        keep_indices = find(diagR >= tol*diagR(1));
+                        final_indices = idx(keep_indices);
+                        S = S(:, final_indices);
                         Y = opts.outer.correction_opts.Y(:, 1:opts.outer.correction_opts.curr_mem);
+                        Y = Y(:, final_indices);
                         utility_matrix = opts.outer.correction_opts.utility_matrix(:, 1:opts.outer.correction_opts.curr_mem);
+                        utility_matrix = utility_matrix(:, final_indices);
 
                         %using multisecant update
                         grad_inner = @(x) opts.inner.solver_opts.A(x) + (Y - utility_matrix)*((Y'*S)\(Y'*x)) + Y*((Y'*S)\((Y - utility_matrix)'*x)) - Y*((Y'*S)\((Y - utility_matrix)'*S*((Y'*S)\(Y'*x)))) + opts.inner.solver_opts.b;
@@ -66,7 +76,7 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
 
             %pass to the solver
             %gradient mode as step or reuse only works with 1 inner iteration right now
-            [x_inner_1, info_inner] = outer_preconditioned_prox(x_inner_0, grad_inner, Ax_km1, p_k, opts.inner.solver_opts);
+            [x_inner_1, info_inner] = outer_preconditioned_prox(x_inner_0, grad_inner, Ax_km1, p_k, Q, opts.inner.solver_opts);
             
         case 'bbpgd'
             x_inner_1 = x_inner_0 - ((s_k'*s_k)/(s_k'*y_k))*grad_inner(x_inner_0);

@@ -90,6 +90,23 @@ if ~isfield(opts, 'prox')|| isempty(opts.prox)
         'runCVX', false);
 end
 
+if ~isfield(opts, 'acceleration') || isempty(opts.acceleration)
+    opts.acceleration = struct('restart', true);
+end
+
+if ~isfield(opts.acceleration, 'restart')
+    opts.acceleration.restart = true;
+end
+
+if ~isfield(opts.acceleration, 'backtrack')
+    opts.acceleration.backtrack = false;
+end
+
+if opts.acceleration.backtrack 
+    %store the last 10 function values
+    opts.acceleration.f_vals = zeros(10, 1);
+end
+
 %% initialize info
 info = struct('kkt', [], ...
     'iter',[],...

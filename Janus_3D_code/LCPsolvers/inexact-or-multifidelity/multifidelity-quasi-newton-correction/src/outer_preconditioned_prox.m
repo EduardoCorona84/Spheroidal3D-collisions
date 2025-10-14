@@ -17,6 +17,7 @@ function [x, info] = outer_preconditioned_prox(x0, grad, Ax_km1, p_1, opts)
         end
         info.matvecs(i) = info.matvecs(i) + 1;
         p = -opts.H(grad_0);
+        [, ] = check_descent(Q, grad_0)
         x_1 = prox(x0 + p, opts);
         x0 = x_1;
         grad_0 = grad_0 - opts.b;
