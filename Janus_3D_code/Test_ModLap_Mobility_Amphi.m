@@ -33,10 +33,10 @@ if ~exist('rd','var') || isempty(rd)
     rd=1;
 end
 if ~exist('n','var') || isempty(n)
-    n=4;
+    n=5;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
-    Cdst=2.5; % NIC: change back to 4
+    Cdst=2.3; 
 end
 if ~exist('ep','var') || isempty(ep)
     ep=.3;
@@ -53,6 +53,12 @@ end
 if ~exist('saveLCPs','var') || isempty(saveLCPs)
     saveLCPs=true; 
 end
+%% misc extra parameters
+tol=1e-4;
+mdist=3; 
+denseMV=false; 
+denseforce=1;
+gamma=1; 
 %% Files to save results
 mfilePath = mfilename('fullpath');
 if contains(mfilePath,'LiveEditorEvaluationHelper')
@@ -68,13 +74,25 @@ mkdir(lcpResDir);
 LCP_file_path=fullfile(lcpResDir, ['amphi' postFix]);
 %% boundary_label function
 boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
-%% Make sure all the code is on the matlabpath'
-%Remove addpaths if compiling in command line (mcc)
+%% Make sure all the code is on the matlabpath
+% Remove addpaths if compiling in command line (mcc)
 addpath(basedir);
 addpath(fullfile(basedir,'support'));
 addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
 addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
 addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
+%% Create Fparams struct 
+Fparams = struct('Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp',...
+    'lambda',lambda,'gamma',gamma,'denseMV',denseMV,...
+    'typeMV','Vsh','tdisc',tdisc, ...
+    'boundary_label',boundary_label,'denseforce',denseforce,...
+    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fill Parameter Structs
+% body parameters
+n3 = n^3; 
+rd=rd*ones(n3,1);
+Fparams.parbd = struct('Shape','','n3',n3,'rd',rd,'diam',2*rd,'p',p,'mdist',mdist,'mxrd',rd(1),'eps',ep,'out',1);
 %% Particle centers (cubic lattice in this example)
 Cdst=mean(rd)*Cdst; % make center distance relative to radii
 lx=0:Cdst:Cdst*(n-1);
@@ -86,10 +104,15 @@ display(C);
 try %#ok<TRYNC>
     rng('default'); 
 end
-C = C + 0.1*rand(size(C));
+while true
+    C = C + 0.1*rand(size(C));
+    [~,~,mindst,~] = LOCAL_check_collision_sph(C,Fparams);
+    if all(mindst > ep/10 )
+        break
+    end
+end
 display(C); 
-n3 = size(C,1); 
-rd=rd*ones(n3,1);
+Fparams.parbd.Ct = C;
 
 % initial particle orientations
 %% NIC: set the initial direction to be towards the center 
@@ -97,32 +120,11 @@ init_dir= -C;
 for i = 1:n3
     init_dir(i,:) = init_dir(i,:) / norm(init_dir(i,:));
 end
-%% This is the old setting
-% nrt = [zeros(n3/2,2) ones(n3/2,1)];
-% init_dir=[nrt;-nrt];
-%% Dont know who did this
-%init_dir=rand(n3,3);
-%init_dir=init_dir./repmat(sqrt(init_dir(:,1).^2+init_dir(:,2).^2+init_dir(:,3).^2),1,3);
+Fparams.init_dir = init_dir;
 
-% misc extra parameters
-tol=1e-4;
-mdist=3; 
-denseMV=false; 
-denseforce=1;
-gamma=1; 
-
-% default boundary label 
-if nargin<11
-    boundary_label = @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
-end
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Fill Parameter Structs
-% body parameters
-parbd = struct('Shape','','n3',n3,'rd',rd,'p',p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
 
 % LCP solver parameters
-lcpOpts = struct(...
+Fparams.lcpOpts = struct(...
     'solver','proxquasinewton',...
     'max_iter',100,...
     'tol_rel',1e-6,...
@@ -134,19 +136,12 @@ lcpOpts = struct(...
 );
 
 % linear solver parameters
-parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
+Fparams.parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
 
 % low-fidelity parameters
 % lofi_p = 2;
-% lofi = struct('Shape','','n3',n3,'rd',rd,'p',lofi_p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
+% Fparams.lofi = struct('Shape','','n3',n3,'rd',rd,'p',lofi_p,'Ct',C,'mdist',mdist,'eps',ep,'out',1);
 
-%Create Fparams struct 
-Fparams = struct('parbd',parbd,'parslv',parslv,'lcpOpts',lcpOpts,...
-    'Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp','lambda',lambda,'gamma',gamma,...
-    'denseMV',denseMV,'typeMV','Vsh','tdisc',tdisc,'init_dir',init_dir, ...
-    'boundary_label',boundary_label,'denseforce',denseforce,...
-    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);%, ...
-    % 'lofi', lofi);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
 RBS_mobility(fname,Fparams,true);

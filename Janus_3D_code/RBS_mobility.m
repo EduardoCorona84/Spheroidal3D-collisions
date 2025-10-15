@@ -66,25 +66,24 @@ Nt = Fparams.Nt; n3=Fparams.parbd.n3;
 %(0.2) Initialize timings and Fparams struct before simulation
 tic
 Fparams = RBS_Initialize_params(Fparams);
+% Force the preconditioners to empty 
+Fparams.parslv.prec=[]; 
+Fparams.parslv.prev=[]; 
 dt0 = Fparams.dt; timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc;
-if ~init
+%% Possibly load information from previous run 
+saveFile = [fname '.mat'];
+if ~init || ~exist(saveFile, 'file')
     lid = 1;
     % Initial conditions
     tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
     Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; Mt = cell(Nt+1,n3); Energy=cell(1,Nt+1);
-    t=tt(0); nrmW = zeros(n3,1);
-    Fparams.parslv.prev=[]; %initialize preconditioner params
-    zN = zeros(Nt,1);
-    timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
-        'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
-        'advance',zN,...
-        'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
+    Ct{lid} = Fparams.parbd.C; Xt{lid} = Fparams.parbd.Xrp;
+    t=tt(1); nrmW = zeros(n3,1);
     for k=1:n3
         Mt{1,k}=eye(3);
     end
 else
     % Load previous file 
-    saveFile = [fname '.mat'];
     load(saveFile, 'tt', 'Ct', 'Xt', 'VW', 'Mt', 'U', 'mu', ...
         'psi_Lap', 'sigma', 'Energy', 'FT');
     % Get the last entry that was saved
@@ -93,20 +92,27 @@ else
     % NIC: I think this initialization is in error
     nrmW = arrayfun(@(k) norm(VW{lid}(4:6,k)), 1:n3);
     % nrmW = zeros(n3,1);
+    % np = Fparams.pardb.np;
     % for k=1:n3
     %    nrmW(k) = norm(VW0(4:6,k));
     %     xind = (1:np)+np*(k-1);
     %     Xrp(xind,:) = Xrp(xind,:)*Mt{k}';
     % end
     Fparams.parbd.Xrp = Xt{lid}; Fparams.parbd.C = Ct{lid}; 
-    % Set the preconditioners to empty because we do not save this well
-    Fparams.parslv.prec=[]; 
-    Fparams.parslv.prev=[]; 
-    % Load old timings file
-    timingsFile = [fname '.profile.mat'];
+end
+% Similarly for the timings data
+timingsFile = [fname '.profile.mat'];
+if ~init ||  ~exist(timingsFile,'file')
+    zN = zeros(Nt,1);
+    timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
+        'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
+        'advance',zN,...
+        'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
+else 
     load(timingsFile,'timings');
 end
 timings.setup_surf = toc;
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %(0.3) Initialize Kernels (MatVecs) and Nullspace info
 tic; 
@@ -123,7 +129,8 @@ if ~strcmp(Fparams.parbd.Shape,'') % unit sphere
 else  
    X2=[]; 
 end
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% (1) Start the time evolution of the system
 for i=lid:Nt
     Fparams.ixTime = i;
     Fparams.endFlag = i == Nt;
@@ -259,19 +266,12 @@ for i=lid:Nt
     t = t+dt;
     tt(i+1)=t;
     fprintf('\n dt: %2.2f ',dt)
-    if mod(i,2)==1
-        saveFile = [fname '.mat'];
-        save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
-    else
-        saveFile = [fname '.2.mat'];
-        save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
-    end
-
-    saveFile = [fname '.profile.mat'];
-    save(saveFile,'timings');
-    diary off;
-
+    disp('Saving intermediate results to file')
+    save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
+    save(timingsFile,'timings');
 end
+
+diary off;
 end
 
 function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist,t,dt,it)
@@ -778,17 +778,6 @@ VW(1:2,:) = vxy; VW(6,:) = wz;
    fprintf('\n Prescribed forces and torques \n'); 
    %display(reshape(FT,6,n3))
 end
-
-end
-
-function den = LOCAL_CenterDistance(C)
-
-[Y_g1,  X_g1  ] = meshgrid(C(:,1), C(:,1));
-[Y_g2,  X_g2  ] = meshgrid(C(:,2), C(:,2));
-[Y_g3,  X_g3  ] = meshgrid(C(:,3), C(:,3));
-d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
-den = sqrt(d1.^2 + d2.^2 + d3.^2);
-den = 10000*(den==0)+den; 
 
 end
 
@@ -1337,53 +1326,6 @@ else
     if isfield(Fparams,'parsh')
         fprintf('\n Min relative distance to geometry: %2.4f, absolute distance: %2.4f ',mindstsh,mindstsh*Fparams.parsh.rd);
     end
-end
-
-end
-
-function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparams)
-
-n3 = size(C,1); 
-
-rd = Fparams.parbd.rd; 
-mxrd = Fparams.parbd.mxrd; 
-diam = Fparams.parbd.diam; 
-eps = Fparams.parbd.eps;  
-
-if n3>1
-    % Compute center distances
-    distC = LOCAL_CenterDistance(C);
-
-    % Find pairs for which (C_i-C-j) <= (r_i+r_j)+1.1*eps*max(r_i,r_j)
-    [ii,jj]=meshgrid(1:n3); 
-    id = distC<=diam+1.1*eps*mxrd & ii<jj; 
-    ip = ii(id); 
-    jp = jj(id); 
-
-    % Compute minimum relative distance between spheres
-    mindst=min(reshape((distC-diam)./mxrd,[],1));
-else
-    ip=[]; jp=[]; 
-    mindst=Inf; 
-end
-
-% If there is a spherical shell, compute signed distance to boundary
-if isfield(Fparams,'parsh')
-   rdsh = Fparams.parsh.rd; 
-   sheps = Fparams.parsh.eps;
-     
-   NC = sqrt(sum(C.*C,2)); 
-   distSh = rdsh - rd - NC; %(R-r) - ||C_i||
-   mindstsh = min(distSh)/Fparams.parsh.rd; 
-   iish = find(distSh <= 1.1*sheps*rdsh); 
-   jjsh = (n3+1)*ones(size(iish)); %j=n3+1 -> collision with boundary
-   
-   colevent = mindst < 1.1*eps || mindstsh < 1.1*sheps;
-   collist = [[ip ; iish] [jp ; jjsh]];
-else
-   colevent = mindst < 1.1*eps; 
-   mindstsh = Inf;
-   collist = [ip jp]; 
 end
 
 end
