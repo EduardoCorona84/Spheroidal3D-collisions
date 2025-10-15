@@ -59,6 +59,8 @@ if ~isfield(opts, 'stepSize')
     switch lower(opts.solver)
         case 'bbpgd'
             opts.stepSize.kappa = 'bb1';
+        case 'apgd'
+            opts.stepSize.kappa = 'bb1';
         otherwise 
             opts.stepSize.kappa = 'uniform';
     end
