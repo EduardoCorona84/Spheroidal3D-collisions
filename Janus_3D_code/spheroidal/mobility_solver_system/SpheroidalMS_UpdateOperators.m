@@ -16,6 +16,7 @@ i : current timestep in mobility problem (starts at i=0)
 Outputs:
 Kernels : BIE operators (either matrix/matrix-free depending on params passed)
     Kernels.TSSD0
+        seems to be used for old collision resolution
     Kernels.ITSSD0
 Nullsp : nullspace completion terms
 Fparams : simulation parameters; see spheroidal_mobility.m.
@@ -86,13 +87,13 @@ if i==0
     Fpar0 = Fparams; Fpar0.parbd=parbd0;
 
     % TSL: 0.5*I + TSL
-    [~,Kernels.TSSDd] = RBS_Build_DMV('dense',Fpar0,0.5,'TSL_Stk_3D'); 
+    [~,Kernels.TSSDd] = SpheroidalMS_Build_DMV('dense',Fpar0,0.5,'TSL_Stk_3D'); 
     
     Kernels.TSSD0 = Kernels.TSSDd;
     Kernels.ITSSD0 = inv(Kernels.TSSDd+Lk(1:Nb,1:Nb));
 
     % SLP: SLP
-    [~,Kernels.SSDd] = RBS_Build_DMV('dense',Fpar0,0,'SL_Stk_3D');
+    [~,Kernels.SSDd] = SpheroidalMS_Build_DMV('dense',Fpar0,0,'SL_Stk_3D');
     Kernels.SSD0 = Kernels.SSDd;
         
     if strcmp(prtype,'TT')

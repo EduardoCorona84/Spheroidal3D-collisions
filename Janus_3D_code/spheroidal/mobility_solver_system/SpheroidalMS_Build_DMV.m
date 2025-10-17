@@ -19,8 +19,9 @@ D : 3*np*n3 x 3*np*n3 matrix
     returns the dense matrix if requested
 %}
 if ~strcmp(Fparams.typeMV,'SSph') || ~strcmp(Fparams.parslv.prtype,'')
+    error('Rbs quadrature not implemented; need to implement Sc based on shape_type in Fparams.');
     params=Fparams.parbd; p = params.p; 
-    np=params.np; Sc=params.Sc; eta=Fparams.eta; 
+    np=Fparams.np; Sc=Fparams.Sc; eta=Fparams.eta; 
     DMV = cell(size(Sc,2),1); D=DMV;
     
     Sc{p}.dblLayerOpStale=1;  
