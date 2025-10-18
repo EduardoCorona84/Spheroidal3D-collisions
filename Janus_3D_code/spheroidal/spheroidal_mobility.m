@@ -8,19 +8,22 @@ function spheroidal_mobility(fname,Fparams,init)
     
     Fparams - (struct) parameter struct for rigid body simulation, with fields:
     ----
-    type            - (string) mobility problem type (FTfun)
+    type            - (string) problem type (FTfun)
     typeMV          - (string) 'SSph' for (scalar) spheroidal harmonics, 'Rbs' for rotation based singular quad
     denseMV         - (bool) dense vs FMM for far-field
     num_timesteps   - (int)    number of timesteps
     dt              - (double) timestep length
-    timedisc        - (string) time discretization (i.e. "euler", "trapz", or "rk4")
+    tdisc           - (string) time discretization 
+        Implemented are "euler", "trapz", and "rk4" (and also "abash"?)
     comp            - (bool) compute intermediate quantities FT and VW (for debugging purposes?)
 
     parbd - (struct) struct with rigid body parameters:
-        Shape       - (string) rigid body shape; must be 'spheroid' for now--which represents spheres and spheroids.
         n3          - (int) number of rigid bodies n_b
-        u0          - (double) n_b x 1 array of u0's for spheroids; if spherical, set it to be -1. 
-        a           - (double) n_b x 1 array of a's for spheroids; if spherical, set it to be the desired radius.
+        equ_radii   - (double) n_b x 1 array of equatorial radii for spheres/spheroids; advised to be set to 1 for efficiency purposes.
+        polar_radii - (double) n_b x 1 array of polar radii for spheres/spheroids; obviously, this should be less than major_radii
+            If one truly wants the u0/a values for the spheroids instead, see the utility functions -Brian.
+            The convention for the codebase is that if equi_radius > polar_radius, it is a oblate. Otherwise,
+            it's an prolate.
         shape_type  - (string) n_b x 1 array of strings: should be 'prolate', 'oblate', or 'sphere'.
             Spheres are not implemented for the time being.
         p           - (int) spheroidal harmonic order (bodies) 
@@ -35,9 +38,12 @@ function spheroidal_mobility(fname,Fparams,init)
          prtype   - (string) 'bkdiag' or 'TT'
          solver   - gmres, pcg, bicg, etc. 
          tol (tolerance), maxit (maximum iterations), rst (restart), etc.
-     
-    Ffun, Tfun = @(t,C) with output of size 3 x n_b.
+    
+    Depending on the type of problem that is implemented
+    Ffun, Tfun = @(t,C,q) with output of size 3 x n_b.
         Force and torque prescriptions; required if type is 'FTfun'.
+        The parameters are: t for timestep, C for the center of the body, and
+        q for the quaternion associated with the body (to represent orientation).
     
     init    - (string) optional filename to resume a simulation from last
     recorded timestep
@@ -64,7 +70,12 @@ function spheroidal_mobility(fname,Fparams,init)
     ROTATIONAL_VELOCITY_TOL = 1e-10;    % to update the body's angular position.
      
     %%(0.0) Input validation
-    assert(strcmp())
+    if ~isempty(Fparams)
+        % Generic property validation
+
+        % parbd validation
+        assert()
+    end
 
     %%(0.1) (optional) Load data in init, initialize output arrays
     num_timesteps = Fparams.Nt; num_body=Fparams.parbd.n3; 
@@ -139,7 +150,7 @@ function spheroidal_mobility(fname,Fparams,init)
     timings.total = zN;
 
     tic;
-    Fparams = MS_initparams(Fparams);
+    Fparams = SpheroidalMS_initparams(Fparams);
     timings.setup_surace = toc;
     timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc; 
     
@@ -160,7 +171,7 @@ function spheroidal_mobility(fname,Fparams,init)
     
     % Get kernels/nullspace
     Kernels=[]; 
-    [Kernels,Nullsp,Fparams,timings] = RBS_Update_Operators(Xrp,C0,Mt0,normW,Kernels,Fparams,timings,0); 
+    [Kernels,Nullsp,Fparams,timings] = SpheroidalMS_UpdateOperators(Xrp,C0,Mt0,normW,Kernels,Fparams,timings,0); 
     timings.setup_kernel=toc;
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -347,7 +358,7 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,d
     mu -
     VW -
     Nullsp
-    Fparams
+    Fparams - (struct) parameters of problem
     colevent - (boolean) did a collision event happen in advancing the timestep?
     collist
     dt
@@ -379,7 +390,7 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,d
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Advance center Ct 
     tic; 
-    Ctp = LOCAL_advance_center(Ct,dt,VW,Fparams); 
+    Ctp = LOCAL_advance_center(Ct,dt,VW); 
     fprintf('\n Time to advance centers C(t): %e',toc); 
     timings.advance(it) = timings.advance(it) + toc; 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -416,7 +427,7 @@ function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist,dt] = LOCAL_advanc
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Advance center Ct 
     tic; 
-    Ctp = LOCAL_advance_center(Ct,dt,VW,Fparams); 
+    Ctp = LOCAL_advance_center(Ct,dt,VW); 
     fprintf('\n Time to advance centers C(t): %e',toc); 
     timings.advance(it) = timings.advance(it) + toc; 
     
@@ -599,7 +610,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
     VW = real(VW); 
 end
     
-function Ctp = LOCAL_advance_center(Ct,dt,VW,Fparams)
+function Ctp = LOCAL_advance_center(Ct,dt,VW)
     Ctp = Ct + dt*VW(1:3,:)';
 end
 
@@ -825,7 +836,7 @@ function [colevent,collist,dt,Ctp] = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,M
             % Recompute dt and Ct{i+1} to avoid collision
             dt = dt/2;
             bis=bis+1; 
-            Ctp = LOCAL_advance_center(Ct,dt,VW,Fparams); 
+            Ctp = LOCAL_advance_center(Ct,dt,VW); 
         
             %Check for collision between spheres (or sphere envelopes)
             [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(Ctp,Fparams);
@@ -934,7 +945,7 @@ function den = LOCAL_CenterDistances(C)
     Calculates pairwise Euclidean distance between points in R^3.
 
     Inputs
-    C - centers of bodies
+    C - (double) n_b x 1 centers of bodies
 
     Outputs
     den - distances between bodies
@@ -951,6 +962,16 @@ function den = LOCAL_CenterDistances(C)
 end
 
 function M = RotationMat(wh,t)
+    %{
+    An implementation of Rodrigues' rotation matrix formula.
+
+    Inputs
+    wh - (double) angular velocity vector
+    t  - (double) timestep
+
+    Outputs
+    M - (double) 3x3 rotation matrix
+    %}
     nwh = norm(wh); 
     t = nwh*t; 
     wh = wh./nwh; 
