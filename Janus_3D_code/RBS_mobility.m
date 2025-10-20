@@ -1396,6 +1396,17 @@ end
 
 function [colevent,collist,mindst,Xip,Xjp]=LOCAL_check_collision(collist,eps,C,X,MRot,Mt,VW,dt,np)
 % WARNING: This function needs to be updated to work w/ non-sphere objects 
+%For Tyler (by Tyler)
+%collist is the list of potential collisions from center distance check
+%eps is the epsilon buffer around the objects
+%C is a cell array of the centers of the bodies
+%X has to do with the shapes, but its not clear
+%MRot is a function handle for a rotation matrix given angular velocity and time step (want to sort this out a bit more.)
+%Mt is a cell array of size n3 which is the number of bodies (think this has to do with rotation)
+%VW is the velocity array, size 6 by n3. 
+%dt is the time step length
+%np is Fparams.parbd.np , unsure
+
 idpw = collist(:,2)<size(C,1)+1;
 ip = collist(idpw,1); jp = collist(idpw,2); 
 distcol=zeros(size(ip)); 
