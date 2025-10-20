@@ -252,6 +252,22 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
         opts.inner.solver_opts.gradient_mode = 'full'; %can also be 'step' or 'reuse'
     end
 
+    if ~isfield(opts.inner.solver_opts, 'adaptive')
+        opts.inner.solver_opts.adaptive = struct();
+    end
+
+    if ~isfield(opts.inner.solver_opts.adaptive, 'enabled')
+        opts.inner.solver_opts.adaptive.enabled = false;
+    end
+
+    if ~isfield(opts.inner.solver_opts.adaptive, 'abs_err_estimate')
+        opts.inner.solver_opts.adaptive.abs_err_estimate = 0;
+    end
+
+    if ~isfield(opts.inner.solver_opts.adaptive, 'descent_parameter')
+        opts.inner.solver_opts.adaptive.descent_parameter = (1/2);
+    end
+
     opts.inner.solver_opts.b = opts.outer.solver_opts.b;
 
     opts.warm.solver_opts.A = opts.inner.solver_opts.A;
