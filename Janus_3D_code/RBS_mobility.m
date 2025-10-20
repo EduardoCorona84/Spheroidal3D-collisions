@@ -1,4 +1,4 @@
-function RBS_mobility(fname,Fparams,init)
+function RBS_mobility(fname,Fparams)
 %{
 General purpose test code for the mobility problem for Stokesian rigid body 
 suspensions 
@@ -44,15 +44,10 @@ Depending on type, extra parameters might be required.
 The default 'FTfun' (force and torque prescription) requires functions 
 Ffun,Tfun = @(t,C) with output of size 3 x n_b. 
 
-init    - (optional bool) Default false. Attempt to load intermediate results from previous 
-        run will use the same fname to load the results
 recorded timestep
 %}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-global timings DATA_DIR;
-if ~exist('init','var') || isempty(init)
-    init = false;
-end
+global timings DATA_DIR; %#ok<GVMIS>
 
 DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), [num2str(Fparams.parbd.n3) '_' num2str(Fparams.parbd.p)]);
 if ~exist(DATA_DIR, 'dir')
@@ -72,7 +67,7 @@ Fparams.parslv.prev=[];
 dt0 = Fparams.dt; timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc;
 %% Possibly load information from previous run 
 saveFile = [fname '.mat'];
-if ~init || ~exist(saveFile, 'file')
+if ~Fparams.loadIntermediate || ~exist(saveFile, 'file')
     lid = 1;
     % Initial conditions
     tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
@@ -88,6 +83,7 @@ else
         'psi_Lap', 'sigma', 'Energy', 'FT');
     % Get the last entry that was saved
     lid = sum(tt>0);
+    lid =50; % TODO REMOVE
     t = tt(lid);
     % NIC: I think this initialization is in error
     nrmW = arrayfun(@(k) norm(VW{lid}(4:6,k)), 1:n3);
@@ -102,7 +98,7 @@ else
 end
 % Similarly for the timings data
 timingsFile = [fname '.profile.mat'];
-if ~init ||  ~exist(timingsFile,'file')
+if ~Fparams.loadIntermediate ||  ~exist(timingsFile,'file')
     zN = zeros(Nt,1);
     timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
         'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
@@ -111,6 +107,7 @@ if ~init ||  ~exist(timingsFile,'file')
 else 
     load(timingsFile,'timings');
 end
+Fparams.lid = lid;
 timings.setup_surf = toc;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -130,6 +127,32 @@ else
    X2=[]; 
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% (0.5) Start plotting function if asked for
+if Fparams.plotFlag
+    % Initialize figure
+    set(0,'DefaultFigureWindowStyle','docked')
+    figure
+    ax = axes;
+    ax.FontSize = 16;
+    grid on
+    view(0,90)
+    axis([-3 3 -3 3 -1 1])
+    grp = hgtransform(Parent=ax);
+    % Plot the initial config
+    C = Ct{1};
+    r = Fparams.parbd.rd;
+    hndls = cell(n3, 1);
+    for k=1:n3
+        [Sx, Sy, Sz]=sphere(40);
+        Sx=r(k)*Sx;
+        Sy=r(k)*Sy;
+        Sz=r(k)*Sz;
+        Sc=C(k,:);
+        hndls{k} = surf(Sx+Sc(1),Sy+Sc(2),Sz+Sc(3),Parent=grp,EdgeColor='k');
+    end
+    drawnow
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % (1) Start the time evolution of the system
 for i=lid:Nt
     Fparams.ixTime = i;
@@ -139,7 +162,7 @@ for i=lid:Nt
         fprintf('\n ---------------------------------------------------------- \n')
         fprintf('\n (1) Explicit euler step \n')
         [Xt{i+1},Mt(i+1,:),Ct{i+1},U{i},FT{i},sigma{i},mu{i},VW{i},Kernels,Nullsp,...
-            Fparams,colevent,collist,dt,psi_Lap{i},Energy(i)] = ...
+            Fparams,colevent,collist,dt,psi_Lap{i},Energy{i}] = ...
             LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t,dt,i);
 
     elseif strcmp(timedisc,'trapz')
@@ -269,6 +292,21 @@ for i=lid:Nt
     disp('Saving intermediate results to file')
     save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
     save(timingsFile,'timings');
+    if Fparams.plotFlag
+        C = Ct{i+1};
+        r = Fparams.parbd.rd;
+        for k=1:n3
+            [Sx, Sy, Sz]=sphere(40);
+            Sx=r(k)*Sx;
+            Sy=r(k)*Sy;
+            Sz=r(k)*Sz;
+            Sc=C(k,:);
+            hndls{k}.XData=Sx+Sc(1);
+            hndls{k}.YData=Sy+Sc(2);
+            hndls{k}.ZData=Sz+Sc(3);
+        end
+        drawnow
+    end
 end
 
 diary off;
@@ -813,20 +851,19 @@ else
     LCP_file_path = Fparams.LCP_file_path;
 end
 
-if ~isfield(Fparams, 'endFlag') 
-    endFlag = false; 
-else 
-    endFlag = Fparams.endFlag;
-end
-if saveLCPs && isempty(lcp_list) 
-    lcp_list = repmat( ...
-        struct( ...
-            'A', [], ...
-            'F', [], ...
-            'C', [], ...
-            'b', [] ...
-        ), [1, Fparams.Nt] ...
-    );
+if saveLCPs && (isempty(lcp_list) || Fparams.ixTime == Fparams.lid)
+    if Fparams.loadIntermediate && exist(LCP_file_path,'file')
+        load(LCP_file_path, 'lcp_list');
+    else
+        lcp_list = repmat( ...
+            struct( ...
+                'A', [], ...
+                'F', [], ...
+                'C', [], ...
+                'b', [] ...
+            ), [1, Fparams.Nt] ...
+        );
+    end
     save_iter = 0;
 end
 
@@ -913,7 +950,6 @@ if isfield(Fparams, 'lofi')
     lofi_parslv.prec = [];
     lofi_A = @(x) real(F.'*(lofi_Ck*Lapp(lofi_SD,Lslv(lofi_TD,...
         -Lapp(lofi_TD, lofi_Bf(x))+lofi_Lk*lofi_Bf(x),lofi_parslv)+lofi_Bf(x))));
-    e
 end
 
 %% Build constant vector b: 

@@ -21,7 +21,7 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma)
 %% Default parameters
 if ~exist('p','var') || isempty(p)
     p=8; 
@@ -53,30 +53,45 @@ end
 if ~exist('saveLCPs','var') || isempty(saveLCPs)
     saveLCPs=true; 
 end
-%% misc extra parameters
-tol=1e-4;
-mdist=3; 
-denseMV=false; 
-denseforce=1;
-gamma=1; 
+if ~exist('initMode','var') || isempty(initMode)
+    initMode='vesicle'; 
+end
+if ~exist('tol','var') || isempty(tol)
+    tol=1e-4;
+end
+if ~exist('mdist','var') || isempty(mdist)
+    mdist=3; 
+end
+if ~exist('denseMV','var') || isempty(denseMV)
+    denseMV=false; 
+end
+if ~exist('denseforce','var') || isempty(denseforce)
+    denseforce=1;
+end
+if ~exist('gamma','var') || isempty(gamma)
+    gamma=1; 
+end
+%% boundary_label function
+boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
 %% Files to save results
 mfilePath = mfilename('fullpath');
 if contains(mfilePath,'LiveEditorEvaluationHelper')
     mfilePath = matlab.desktop.editor.getActiveFilename;
 end
-[basedir,~,~] = fileparts(mfilePath);
+[dirname,~,~] = fileparts(mfilePath);
+basedir = fullfile(dirname, '..');
 lcpDataDir = fullfile(basedir, 'data');
-mkdir(lcpDataDir)
 postFix = ['.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
-fname=fullfile(lcpDataDir, ['amphi' postFix]);
 lcpResDir = fullfile(basedir, 'LCPsolvers/data');
+fname = fullfile(lcpDataDir, ['amphi' postFix]); % Name of file for regular results file
+LCP_file_path = fullfile(lcpResDir, ['amphi' postFix]); % Name of the LCP results file
+% Make directories if they do not exist 
+mkdir(lcpDataDir)
 mkdir(lcpResDir);
-LCP_file_path=fullfile(lcpResDir, ['amphi' postFix]);
-%% boundary_label function
-boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
 %% Make sure all the code is on the matlabpath
 % Remove addpaths if compiling in command line (mcc)
 addpath(basedir);
+addpath(fullfile(basedir,'test'));
 addpath(fullfile(basedir,'support'));
 addpath(genpath(fullfile(basedir, 'LCPsolvers/solvers')))
 addpath(fullfile(basedir, 'FMMLIB/fmmlib3d-1.2/matlab'));
@@ -88,41 +103,24 @@ Fparams = struct('Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp',...
     'boundary_label',boundary_label,'denseforce',denseforce,...
     'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% initialize configuration
+switch initMode
+    case 'lattice'
+        [C, init_dir] = init_lattice(n, Cdst);
+    case 'vesicle'
+        [C, init_dir] = init_vesicle(n, Cdst);
+    otherwise
+        error([initMod ' not a recognized initMode'])
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Fill Parameter Structs
 % body parameters
-n3 = n^3; 
+n3 = size(C,1); 
 rd=rd*ones(n3,1);
 Fparams.parbd = struct('Shape','','n3',n3,'rd',rd,'diam',2*rd,'p',p,'mdist',mdist,'mxrd',rd(1),'eps',ep,'out',1);
-%% Particle centers (cubic lattice in this example)
-Cdst=mean(rd)*Cdst; % make center distance relative to radii
-lx=0:Cdst:Cdst*(n-1);
-lx = lx - mean(lx); 
-[xx,yy,zz] = meshgrid(lx);
-C = [xx(:) yy(:) zz(:)]; 
-display(C);
-% randomize centers and/or radii
-try %#ok<TRYNC>
-    rng('default'); 
-end
-while true
-    C = C + 0.1*rand(size(C));
-    [~,~,mindst,~] = LOCAL_check_collision_sph(C,Fparams);
-    if all(mindst > ep/10 )
-        break
-    end
-end
-display(C); 
 Fparams.parbd.Ct = C;
-
-% initial particle orientations
-%% NIC: set the initial direction to be towards the center 
-init_dir= -C;
-for i = 1:n3
-    init_dir(i,:) = init_dir(i,:) / norm(init_dir(i,:));
-end
 Fparams.init_dir = init_dir;
-
-
 % LCP solver parameters
 Fparams.lcpOpts = struct(...
     'solver','proxquasinewton',...
