@@ -1,15 +1,28 @@
 function eval = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, sigma_x, sigma_y, sigma_z, target_points, target_normals)
 %{
-A version of L2StkMatVec implemented for the mobility solver code.
-The reason for this new file is to be handle BOTH spheres and spheroids.
+A version of L2StkMatVec implemented for the mobility solver codeHaThe reason for this new file is to be handle BOTH spheres and spheroids.
 
 Note that the target points are assumed to be already rotated to the local frame of
-spheroid i.
+spheroid i, and that this function assumes only 1 source spheroid (for now?).
 
 Inputs
+    pot - (string) the following cases are supported: 
+        'SL_Stk_3D'   single layer, Stokes
+        'DL_Stk_3D'   double layer, Stokes
+        'TSL_Stk_3D'  traction kernel of single layer, Stokes
+    u0 - (double) controls the aspect ratio of spheroid
+    a - (double) scale parameter
+    sigma_x - (double array) surface density for the x-component
+        size np × 1
+    sigma_y - (double array) surface density for the y-component
+    sigma_z - (double array) surface density for the z-component
+    target_points - (double) target points to evaluate layer potential at
+    target_normals - (double) normals at target points
+        only necessary if doing TSL_Stk_3D.
 
 Outputs
-
+    eval - (double, 3*np × 1) Interleaved velocity (or traction) values at targets
+        [vx1; vy1; vz1; vx2; vy2; vz2; ...].
 %}
 
 %% Initialize source particle
