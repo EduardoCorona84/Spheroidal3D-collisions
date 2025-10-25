@@ -37,7 +37,7 @@ tau = cell(n3,1);
 Cg = reshape(repmat(C.',np,1),3,[]).';
 Xg = zeros(np*n3,3); Wg=zeros(np*n3,1); Nrg=Xg; Xrp = Xg;
 
-shape_type = LOCAL_build_shape_types(equ_radii, polar_radii);
+shape_type = calculate_shape_type(equ_radii, polar_radii);
 
 for j=1:n3
     shape_type = shape_type(j);
@@ -125,21 +125,6 @@ if kerd>1 % For Kernel_Eval?
     parbd.cj = parbd.ci; 
 end
 
-end
-
-function shape_type = LOCAL_build_shape_types(equ_radii, polar_radii)
-    EQUALITY_TOL = 1e-14;
-    ns = size(equ_radii, 1);
-    shape_type = strings(ns, 1);
-    for j=1:ns
-        if abs(equ_radii - polar_radii) < EQUALITY_TOL
-            shape_type(j) = 'sphere';
-        elseif equ_radii > polar_radii
-            shape_type(j) = 'oblate';
-        else
-            shape_type(j) = 'prolate';
-        end
-    end
 end
 
 function surface = LOCAL_build_axisymmetric_shape(p, shape_type, equatorial_radius, polar_radius)

@@ -49,8 +49,6 @@ classdef TEST_SpheroidalMS_params < matlab.unittest.TestCase
             Xp represents UNROTATED spheres/spheroids in its global frame
 
             Not sure where Xp is used however...
-            Seems to be used only in shell problems (which are not
-            implemented). So, probably remove?
             %}
             Xp = parbd.Xp;
             Xrp = parbd.Xrp;
