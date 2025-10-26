@@ -1,4 +1,4 @@
-function Y = SpheroidalMS_MatVec(V,L,typeMV,Fparams,kerd,a,flag_pot,DMV)
+function Y = SpheroidalMS_MatVec(V,L,typeMV,Fparams,kerd,a,flag_pot)
 %{
 Intermediatery function to handle processing to different mavecs.
 
@@ -25,15 +25,14 @@ if strcmp(typeMV,'SSph')
         V = 'Mat'; 
     end
 
-    if(isfield(Fparams,'lambda')) % Modified Laplace
+    if(isfield(Fparams,'lambda')) % Modified Laplace?
         error("This problem type is not implemented.");
         Y = VSh_Mod_MatVec_RB2(V,L,Fparams);
     else
         Y = SSph_MatVec(V,L,Fparams);
     end
-else % Rotation-based singular quadrature matvec
+else
     error("This mode of matvec is not implemented.");
-    Y = Shg_MatVec(V,DMV,L,Fparams);
 end
         
 end

@@ -1,6 +1,6 @@
 function [DMV,D] = SpheroidalMS_Build_DMV(dtype,Fparams,a,flag_pot)   
 %{
-Builds a dense matvec (DMV). Probably not needed, but it is here for reference.
+Builds a dense matvec (DMV) for requested operator in flag_pot.
 
 Inputs
 dtypes : string
@@ -10,7 +10,11 @@ Fparams : struct
 a : scalar
     the constant in the operator a*I + O, where O is the layer potential operator
 flag_pot : string
-    type of layer potential to use; see code for implemented potentials.
+    type of layer potential to use; see code below for types:
+        'SL_Stk_3D'
+        'TSL_Stk_3D'
+        'dSL_L_3D'
+        'SL_L_3D'
 
 Outputs
 DMV : function
@@ -19,7 +23,6 @@ D : 3*np*n3 x 3*np*n3 matrix
     returns the dense matrix if requested
 %}
 if ~strcmp(Fparams.typeMV,'SSph') || ~strcmp(Fparams.parslv.prtype,'')
-    error('Rbs quadrature not implemented; need to implement Sc based on shape_type in Fparams.');
     params=Fparams.parbd; p = params.p; 
     np=Fparams.np; Sc=Fparams.Sc; eta=Fparams.eta; 
     DMV = cell(size(Sc,2),1); D=DMV;
