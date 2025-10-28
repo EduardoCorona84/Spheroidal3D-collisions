@@ -46,7 +46,14 @@ function M = L2StkMatVecKernel(pars, pot, p, nu_eval)
         M = DLPmatrix_dev(IDparams, [], np, ns);
         M = blkdiag(M{:});
     elseif strcmp(pot, 'TLP')
-        M = TSLmatrix(IDparams, p, ns);
+        fine_p = p+4;
+        right_proj_mtx = LOCAL_generate_projection_to_fine_grid(p, fine_p);
+        left_proj_mtx = LOCAL_generate_projection_to_coarse_grid(p, fine_p);
+        right_proj_mtx = kron(eye(3), right_proj_mtx);
+        left_proj_mtx = kron(eye(3),left_proj_mtx);
+        IDparams.sigma = repmat(eye(2*fine_p*(fine_p+1)),1,1,ns);
+        M = TSLmatrix(IDparams, fine_p, ns);
+        M = left_proj_mtx*M*right_proj_mtx;
     else
         error("Invalid potential given: should be 'SLP', 'DLP', or 'TLP'.");
     end
@@ -663,6 +670,50 @@ function M = TSL_matrix_alternative(IDparams, p, ns)
     end
 
     M = blkdiag(M_cells{:});
+end
+
+function proj_mtx = LOCAL_generate_projection_to_fine_grid(coarse_p, fine_p)
+    %{
+    Go from a coarse spatial grid to a fine spatial grid grid.
+    %}
+    coarse_np = 2*coarse_p*(coarse_p + 1);
+    fine_np = 2*fine_p*(fine_p + 1);
+
+    coarse_sp = (coarse_p + 1)^2;
+    fine_sp = (fine_p + 1)^2;
+
+    % First, project to harmonics (note this is equivalent to doing shAna
+    % on the density).
+    coarse_proj_mtx = shAna(eye(coarse_np));
+    
+    % Then, pad.
+    pad_mtx = [eye(coarse_sp) ; zeros(fine_sp - coarse_sp, coarse_sp)];
+
+    % Finally, construct the matrix.
+    proj_mtx = shSyn(pad_mtx * coarse_proj_mtx);
+end
+
+function proj_mtx = LOCAL_generate_projection_to_coarse_grid(coarse_p, fine_p)
+    %{
+    Go from a fine spatial grid to a coarse spatial grid.
+    %}
+    coarse_np = 2*coarse_p*(coarse_p + 1);
+    fine_np = 2*fine_p*(fine_p + 1);
+
+    coarse_sp = (coarse_p + 1)^2;
+    fine_sp = (fine_p + 1)^2;
+
+    % Project from fine spatial grid to fine harmonic space.
+    spectral_proj_mtx = shAna(eye(fine_np));
+
+    % Truncate the harmonics corresponding to the coarse grid.
+    truncation_mtx = [eye(coarse_sp) zeros(coarse_sp, fine_sp - coarse_sp)];
+    
+    % Then, convert back to coarse grid.
+    spatial_proj_mtx = shSyn(eye(coarse_sp));
+
+    % Finally, construct the matrix.
+    proj_mtx = spatial_proj_mtx * truncation_mtx * spectral_proj_mtx;
 end
 
 %% Helper code
