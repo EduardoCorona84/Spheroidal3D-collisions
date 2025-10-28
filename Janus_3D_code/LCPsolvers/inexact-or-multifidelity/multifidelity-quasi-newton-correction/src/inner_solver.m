@@ -13,6 +13,7 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
         switch(opts.outer.correction_opts.memory)
             case 'dense full'
                 grad_inner = @(x) opts.inner.solver_opts.A(x) + opts.outer.correction_opts.update_matrix*x + opts.inner.solver_opts.b;
+                Q = [];
             
             case 'dense limited'
 
@@ -21,14 +22,32 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
                     case 'sr1'
                         %use the compact representation
                         S = opts.outer.correction_opts.S(:, 1:opts.outer.correction_opts.curr_mem);
+                        [Q, R, idx] = qr(S, 0);
+                        tol = 1e-2;
+                        Q_indices = abs(diag(R)) >= tol * abs(R(1,1));
+                        final_indices = idx(Q_indices);
+                        Q = Q(:, Q_indices);
+
+                        S = S(:, final_indices);
+
                         utility_matrix = opts.outer.correction_opts.utility_matrix(:, 1:opts.outer.correction_opts.curr_mem);
+
+                        utility_matrix = utility_matrix(:, final_indices);
 
                         %compute the gradient using the compact representation
                         grad_inner = @(x) opts.inner.solver_opts.A(x) + utility_matrix*((utility_matrix'*S)\(utility_matrix'*x)) + opts.inner.solver_opts.b;
                     case 'bfgs'
                         S = opts.outer.correction_opts.S(:, 1:opts.outer.correction_opts.curr_mem);
+                        [Q, R, idx] = qr(S, 0);
+                        tol = 1e-2;
+                        Q_indices = abs(diag(R)) >= tol * abs(R(1,1));
+                        final_indices = idx(Q_indices);
+                        Q = Q(:, Q_indices);
+                        S = S(:, final_indices);
                         Y = opts.outer.correction_opts.Y(:, 1:opts.outer.correction_opts.curr_mem);
+                        Y = Y(:, final_indices);
                         utility_matrix = opts.outer.correction_opts.utility_matrix(:, 1:opts.outer.correction_opts.curr_mem);
+                        utility_matrix = utility_matrix(:, final_indices);
 
                         %using multisecant update
                         grad_inner = @(x) opts.inner.solver_opts.A(x) + Y*((Y'*S)\(Y'*x)) - utility_matrix*((S'*utility_matrix)\(utility_matrix'*x)) + opts.inner.solver_opts.b;
@@ -39,7 +58,9 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
                         [Q, R, idx] = qr(S, 0);
                         %determine columns to keep uisng a tolerance and the diagonal of R
                         tol = 1e-2;
-                        final_indices = idx(abs(diag(R)) >= tol * abs(R(1,1)));
+                        Q_indices = abs(diag(R)) >= tol * abs(R(1,1));
+                        final_indices = idx(Q_indices);
+                        Q = Q(:, Q_indices);
                         S = S(:, final_indices);
                         Y = opts.outer.correction_opts.Y(:, 1:opts.outer.correction_opts.curr_mem);
                         Y = Y(:, final_indices);
@@ -55,6 +76,7 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
         end
     else
         %no correction, just use the low fidelity matrix
+        Q = [];
         grad_inner = @(x) opts.inner.solver_opts.A(x) + opts.inner.solver_opts.b;
     end
 
@@ -66,15 +88,17 @@ function [x_inner_1, info_inner, opts] = inner_solver(x_inner_0, opts, s_k, y_k,
             A_low = opts.inner.solver_opts.A; 
             max_iter_inner = opts.inner.solver_opts.max_iter;
             solver_type = opts.inner.solver_opts.solver;
+            adaptive_opts = opts.inner.solver_opts.adaptive;
             opts.inner.solver_opts = opts.outer.solver_opts;
             opts.inner.solver_opts.A = A_low;
             opts.inner.solver_opts.max_iter = max_iter_inner;
             opts.inner.solver_opts.solver = solver_type;
             opts.inner.solver_opts.gradient_mode = gradient_mode;
+            opts.inner.solver_opts.adaptive = adaptive_opts;
 
             %pass to the solver
             %gradient mode as step or reuse only works with 1 inner iteration right now
-            [x_inner_1, info_inner] = outer_preconditioned_prox(x_inner_0, grad_inner, Ax_km1, p_k, Q(:, final_indices), opts.inner.solver_opts);
+            [x_inner_1, info_inner] = outer_preconditioned_prox(x_inner_0, grad_inner, Ax_km1, p_k, Q, opts.inner.solver_opts);
             
         case 'bbpgd'
             x_inner_1 = x_inner_0 - ((s_k'*s_k)/(s_k'*y_k))*grad_inner(x_inner_0);

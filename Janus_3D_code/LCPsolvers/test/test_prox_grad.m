@@ -7,18 +7,33 @@ b = 2*(randn(n, 1) - 1/2);
 
 fg = LOCAL_create_fg(Amat, b);
 opts.storeIts = true;
+opts.acceleration.backtrack = false;
+opts.stepSize.init = 'uniform';
+opts.stepSize.eta = 'uniform';
+opts.stepSize.kappa = 'bb1';
 opts.solver = 'apgd';
 opts.b = b;
 opts.A = @(x) Amat * x;
-[x, info] = accelerated_prox_grad(fg, zeros(n, 1), opts);
+[x, info_no_opt] = accelerated_prox_grad(fg, zeros(n, 1), opts);
 
-cvx begin
+cvx_begin
     variable x_cvx(n)
     minimize( (1/2)*quad_form(x_cvx, Amat) + dot(x_cvx, b))
     subject to
         x_cvx >= 0
-cvx end
+cvx_end
 
+opts.stepSize.eta = 'opt';
+[x, info_opt] = accelerated_prox_grad(fg, zeros(n, 1), opts);
+
+error_no_opt = vecnorm(info_no_opt.iterHist' - x_cvx)/norm(x_cvx);
+error_opt = vecnorm(info_opt.iterHist' - x_cvx)/norm(x_cvx);
+semilogy(error_no_opt, '--o', 'DisplayName', 'APGD - BB1, Uniform \eta'); hold on;
+semilogy(error_opt, 'o-', 'DisplayName', 'APGD - BB1, Optimal \eta'); hold on;
+xlabel('Iteration');
+ylabel('Relative error to CVX solution');
+legend();
+title('Convergence of Accelerated Proximal Gradient Method');   
 
 
 function fg = LOCAL_create_fg(A_init,b)

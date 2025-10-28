@@ -261,11 +261,11 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     end
 
     if ~isfield(opts.inner.solver_opts.adaptive, 'abs_err_estimate')
-        opts.inner.solver_opts.adaptive.abs_err_estimate = 0;
+        opts.inner.solver_opts.adaptive.abs_err_estimate = 0.2;
     end
 
     if ~isfield(opts.inner.solver_opts.adaptive, 'descent_parameter')
-        opts.inner.solver_opts.adaptive.descent_parameter = (1/2);
+        opts.inner.solver_opts.adaptive.descent_parameter = 1/100;
     end
 
     opts.inner.solver_opts.b = opts.outer.solver_opts.b;

@@ -8,7 +8,7 @@ function descent = check_descent(grad_0, p, Q, opts)
     %Thus the error would be bounded by abs_err * || P_{S_perp} p ||_2
 
 
-    if opts.adaptive.enabled == false
+    if opts.adaptive.enabled == false || isempty(Q)
         descent = true;
         return
     else

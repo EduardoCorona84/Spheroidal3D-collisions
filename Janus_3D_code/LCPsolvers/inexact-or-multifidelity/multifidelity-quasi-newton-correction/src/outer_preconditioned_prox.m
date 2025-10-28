@@ -1,4 +1,4 @@
-function [x, info] = outer_preconditioned_prox(x0, grad, Ax_km1, p_1, opts)
+function [x, info] = outer_preconditioned_prox(x0, grad, Ax_km1, p_1, Q, opts)
 
     %should make sure the indexing aligns with nic's convention
     info.iterHist = zeros(opts.max_iter, length(x0));
