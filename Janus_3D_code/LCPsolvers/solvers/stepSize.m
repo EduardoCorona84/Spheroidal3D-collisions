@@ -23,8 +23,9 @@ switch lower(mode)
         % For QP, this is the optsimal step length (see page 56 of n&W)
         % Notice that is A is not perfectly symmetric, then we do not have
         % kappa = -(Ax+b)'p/(p'Ap)
+        b = opts.b;
         Ap = opts.A(p);
-        kappa = -(1/2*(dot(p, Ax) +  dot(x, Ap)) + dot(p,opts.b)) / dot(p, Ap);
+        kappa = -(dot(p, Ax+b)) / dot(p, Ap);
         % In the bwd case, we need to stay in the feasible set
         % - Because x>0 and x + p > 0, via convexity kappa \in (0,1] is good
         % - In the other case, we need to check when the ray intersects the
@@ -33,16 +34,11 @@ switch lower(mode)
         %   it is irrelevant. But if not then we need to make sure that we only
         %   travel to the closest feasible point.
         if k < 0
-            if kappa <= 1
-                return
-            else
-                kappa_list = - x(p < 0) ./ p(p < 0);
-                if isempty(kappa_list)
-                    return;
-                end
-                kappa = min(kappa, min(kappa_list));
+            mask = p < 0;
+            if ~any(mask) 
+                return;
             end
-            
+            kappa = min([kappa; - x(mask) ./ p(mask)]);
         end
     case 'uniform' 
         kappa = 1;

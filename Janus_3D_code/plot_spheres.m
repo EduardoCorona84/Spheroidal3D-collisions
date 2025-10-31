@@ -1,66 +1,61 @@
-function plot_spheres(Ct, lims)
+function plot_spheres(Ct, r, lims,titleStr)
+if ~isa(Ct,'cell')
+    Ct = {Ct};
+end
+if ~exist('r','var')
+    r = ones(size(Ct{1},1),1);
+end
 if ~exist('lims', 'var') || isempty(lims)
-    lims = [-3 3 -3 3 -1 1];
+    R = computeMaxRad(Ct{1});
+    lims = [-2*R 2*R];
+end
+if ~exist('titleStr','var') || isempty(titleStr)
+    titleStr = ['Vesicle with ' num2str(size(Ct{1},1)) ' particles'];
 end
 %%
-set(0,'DefaultFigureWindowStyle','docked')
-fig = figure;
-axis(lims)
-grid on
-view(0,90)
-
-n3 = size(Ct{1},1);
-nt = numel(Ct);
-if ~exist('r','var')
-    r = ones(n3,1);
-end
-% F(nt) = struct('cdata',[],'colormap',[]);
-hold on 
-hndls = updateSurf(cell(n3,1), Ct, r, 1);
-hold off
-
-
-title('Simple Amphi');
-xlabel('X'); ylabel('Y'); zlabel('Z');
-
+fig = uifigure('Name', titleStr, 'Position', [100 100 700 500]);
+ax = uiaxes(fig, 'Position', [50 100 600 370]);
+xlim(ax,lims);
+ylim(ax, lims);
+zlim(ax, lims);
+xlabel(ax, 'X');
+ylabel(ax, 'Y');
+zlabel(ax, 'Z');
+title(ax, titleStr);
+view(ax, 45,45)
+grid(ax, 'on')
 % Add slider
-hSlider = uicontrol('Style', 'slider',...
-    'Min', 1, 'Max', nt, 'Value', 1,...
-    'Units', 'normalized',...
-    'Position', [0.2 0.02 0.6 0.05],...
-    'Callback', @(src, event) updateSurf(hndls, Ct, r, src.Value));
+sld = uislider(fig, ...
+    'Position', [100 50 500 3], ...
+    'MajorTicks', 10:10:numel(Ct), ...
+    "Limits",[1 numel(Ct)], ...
+    "Value",1);
+% Change the plots when the slider moves
+sld.ValueChangingFcn = @(src,event) updateSurf(ax, Ct, r, src.Value);
+% Initialize plot
+updateSurf(ax, Ct, r, 1)
 
-% Add a text label to display slider value
-uicontrol('Style', 'text', 'Units', 'normalized', ...
-    'Position', [0.82 0.02 0.1 0.05], ...
-    'String', 'ixTime = ');
+function updateSurf(ax, Ct, r, i)
+persistent Sx Sy Sz
+if isempty(Sx)
+    [Sx, Sy, Sz] = sphere(40);
 end
+% Clear old plots
+cla(ax);
 
-function hndls = updateSurf(hndls, Ct, r, i)
-    i = round(i);
-    n3 = numel(hndls);
-    [Sx, Sy, Sz]=sphere(40);
-    C = Ct{i};
-    for k=1:n3
-        Sx_=r(k)*Sx;
-        Sy_=r(k)*Sy;
-        Sz_=r(k)*Sz;
-        Sc_= C(k,:);
-        if i ==1 
-            hndls{k} = surf(Sx_+Sc_(1),Sy_+Sc_(2),Sz_+Sc_(3));
-        else 
-            hndls{k}.XData=Sx_+Sc_(1);
-            hndls{k}.YData=Sy_+Sc_(2);
-            hndls{k}.ZData=Sz_+Sc_(3);
-        end
-    end
+i = round(i);
+C = Ct{i};
+n3 = size(C,1);
+for k=1:n3
+    Sx_=r(k)*Sx;
+    Sy_=r(k)*Sy;
+    Sz_=r(k)*Sz;
+    Sc_= C(k,:);surf(ax, Sx_+Sc_(1),Sy_+Sc_(2),Sz_+Sc_(3));
+    hold(ax,'on')
 end
+hold(ax,'off')
+drawnow
 
-% 
-% %%
-% fig = figure();
-% axis([-3 3 -3 3 -1 1])
-% grid on
-% view(0,90)
-% movie(fig,F,2)
-
+function maxRad = computeMaxRad(C)
+n = size(C,1);
+maxRad = max(arrayfun(@(i) norm(C(i,:)), 1:n));

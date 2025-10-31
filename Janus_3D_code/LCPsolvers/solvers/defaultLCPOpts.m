@@ -55,12 +55,40 @@ end
 
 if ~isfield(opts, 'stepSize')
     opts.stepSize = struct('init', 'uniform',...
-        'eta', 'opt');
+        'kappa', [],...
+        'eta', []);
     switch lower(opts.solver)
         case 'bbpgd'
             opts.stepSize.kappa = 'bb1';
-        otherwise 
+            opts.stepSize.eta = 'uniform';
+        case 'proxquasinewton'
             opts.stepSize.kappa = 'uniform';
+            opts.stepSize.eta = 'opt';
+        case 'subspacemin'
+            opts.stepSize.kappa = 'uniform';
+            opts.stepSize.eta = 'opt';
+        case 'semismoothnewton'
+            opts.stepSize.init = 'uniform';
+            opts.stepSize.kappa = 'uniform';
+            opts.stepSize.eta = 'uniform';
+        otherwise
+            opts.stepSize.kappa = 'uniform';
+            opts.stepSize.eta = 'opt';
+    end
+    % For testing scripts, all the name of the algo 
+    if isfield(opts, 'name')
+        if contains(opts.name, 'kappa') && contains(opts.name, 'bb')
+            opts.stepSize.kappa = 'bb1';
+        elseif contains(opts.name, 'kappa = 1')
+            opts.stepSize.kappa = 'uniform';
+        elseif contains(opts.name, 'kappa^*')
+            opts.stepSize.kappa = 'opt';
+        end
+        if contains(opts.name, 'eta = 1')
+            opts.stepSize.eta = 'uniform';
+        elseif contains(opts.name, 'eta^*')
+            opts.stepSize.eta = 'opt';
+        end
     end
 end
 
@@ -121,7 +149,7 @@ if ~isfield(opts, 'subspaceMin')
         'innerStepSelection', 'pqn', ...
         'innerSolver','cvx', ...
         'orthoMethod','qr', ...
-        'kThresh', 1, ...
+        'kThresh', 0, ...
         'useOneStepIter', false ...
     );
 end

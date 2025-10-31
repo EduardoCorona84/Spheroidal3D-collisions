@@ -24,7 +24,7 @@ lambda - (double) mod lap parameter
 function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma)
 %% Default parameters
 if ~exist('p','var') || isempty(p)
-    p=8; 
+    p=2; 
 end
 if ~exist('lambda','var') || isempty(lambda)
     lambda=0.1;
@@ -33,7 +33,7 @@ if ~exist('rd','var') || isempty(rd)
     rd=1;
 end
 if ~exist('n','var') || isempty(n)
-    n=5;
+    n=2;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
     Cdst=2.3; 

@@ -11,8 +11,7 @@ if all(x0 == 0)
 else 
     Ax_k = opts.A(x_k);
 end
-s = [];
-y = [];
+s = []; y = [];
 [f_k, grad_k] = fg(x_k, Ax_k);
 k = 0;
 while true
@@ -25,18 +24,18 @@ while true
     k = k + 1;
     x_km1 = x_k; Ax_km1 = Ax_k; grad_km1 = grad_k;
     % Gradient descent direction
-    p = -grad_k;
+    q = -grad_k;
     % Select step size
-    kappa = stepSize(k, p, x_km1, Ax_km1,  opts, s, y); 
+    kappa = stepSize(k, q, x_km1, Ax_km1,  opts, s, y); 
     % Gradient Descent Step
-    x_k = x_km1 + kappa * p;
+    x_k = x_km1 + kappa * q;
     % Projection to positive orthant
     x_k = max(0, x_k);
     % Possibly a step length update after the projection
-    q = x_k - x_km1;
-    [eta, Aq] = stepSize(-1, q, x_km1, Ax_km1, opts);
-    Ax_k = Ax_km1 + eta*Aq;
-    x_k = x_km1 + eta*q;
+    p = x_k - x_km1;
+    [eta, Ap] = stepSize(-1, p, x_km1, Ax_km1, opts);
+    x_k = x_km1 + eta*p;
+    Ax_k = Ax_km1 + eta*Ap;
     % Increment the number of iterations
     [f_k, grad_k] = fg(x_k, Ax_k);
     s = x_k - x_km1;

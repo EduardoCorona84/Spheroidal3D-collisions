@@ -1,7 +1,7 @@
 ## Dependencies
 using PlotlyKaleido: restart as restart_kaleido
 restart_kaleido(plotly_version = "2.35.2", mathjax = true) 
-using Latexify, LaTeXStrings, PlotlyJS, LaTeXTabulars, Statistics
+using Latexify, LaTeXStrings, PlotlyJS, LaTeXTabulars, Statistics, Colors
 Latexify.set_default(fmt = "%.4g")
 using MAT: matread
 include("tableFormatter.jl")
@@ -12,7 +12,7 @@ abs_tol_kkt = 1e-8
 nMin = 100 
 nMax = 150
 fname = "randProblems_noStructure_updateStepSize_n_$(nMin)_$(nMax)"
-matdic = matread("/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/results_$(fname).mat")
+matdic = matread("/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/10.30.2025.results_randProblems_percentLarge_0.1_n_100_150.mat")
 _results = matdic["results"]
 mcGood = Int.(matdic["mcGood"])[:]
 algoNames = _results["name"]
@@ -34,8 +34,21 @@ for (ix, name) in enumerate(algoNames)
     end
 end
 ##
+PLOTLYJS_COLORS = [
+    colorant"#1f77b4",  # muted blue
+    colorant"#ff7f0e",  # safety orange
+    colorant"#2ca02c",  # cooked asparagus green
+    colorant"#d62728",  # brick red
+    colorant"#9467bd",  # muted purple
+    colorant"#8c564b",  # chestnut brown
+    colorant"#e377c2",  # raspberry yogurt pink
+    colorant"#7f7f7f",  # middle gray
+    colorant"#bcbd22",  # curry yellow-green
+    colorant"#17becf"   # blue-teal
+]
 trs = AbstractTrace[]
-for name in algoNames
+for (kk,name) in enumerate(algoNames)
+    println(name)
     metric = []
     for errHist in results[name]["errHist"]
         errHist[1,2] = Inf
@@ -47,6 +60,11 @@ for name in algoNames
                 metric, 
                 metricName == "matVec" ? errHist[ix,3] : ix
             )
+        else
+             push!(
+                metric, 
+                length(errHist[:,1]), 
+            )
         end
     end
     results[name][metricName] = metric
@@ -54,23 +72,18 @@ for name in algoNames
         prts = split(name, "\\kappa")
         name = "\$\\text{"*prts[1]*"}\\kappa"*prts[end]*"\$"
     end
+    println(name)
     push!(
         trs, 
         box(
             name=name,
-            x=metric
+            x=metric,
+            marker_color=PLOTLYJS_COLORS[kk]
         )
     )
 end
 problem_size_string = "\$n \\in [$(nMin),$(nMax))\$"
 num_problems = length(mcGood)
-save_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig"
-open(joinpath(save_dir, "$(fname)_caption.tex"), "w") do f
-    s = """
-    All the LCP's with a problem of size of $problem_size_string were ran by all algorithms. There were a total of $num_problems problems. The tolerance of 1E-6 was used for both the absolute and relative kkt condition.
-"""
-    write(f, s)
-end
 
 p = plot(
     trs,
@@ -97,13 +110,22 @@ p = plot(
         )]
     )
 )
-savefig(
+display(p)
+nothing
+##
+save_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig"
+# open(joinpath(save_dir, "$(fname)_caption.tex"), "w") do f
+#     s = """
+#     All the LCP's with a problem of size of $problem_size_string were ran by all algorithms. There were a total of $num_problems problems. The tolerance of 1E-6 was used for both the absolute and relative kkt condition.
+# """
+#     write(f, s)
+# end
+PlotlyJS.savefig(
     p,
     joinpath(save_dir, "$(fname)_boxPlot.pdf"),
     height=600,
     width=800
 )
-display(p)
 ##
 rows = Any[]
 push!(rows, ["", "Minimum", "Lower Quartile", "Median", "Upper Quartile", "Maximum"])

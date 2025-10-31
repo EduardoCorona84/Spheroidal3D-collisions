@@ -1,12 +1,13 @@
-function [C, init_dir] = init_vesicle(n, Cdst)
+function [C, init_dir] = init_vesicle(n, Cdst, plotFlag)
 if ~exist('n','var') || isempty(n)
-    n=100; 
+    n=1000; 
 end
 if ~exist('Cdst','var') || isempty(Cdst)
     Cdst=2.5;
 end
-
-plotFlag = true;
+if ~exist('plotFlag','var') || isempty(plotFlag)
+    plotFlag = true;
+end
 ratioOut = 2/3;
 nOut = round(n * ratioOut);
 nIn = n - nOut;
