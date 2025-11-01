@@ -26,7 +26,11 @@ params - parameter struct with fields such as:
         'DL_Stk_3D'   double layer, Stokes
         'dSL_Stk_3D'  normal derivative of single layer, Stokes
         'TSL_Stk_3D'  traction kernel of single layer, Stokes
-    Xv - 
+    Xv - (double 3*np*n3 x 3) duplicated list of points; seems to be only
+    used for Kernel_Eval/FMM
+    X - (double 3*np*n3 x 3) list of points; should be in the global frame
+    (i.e. the points are already rotated and in their respective centered
+    positions)
 V - (double n_c*N_deg x 1) array of density or densities
     should (probably) be formatted like
     [sig_x(p_1) ; sig_y(p_1) ; sig_z(p_1) ; sig_x(p_2) ; ...]
@@ -60,14 +64,15 @@ else
     rot = false;
 end
 
-%% TODO: redo this neighbor function
-%% In particular, need to do something more intelligently with params.neigh
-% See collision code for replacement, perhaps?
+% Handle neighbors
+% TODO: remove params.neigh, as it's just clutter
 if isfield(params,'neigh')
     neigh=params.neigh; % Neighbor list (cell(n3,1)) 
 else
     distC = get_distances_between_centers(C);  
-    neigh = cell(n3,1);  
+    neigh = cell(n3,1);
+
+    % Circumscribe a sphere around each body
     for i=1:n3
         max_radius_i = max(equ_radii(i), polar_radii(i));
         neigh{i} = find(distC(i,:)<max_radius_i*params.mdist); 
@@ -93,6 +98,28 @@ Xv = params.X;
 %% ACTUAL MATVEC
 if strcmp(V, 'Mat')
     error('Dense matrix requested; this is not implemented yet.');
+
+    % Start with Kernel Eval (correct for far-interactions)
+    % Then, replace self-to-self and self-to-near appropriately.
+    Y = Kernel_Eval(Xv,Xv,params); 
+
+    for body_ind=1:n3
+        % Indices for source particle
+        I_box = (1:Nb)+Nb*(body_ind-1);
+
+        % Number of neighbors for source particle (i.e. number of particles
+        % that are needed for near-evaluation).
+        num_ngh = length(neigh{body_ind});
+
+        % Build neighbor sphere index
+        neigh{body_ind} = reshape(neigh{body_ind},1,[]);         
+        I_nghv = repmat((1:Nb)',1,num_ngh)+Nb*(repmat(neigh{body_ind},Nb,1)-1);  
+        I_nghv = I_nghv(:);
+
+        equ_radius = equ_radii(body_ind);
+        polar_radius = polar_radii(body_ind);
+        body_shape_type = params.shape_type(body_ind);
+    end
 
     if ismember(params.shape_type, 'sphere')
         error('Dense matrix is not implemented for spheres and spheroids.');
@@ -125,11 +152,11 @@ elseif ~isempty(V) && isnumeric(V)
         %% Near-interaction
         % No matter what, we need to rotate the target spheres and spheroids to be in the local frame
         % of the current body.
-        if rot
-            target_pts = (target_pts - repmat(C(body_ind,:), size(target_pts,1), 1)) * MRot{body_ind}';
-            target_normals = target_normals * MRot{body_ind}';
+        if rot % It seems that the target points are already in the local frame. Is this a good idea?
+            target_pts = (target_pts - C(body_ind, :)) * MRot{body_ind};
+            target_normals = target_normals * MRot{body_ind};
         else
-            % translate to local frame (no rotation)
+            % Translate to local frame (no rotation)
             target_pts = (target_pts - repmat(C(body_ind,:), size(target_pts,1), 1));
         end
 
@@ -164,8 +191,80 @@ elseif ~isempty(V) && isnumeric(V)
                 end
             end
         elseif strcmp(body_shape_type, 'sphere')
-            error('not implemented.');
-            % Spherical harmonic routine assumes unit sphere...
+            if kerd==1
+                error('Scalar kernels on spheres not implemented here.');
+            end
+
+            % Map pot to kernel type (as in VSh_MatVec_RB2)
+            switch pot(1:3)
+                case 'SL_'
+                    pMat = 'SMat';
+                case 'SDL'
+                    pMat = 'SDMat';
+                case 'dSL'
+                    pMat = 'SpMat';
+                case 'TSL'
+                    pMat = 'TSMat';
+                case 'DL_'
+                    pMat = 'DMat';
+                case 'dDL'
+                    pMat = 'DpMat';
+                case 'TDL'
+                    pMat = 'TDMat';
+                otherwise
+                    error('Unsupported pot for spherical near-eval.');
+            end
+
+            % Rescale geometry to unit sphere for spectral near-eval
+            % target_pts are already translated (and rotated if rot) into the local frame
+            Xtrg = (1/equ_radius) * target_pts;
+
+            % Target normals in the local frame, duplicated per component
+            Nrtrg = params.nor(I_nghv,:);
+            if rot
+                Nrtrg = Nrtrg * MRot{body_ind};
+            end
+
+            % Spherical coordinates on unit sphere frame
+            [th, phi, rho] = cart2sph(Xtrg(:,1), Xtrg(:,2), Xtrg(:,3));
+            th(th<0) = th(th<0) + 2*pi;
+            phi = pi/2 - phi;
+
+            % Build vector SH coefficients for the source body's density
+            Vloc = V(I_box,:);
+            % Densities are assumed in the local body frame
+            Vh_loc = VshAna([Vloc(1:3:end,:); Vloc(2:3:end,:); Vloc(3:3:end,:)],'VW');
+
+            if num_ngh>1
+                slf = find(neigh{body_ind}==body_ind); 
+                indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+                Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
+
+                % Self term (evaluate at unit radius)
+                Ynear(Nb*(slf-1)+1:Nb*slf, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                % Off-diagonal neighbor terms at specified spherical coordinates and normals
+                if ~isempty(ind_off)
+                    Ynear(indv_off, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off,:));
+                end
+            else
+                Ynear = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+            end
+
+            if size(Ynear,2) > 1
+                Ynear = sum(Ynear, 2);
+            end
+
+            % Scale from unit sphere back to radius r
+            if strncmp(pot,'SL_',3)
+                rda = equ_radius; % SLP scales like r
+            elseif strncmp(pot,'dDL',3)
+                rda = 1/equ_radius; % dDL scales like 1/r
+            else
+                rda = 1;
+            end
+            Ynear = rda * Ynear;
         else
             error('Invalid body shape type; should be "sphere" or "prolate" or "oblate".');
         end
@@ -173,9 +272,11 @@ elseif ~isempty(V) && isnumeric(V)
         % Post-processing of Ynear
         if rot && kerd==3
             % Rotate back
-            Ynear = [Ynear(1:3:end,:);Ynear(2:3:end,:);Ynear(3:3:end,:)];  
-            Ynear = reshape(Ynear,[],3)*MRot{body_ind};       
-            Ynear = reshape(reshape(Ynear,[],3).',[],1); 
+            Ynear = [Ynear(1:3:end,:), Ynear(2:3:end,:), Ynear(3:3:end,:)];  
+            Ynear = Ynear*MRot{body_ind};       
+
+            % Go back to interleaved format
+            Ynear = reshape(reshape(Ynear,[],3).',[],1);
         end
 
         %% Far-interaction

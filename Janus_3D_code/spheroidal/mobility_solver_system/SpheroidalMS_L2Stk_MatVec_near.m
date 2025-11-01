@@ -25,7 +25,7 @@ Outputs
         [vx1; vy1; vz1; vx2; vy2; vz2; ...].
 %}
 
-%% Initialize source particle
+%% Initialize source particle in its local frame
 params_i = SpheroidalParameters();
 params_i.sigma = sigma_x; % Force p to update
 params_i.u0 = u0;

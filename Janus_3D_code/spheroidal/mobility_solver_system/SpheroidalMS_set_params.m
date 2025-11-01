@@ -130,7 +130,9 @@ end
 function surface = LOCAL_build_axisymmetric_shape(p, shape_type, equatorial_radius, polar_radius)
     switch shape_type
         case 'sphere'
-            error('not implemented');
+            % The matvec will scale back to a radius 1 sphere anyways, so 
+            % let's just build the desired sphere for consistency sake.
+            surface = SurfaceSph(equatorial_radius*shape_gallery(p,''));
         case 'prolate'
             [u0, a] = calculate_u0_and_a_from_radii(shape_type, equatorial_radius, polar_radius);
             surface = SurfaceSph(prolate_spheroid_shape(p, u0, a));
