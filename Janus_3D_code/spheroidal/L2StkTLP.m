@@ -68,14 +68,13 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
     end
 
     if ~ALTERNATE_TO_SPP_FLAG % S''
-        [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(pars, sigma_x, sigma_y, sigma_z, X_eval);
-    
         sigma = struct();
         sigma.x = sigma_x; sigma.y = sigma_y; sigma.z = sigma_z;
 
         % Handle y_j * \vec{\sigma} for j = 1,2,3.
         xyz_fields = {'x', 'y', 'z'};
         y_times_sig = struct();
+        y_times_sig_fine = struct();
         for j = 1:3 % Index for Xloc
             for k = 1:3 % Index for sigma
                 field_name = sprintf('%s%d', xyz_fields{k}, j); % 'x1', 'y2', etc.
@@ -99,10 +98,36 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
                 end
             end
         end
+
+        % fine_p = pars.p + 4;
+        % for i=1:ns
+        %     if ~pars.oblate(i)
+        %         Xloc = prolate_spheroid_shape(fine_p, pars.u0(i), pars.a(i));
+        %     else
+        %         Xloc = oblate_spheroid_shape(fine_p, pars.u0(i), pars.a(i));
+        %     end
+        % 
+        %     for j = 1:3
+        %         for k = 1:3
+        %             sig_field = xyz_fields{k};
+        %             sig_high_p = LOCAL_transfer_to_finer_grid(fine_p, pars.p, sigma.(sig_field)(:,:,i));
+        %             output_field = sprintf('%s%d', sig_field, j); % 'x1', 'y2', etc.
+        %             % y_times_sig.z3 means y3*sig_z
+        %             y_times_sig_fine.(output_field)(:,:,i) = sig_high_p .* Xloc(:,j);
+        %             y_times_sig.(output_field)(:,:,i) = LOCAL_transfer_to_coarser_grid(pars.p, fine_p, sig_high_p .* Xloc(:,j));
+        %         end
+        %     end
+        % end
         
+        [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(pars, sigma_x, sigma_y, sigma_z, X_eval);
         [graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x1, y_times_sig.y1, y_times_sig.z1, X_eval);
         [graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x2, y_times_sig.y2, y_times_sig.z2, X_eval);
         [graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI] = spheroidalgraddivSL(pars, y_times_sig.x3, y_times_sig.y3, y_times_sig.z3, X_eval);
+
+        % [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = LOCAL_Spp_finer_grid(pars, p, sigma_x, sigma_y, sigma_z, X_eval);
+        % [graddivSL_y1timessig_U, graddivSL_y1timessig_V, graddivSL_y1timessig_PHI] = LOCAL_Spp_finer_grid_with_high_p_density(pars, p, fine_p, y_times_sig_fine.x1, y_times_sig_fine.y1, y_times_sig_fine.z1, X_eval);
+        % [graddivSL_y2timessig_U, graddivSL_y2timessig_V, graddivSL_y2timessig_PHI] = LOCAL_Spp_finer_grid_with_high_p_density(pars, p, fine_p, y_times_sig_fine.x2, y_times_sig_fine.y2, y_times_sig_fine.z2, X_eval);
+        % [graddivSL_y3timessig_U, graddivSL_y3timessig_V, graddivSL_y3timessig_PHI] = LOCAL_Spp_finer_grid_with_high_p_density(pars, p, fine_p, y_times_sig_fine.x3, y_times_sig_fine.y3, y_times_sig_fine.z3, X_eval);
 
         % Now, need to handle the normal derivatives (this is necessary since the code for S''
         % is for the gradient, and not for the normal derivative).
@@ -236,7 +261,7 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
         Stk_x=cell(1,ns); Stk_y=Stk_x; Stk_z=Stk_x;
         for i=1:ns % Loop over each body
             Xloc_i=Xloc((i-1)*np+1:i*np,:);
-            n_dot_x = dot(X_loc{i}, nu_eval{i}, 2);
+            n_dot_x = dot(Xloc_i, nu_eval{i}, 2);
 
             SP_sum_term_x = nx_trg{i}.*SP_sigmax_X{i} + ny_trg{i}.*SP_sigmax_Y{i} + nz_trg{i}.*SP_sigmax_Z{i};
             SP_sum_term_y = nx_trg{i}.*SP_sigmay_X{i} + ny_trg{i}.*SP_sigmay_Y{i} + nz_trg{i}.*SP_sigmay_Z{i};
@@ -283,4 +308,53 @@ function [Stk_x, Stk_y, Stk_z] = L2StkTLP(X_eval, nu_eval, pars, sigma_x, sigma_
             Stk_z{i} = SP_sum_term_z + graddivSL_sum_term_Z - xnx_term_Z;
         end
     end
+end
+
+function [Spp_U, Spp_V, Spp_PHI] = LOCAL_Spp_finer_grid_with_high_p_density(params, coarse_p, fine_p, sigma_x_fine, sigma_y_fine, sigma_z_fine, X_eval)
+    X_eval = prolate_spheroid_shape(fine_p, params.u0, params.a);
+    [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(params, sigma_x_fine, sigma_y_fine, sigma_z_fine, X_eval);
+    Spp_U = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, graddivSL_sig_U);
+    Spp_V = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, graddivSL_sig_V);
+    Spp_PHI = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, graddivSL_sig_PHI);
+
+    Spp_U = {Spp_U}; Spp_V = {Spp_V}; Spp_PHI = {Spp_PHI};
+end
+
+function [Spp_U, Spp_V, Spp_PHI] = LOCAL_Spp_finer_grid(params, p, sigma_x, sigma_y, sigma_z, X_eval)
+    %{
+    Attempt to do S'' on a finer grid and then interpolate back to the
+    coarse grid.
+    %}
+    coarse_p = p;
+    fine_p = coarse_p + 4;
+    sigma_x_fine = LOCAL_transfer_to_finer_grid(fine_p, coarse_p, sigma_x);
+    sigma_y_fine = LOCAL_transfer_to_finer_grid(fine_p, coarse_p, sigma_y);
+    sigma_z_fine = LOCAL_transfer_to_finer_grid(fine_p, coarse_p, sigma_z);
+    X_eval = prolate_spheroid_shape(fine_p, params.u0, params.a);
+    [graddivSL_sig_U, graddivSL_sig_V, graddivSL_sig_PHI] = spheroidalgraddivSL(params, sigma_x_fine, sigma_y_fine, sigma_z_fine, X_eval);
+    Spp_U = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, graddivSL_sig_U);
+    Spp_V = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, graddivSL_sig_V);
+    Spp_PHI = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, graddivSL_sig_PHI);
+
+    % Format matching
+    Spp_U = {Spp_U}; Spp_V = {Spp_V}; Spp_PHI = {Spp_PHI};
+end
+
+function fine_grid_vec = LOCAL_transfer_to_finer_grid(fine_p, coarse_p, coarse_vec)
+    %{
+    Here, we assume that vec is defined on the spheroidal grid.
+    %}
+    coarse_sp = (coarse_p+1)^2;
+    fine_sp = (fine_p+1)^2;
+    coarse_shc = shAna(coarse_vec);
+    padded_shc = [coarse_shc ; zeros(fine_sp - coarse_sp, size(coarse_vec,2))];
+    fine_grid_vec = shSyn(padded_shc); 
+end
+
+function coarse_grid_vec = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, fine_vec)
+    coarse_sp = (coarse_p+1)^2;
+    fine_sp = (fine_p+1)^2;
+    fine_shc = shAna(fine_vec);
+    truncated_shc = fine_shc(1:(coarse_p + 1)^2,:);
+    coarse_grid_vec = shSyn(truncated_shc); 
 end

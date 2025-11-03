@@ -5,9 +5,12 @@ each layer potential (and also update the nullspace operator L_k).
 
 Inputs:
 Xt : discretization points of bodies at timestep t=i
+    probably not needed...
+    TODO: clean up this argument.
 Ct : centers of bodies at timestep t=i
 Mt : rotation matrices for each body at timestep t=i
 nrmW : norm of rotational velocity for each body
+    probably not needed; only used for RBS method
 Kernels : matvec matrices for operators
 Fparams : parameter struct associated with mobility problem
 timings : timings struct for mobility problem (for debugging)
