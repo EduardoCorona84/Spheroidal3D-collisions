@@ -4,7 +4,7 @@ addpath('../src/');
 addpath('../../utilities/');
 
 %create test matrices
-problem_size = 5000;
+problem_size = 500;
 matrices = construct_test_matrices(problem_size);
 
 %create noisy versions of a test matrix, we'll just use the linear50 for this.

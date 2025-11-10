@@ -7,15 +7,21 @@ function [converged, descent, opts, info] = check_convergence(k, f_k, f_km1, x_k
 
     converged = false;
     descent = true;
+    kkt =  min(grad_k, x_k);
+    kkt = 0.5 * dot(kkt, kkt);
     
     if k == 0
         %for now we will do nothing. If KKT/merit function is a good measure, we could use this here.
     else
         if k >= opts.outer.max_iter
             converged = true;
+        elseif kkt < opts.outer.solver_opts.tol_kkt
+            converged = true;
         else
+            %{
             if opts.inner.enabled == false
             %we are just checking convergence and updating info
+                %{
                 abs_error = norm(x_k - x_km1);
                 if abs_error < opts.outer.solver_opts.tol_abs
                     converged = true;
@@ -23,6 +29,7 @@ function [converged, descent, opts, info] = check_convergence(k, f_k, f_km1, x_k
                 elseif abs_error/norm(x_k) < opts.outer.solver_opts.tol_rel
                     converged = true;
                 end
+                %}
 
             elseif opts.inner.enabled == true
                 if eta > 0
@@ -45,7 +52,9 @@ function [converged, descent, opts, info] = check_convergence(k, f_k, f_km1, x_k
 
                     end
                 end
+            
             end
+            %}
         end
     end
 
@@ -55,6 +64,10 @@ function [converged, descent, opts, info] = check_convergence(k, f_k, f_km1, x_k
 
     if opts.outer.storeFuncs == true
         info.outer.funcHist(k+1) = f_k;
+    end
+
+    if opts.outer.storeKKT == true 
+        info.outer.kktHist(k+1) = kkt;
     end
 
     if converged == true

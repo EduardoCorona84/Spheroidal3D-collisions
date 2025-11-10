@@ -18,8 +18,10 @@ function method_comparisons(A, A_low, b)
     opts.inner.enabled = false;
     opts.outer.correction = false;
     opts.outer.storeFuncs = true;
+    opts.outer.storeKKT = true;
     opts.outer.solver_opts.tol_abs = 1e-16;
     opts.outer.solver_opts.tol_rel = 1e-16;
+    opts.outer.solver_opts.tol_kkt = 1e-16;
     opts.outer.solver_opts.A = @(x) A*x;
     opts.outer.solver_opts.b = b;
     opts.outer.max_iter = 100;
@@ -118,6 +120,7 @@ function method_comparisons(A, A_low, b)
     opts.inner.enabled = true;
     opts.outer.correction = true;
     opts.outer.storeFuncs = true;
+    opts.outer.storeKKT = true;
     opts.inner.solver_opts.adaptive.enabled = false;
     opts.inner.solver_opts.adaptive.descent_parameter = 1/500;
     opts.outer.correction_opts.direction = 'secant';
@@ -129,8 +132,9 @@ function method_comparisons(A, A_low, b)
     opts.outer.adaptive = 'none';
     %opts.outer.solver_opts.solver = 'bbpgd';
     %opts.inner.solver_opts.solver = 'bbpgd';
+    opts.outer.solver_opts.tol_rel = 1e-8;
     opts.outer.solver_opts.tol_abs = 1e-16;
-    opts.outer.solver_opts.tol_rel = 1e-16;
+    opts.outer.solver_opts.tol_kkt = 1e-8;
     opts.outer.solver_opts.A = @(x) A*x;
     opts.outer.solver_opts.b = b;
     opts.inner.solver_opts.gradient_mode = 'step';
@@ -150,6 +154,7 @@ function method_comparisons(A, A_low, b)
     opts.inner.enabled = true;
     opts.outer.correction = true;
     opts.outer.storeFuncs = true;
+    opts.outer.storeKKT = true;
     opts.inner.solver_opts.adaptive.enabled = true;
     opts.inner.solver_opts.adaptive.descent_parameter = 1;
     opts.outer.correction_opts.direction = 'secant';
@@ -163,6 +168,7 @@ function method_comparisons(A, A_low, b)
     %opts.inner.solver_opts.solver = 'bbpgd';
     opts.outer.solver_opts.tol_abs = 1e-16;
     opts.outer.solver_opts.tol_rel = 1e-16;
+    opts.outer.solver_opts.tol_kkt = 1e-8;
     opts.outer.solver_opts.A = @(x) A*x;
     opts.outer.solver_opts.b = b;
     opts.inner.solver_opts.gradient_mode = 'step';

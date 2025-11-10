@@ -39,7 +39,7 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
     end
 
     if ~isfield(opts.outer, 'max_iter')
-        opts.outer.max_iter = 100;
+        opts.outer.max_iter = 50;
     end
 
     if ~isfield(opts.outer, 'correction')
@@ -221,6 +221,10 @@ function [opts, info] = set_default_opts(opts, x0, fg, fg_low)
 
     if opts.outer.storeFuncs == true
         info.outer.funcHist = zeros(opts.outer.max_iter+1, 1);
+    end
+
+    if opts.outer.storeKKT == true
+        info.outer.kktHist = zeros(opts.outer.max_iter+1, 1);
     end
 
     %add in other outer info struct later
