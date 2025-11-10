@@ -20,6 +20,12 @@ s=[]; y=[]; z_k=[]; x_km1=[]; grad_km1=[];
 xhat_k = x_k;
 %% Start the subspace minimization
 k = 0;
+burnIn = opts.subspaceMin.kThresh;
+m = opts.max_iter;
+X = zeros(n, opts.max_iter);
+AX = zeros(n, opts.max_iter);
+Eta = cell(opts.max_iter,1);
+P = cell(opts.max_iter,1);
 while true
     [converged, info] = checkConvergence(k, f_k, x_k, ...
         grad_k, eta, info, opts, x_km1, grad_km1);
@@ -30,60 +36,52 @@ while true
     %% The next search direction should be a descent direction from where we currently are...
     k = k + 1;
     x_km1 = x_k; Ax_km1 = Ax_k; grad_km1 = grad_k; z_km1 = z_k;
-    if opts.subSpaceMin.useOneStepIter
+    if opts.subspaceMin.useOneStepIter
         x_km1 = xhat_k;
     end
-    %% Take one-step algorithm step
-    [x_k, eta, p, Ap] = oneStepAlgo(k, x_km1, Ax_km1, grad_km1, s, y, opts);
-    if k <= opts.subSpaceMin.kThresh
-        % burnIn
-        Ax_k = Ax_km1 + eta*Ap;
-        xprime = x_k;
-        Axprime = Ax_k;
-    else
+    %% Choose next step direction
+    [H, h0, U, V] = updateHk(k, s, y, opts);
+    % quasi-newton step direction
+    q = -H(grad_km1); 
+    % step size direction
+    kappa = stepSize(k, q, x_km1, Ax_km1, opts); % Should always be 1... 
+    y_k = x_km1 + kappa * q;
+    xhat_k = prox(y_k, h0, U, V, opts);
+    p = xhat_k - x_km1;
+    [~, Ap] = stepSize(-k, p, x_km1, Ax_km1, opts);
+    % if k <= 1
+    %     Eta_k = eta; 
+    %     P_k = p;
+    %     x_k = x_km1 + eta*p;
+    %     Ax_k = Ax_km1 + eta*Ap;
+    %     xprime = x_k;
+    %     Axprime = Ax_k;
+    % else
+        % if k - burnIn > m 
+        %     i = k-burnIn-m+1;
+        %     xprime = X(:, i);
+        %     Axprime = AX(:, i);
+        % end
         % Update subspace matrix
-        [P, AP] = updateSubSpace(k, p, Ap, opts);
+        [P_k, AP_k] = updateSubSpace(k, p, Ap, opts);
         % Solve subproblem 
-        z_old = [z_km1; eta];
-        z_k = solveSubProblem(k, xprime, Axprime, P, AP, z_old, opts);
+        Eta_k = solveSubProblem(k, xprime, Axprime, P_k, AP_k, opts);
         % update x1
-        x_k = xprime+P*z_k;
-        Ax_k = Axprime + AP*z_k;
-    end
+        x_k = xprime+P_k*Eta_k;
+        Ax_k = Axprime + AP_k*Eta_k;
+    % end
     %% Check for convergence
     [f_k, grad_k] = fg(x_k, Ax_k);
+    f_k
     s = x_k - x_km1;
     y = grad_k - grad_km1;
+    X(:,k) = x_k;
+    AX(:,k) = Ax_k;
+    Eta{k} = Eta_k;
+    P{k} = P_k;
 end
 
 end % subspaceMin
-
-function [x_k, eta, p, Ap] = oneStepAlgo(k, x_km1, Ax_km1, grad_km1, s, y, opts)
-innerStep = lower(opts.subSpaceMin.innerStepSelection);
-switch innerStep
-    case 'pgd'
-        q = -grad_km1; % use gradient descent?
-        [kappa, ~] = stepSize(k, q, x_km1, Ax_km1, opts, s, y);
-        x_k = x_km1 + kappa * q;
-        % Projection to positive orthant
-        x_k = max(0, x_k);
-    case 'pqn'
-        [H, h0, U, V] = updateHk(k, s, y, opts);
-        % quasi-newton step direction
-        q = -H(grad_km1);
-        % step size direction
-        kappa = stepSize(k, q, x_km1, Ax_km1, opts);
-        x_k = x_km1 + kappa * q;
-        x_k = prox(x_k, h0, U, V, opts);
-    otherwise
-        error([innerStep ' not implemented'])
-end
-% Possibly a step length update after the projection
-p = x_k - x_km1;
-p = p / norm(p);
-[eta, Ap] = stepSize(-1, p, x_km1, Ax_km1, opts);
-x_k = x_km1 + eta*p; 
-end % oneStepAlgo
 
 function [H, h0, U, V] = updateHk(k, s, y_k, opts)
 switch lower(opts.qnUpdate)
@@ -127,54 +125,51 @@ if ~exist('k','var')
     APk = [];
     return 
 end
-k = k - opts.subSpaceMin.kThresh;
+n = numel(p);
+m = opts.max_iter;
+burnIn = opts.subspaceMin.kThresh;
+i = min(m, k - burnIn);
 if isempty(P) || isempty(AP)
     assert(k <= 2, 'This should only happen on the first iteration');
-    n = length(p);
-    P = zeros(n,n);
-    AP = zeros(n,n);
+    P = zeros(n,m);
+    AP = zeros(n,m);
+elseif k-burnIn > m
+    P = [P(:, 2:m) zeros(n,1)];
+    AP = [AP(:, 2:m) zeros(n,1)];
 end
-orthoMethod = lower(opts.subSpaceMin.orthoMethod);
-switch orthoMethod
-case 'cgs'
-    % Make orthogonal to all other vectors in the subspace (build orthonormal P)
-    % Here we are using graham-schmidt, which may be UNSTABLE, so we should update this later...
-    p = p / norm(p);
-    for j = 1:k-1
-        pj = P(:,j);
-        p = p - dot(pj, p) / dot(pj,pj) * pj; 
-        p = p / norm(p);
-    end
-    P(:,k) = p;
-    AP(:,k) = Ap;
-    %% Form inner optimization problem 
-    Pk = P(:,1:k);
-    APk = AP(:,1:k);
-case 'qr'
-    P(:,k) = p;
-    AP(:,k) = Ap;
-    [Pk,R] = qr(P(:,1:k),0);%'econ');
-    APk = AP(:,1:k) / R;
+P(:,i) = p;
+AP(:,i) = Ap;
+[Pk,R] = qr(P(:,1:i),0);%'econ');
+APk = AP(:,1:i) / R;
+
+B = Pk'*APk; 
+Bt = B';
+if norm(B-Bt) / norm(B) > 1e-6 || cond(B) > 1e12 || any(isnan(B(:)))
+    warning('We are losing condition of the problem.')
+    APk = opts.AA*Pk;
 end
-
-
-% B = Pk'*APk; 
-% Bt = B';
-% if norm(B-Bt) / norm(B) > 1e-6
-%     warning('We are losing condition of the problem.')
-%     APk = opts.AA*Pk;
-% end
 
 end
 
-function z = solveSubProblem(k, xprime, Axprime, P, AP, z_old, opts)
-k = k - opts.subSpaceMin.kThresh;
+function z = solveSubProblem(k, xprime, Axprime, P, AP, opts)
+k = k - opts.subspaceMin.kThresh;
 if k == 1 
-    % The one dimentional optimal solution is found by the linesearch algo
-    z = z_old;
+    % The one dimentional optimal solution
+    x = xprime;
+    b = opts.b;
+    p = P;
+    Ax = Axprime;
+    Ap = AP;
+    z_unc = -(dot(p, Ax+b)) / dot(p, Ap);
+    if z_unc < 0
+        mask = p > 0;
+    else 
+        mask = p < 0;
+    end
+    z = min([z_unc; - x(mask) ./ p(mask)]);
     return 
 end
-innersolvername = lower(opts.subSpaceMin.innerSolver);
+innersolvername = lower(opts.subspaceMin.innerSolver);
 b = opts.b;
 switch innersolvername
     case 'cvx'
@@ -288,22 +283,26 @@ e = norm(u_k-u_km1) / max(norm(u_k) , norm(u_km1));
 u_km1 = u_k;
 end % rel_iter
 
-function z = solveSubProblemCVX(xprime, Axprime, P, AP, b, debug) %#ok<STOUT>
+function eta = solveSubProblemCVX(xprime, Axprime, P, AP, b, debug) %#ok<STOUT>
 if ~exist('debug','var') || isempty(debug)
     debug = false;
 end
-B = P'*AP; 
-B = 0.5*(B+B');
-c = P'*(b + Axprime); 
-d = -xprime;
+D = P'*AP; 
+D = 0.5*(D+D'); %#ok<NASGU>
+d = P'*(b + Axprime); 
 k = size(P, 2); %#ok<NASGU>
+if cond(D) > 1e12
+    warning('Conditioning of D is bad')
+elseif cond(P) > 1e12 
+    warning('Conditioning of P is bad')
+end
 cvx_begin quiet
     % cvx_precision best
-    variable z(k)
+    variable eta(k)
     dual variable u
-    minimize dot(0.5*B*z + c, z)
+    minimize dot(0.5*D*eta + d, eta)
     subject to 
-    u : d <= P*z  %#ok<NODEF,NOPRT>
+    u : 0 <= P*eta + xprime  %#ok<NODEF,NOPRT>
 cvx_end 
 
 if debug
@@ -338,6 +337,6 @@ end
 end % solveSubProblemCVX
 
 function checkOpts(opts)
-    assert(isfield(opts, 'subSpaceMin'), 'Necessary to have specification for the subSpaceMin algo')
-    assert(isfield(opts.subSpaceMin, 'innerSolver'), 'Necessary to have specify for the innerSolver')
+    % assert(isfield(opts, 'subspaceMin'), 'Necessary to have specification for the subspaceMin algo')
+    % assert(isfield(opts.subspaceMin, 'innerSolver'), 'Necessary to have specify for the innerSolver')
 end

@@ -69,5 +69,9 @@ if strcmp(Fparams.tdisc,'abash')
    end 
 end
 
+if ~ isfield(Fparams, 'loadIntermediate')
+    Fparams.loadIntermediate = false;
+end
+
 end
 

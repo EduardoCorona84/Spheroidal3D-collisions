@@ -1,50 +1,51 @@
-function [x, info] = zeroSr1_nic(fcnGrad, x0, opts)
+function [x, info] = zeroSr1_nic(fg, x0, opts)
 [opts, info] = defaultLCPOpts(opts, x0);
 checkOpts(opts)
 n = numel(x0);
 eta = 1;
 x_k = x0;
-x_km1 = NaN*ones(n,1);
-grad_km1 = NaN*ones(n,1);
-Ax_km1 = [];
-Aq = [];
+if all(x0 == 0)
+    Ax_k = zeros(n,1);
+else 
+    Ax_k = opts.A(x_k);
+end
+s = []; y = [];
 k = 0;
+[f_k, grad_k] = fg(x_k, Ax_k);
 while true
-    [f_k, grad_k, Ax_k] = fcnGrad(x_k, Ax_km1, Aq, eta);
     [converged, info] = checkConvergence(k, f_k, x_k, ...
         grad_k, eta, info, opts);
     if converged
         x = x_k;
         break
     end
-    
-    s_k = x_k - x_km1;
-    y_k = grad_k - grad_km1;
-    x_km1 = x_k;
-    grad_km1 = grad_k;
-    Ax_km1 = Ax_k;
-    [h0, u, sigma, opts] = updateHk(k, s_k, y_k, opts);
+    k = k + 1;
+    x_km1 = x_k; Ax_km1 = Ax_k; grad_km1 = grad_k;
+    [h0, u, sigma, opts] = updateHk(s, y, opts);
     % quasi-newton step direction
-    p = - h0 * grad_km1;
+    q = - h0 * grad_km1;
     if ~isempty(u)
-        p = p - u * dot(u, grad_k);
+        q = q - u * dot(u, grad_k);
     end
     % step size direction
-    kappa = stepSize(k, p, x_km1, Ax_km1, opts); 
-    x_k = prox(x_km1 + kappa * p, h0, u, sigma, opts);
+    kappa = stepSize(k, q, x_km1, Ax_km1, opts); 
+    x_k = prox(x_km1 + kappa * q, h0, u, sigma, opts);
     % Possibly a step length update after the projection
-    q = x_k - x_km1;
-    [eta, Aq] = stepSize(-1, q, x_km1, Ax_km1, opts);
-    x_k = x_km1 + eta*q;
+    p = x_k - x_km1;
+    [eta, Ap] = stepSize(-1, p, x_km1, Ax_km1, opts);
+    x_k = x_km1 + eta*p;
+    Ax_k = Ax_km1 + eta*Ap;
     % Increment the number of iterations
-    k = k + 1;
+    [f_k, grad_k] = fg(x_k, Ax_k);
+    s = x_k - x_km1;
+    y = grad_k - grad_km1;
 end
 
 end % sr1_custom
 
-function [h0, u, sigma, opts] = updateHk(k, s, y, opts)
+function [h0, u, sigma, opts] = updateHk(s, y, opts)
 
-if k == 0
+if isempty(s) || isempty(y)
     h0 = 1;
     u = [];
     sigma = NaN; 
