@@ -581,10 +581,13 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         
         if ~isempty(mu_c)
             %Update sigma, mu, U and VW
+            %probably need to add logic here for rotations
             mu = mu + mu_c; 
             sigma = sigma + rho_c; 
             U = Lapp(Kernels.SD,(mu+sigma)); 
             
+            % need to figure out whats happening here
+
             CU  = Nullsp.C*U; 
             IU  = CU(vind); 
             WxI = CU(wind); 
@@ -682,16 +685,12 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fpa
 
     % Compute vectors and normal vectors for pairs
     %this is under the assumption that we have spheres. This will need to be modified for spheroids
-    
 
-    R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3
-    NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 
-    Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj|
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Build A
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    F = zeros(6*n3,numF+numFS); 
+    F = zeros(6*n3,numF); 
     %I'm not sure what numFS is for. This looks like its constructing the "D" matrix from my notes. 
 
     %We also probably need the "quaternion matrix", the matrix that converts the angular velocity to the time derivative of the configuration. In spherical case this is just the identity, but we will have more than this.
@@ -739,8 +738,22 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fpa
     %By default, things are stored as rotation matrices. Rotation matrices can be stored as a vector, but I'm not sure what the "interfacing" matrix/operator would be from a vectorized rotation matrix to the angular velocity.
     %Because I have already done all of this with quaternions, I think I am going to just convert to quaternions for now and in the future we can explore alternative approaches.
 
+    %convert to quaternions
+    %{
+    %This is a bit wasteful, but it will work for now.
+    quats = zeros(4*numF, 1);
+    for i = 1:numF
+        quats(4*(i-1)+1) = rotation2quaternion(Mt{i});
+    end
 
-    %I'm not sure what this is doing 
+    %Now we will construct the G matrix (the composition of all the Psis and Identity)
+    G = zeros(7*(numF + 1), 6*(numF + 1));
+    for i = 1:numF
+        G(7*(i - 1) + 1:7*(i - 1) + 3, 6*(i - 1) + 1:6*(i - 1) + 3) = eye(3);
+        G(7*(i - 1) + 4:7*(i - 1) + 7, 6*(i - 1) + 4:6*(i - 1) + 6) = construct_pglobal_psi(quaternionConfiguration(7*(i - 1) + 4:7*(i - 1) + 7));
+    end
+    %}
+    %I'm not sure what this is doing
     %{
     for k=numF+1:numF+numFS
     indi = (1:3)+6*(ipsh(k-numF)-1);
@@ -848,13 +861,14 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fpa
         % Contact forces / torques
         F_c = F*lam; 
         % Obtain rho and mu densities
+        % Need help here to figure this out
         [mu_c,rho_c] = Lapp_ctmat(TD,SD,Lk,Bk.',[],F_c,parslv);
     else
         mu_c=[]; rho_c=[]; F_c=[];  
     end
 end
 
-function [colevent,collist, dt,Ctp, closest_points_1, closest_points_2,] = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt)
+function [colevent,collist, dt,Ctp, closest_points_1, closest_points_2] = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt)
     %{
     
     Inputs
@@ -985,7 +999,7 @@ function [colevent,collist,mindst,Xip,Xjp]=LOCAL_check_collision(collist,eps,C,X
     end
 
     %now we determine which distances are less than the epsilon buffer
-    indices = distances < %some sort of criteria, probably need spheroid specific
+    indices = distances < eps*10;%some sort of criteria, probably need spheroid specific
     collist = collist(indices, :);
     colevent = ~isempty(collist);
     mindst = min(distances);
@@ -1118,4 +1132,68 @@ function M = RotationMat(wh,t)
         wh(1)*wh(2)*(1-cos(t))+wh(3)*sin(t),1-(wh(1)^2+wh(3)^2)*(1-cos(t)),wh(2)*wh(3)*(1-cos(t))-wh(1)*sin(t);...
         wh(1)*wh(3)*(1-cos(t))-wh(2)*sin(t),wh(2)*wh(3)*(1-cos(t))+wh(1)*sin(t),1-(wh(2)^2+wh(1)^2)*(1-cos(t))
     ];
+end
+
+function q = rotation2quaternion(R)
+    % Convert rotation matrix to unit quaternion
+    % Given by Gemini, I need to verify this
+
+    % numerical stability purposes
+    
+    v_w = 1 + trace(R);
+    v_x = 1 + R(1,1) - R(2,2) - R(3,3);
+    v_y = 1 - R(1,1) + R(2,2) - R(3,3);
+    v_z = 1 - R(1,1) - R(2,2) + R(3,3);
+
+    [~, max_index] = max([v_w, v_x, v_y, v_z]);
+    switch max_index
+        case 1
+            qw = 0.5 * sqrt(v_w);
+            qx = (R(3,2) - R(2,3)) / (4 * qw);
+            qy = (R(1,3) - R(3,1)) / (4 * qw);
+            qz = (R(2,1) - R(1,2)) / (4 * qw);
+        case 2
+            qx = 0.5 * sqrt(v_x);
+            qw = (R(3,2) - R(2,3)) / (4 * qx);
+            qy = (R(1,2) + R(2,1)) / (4 * qx);
+            qz = (R(1,3) + R(3,1)) / (4 * qx);
+        case 3
+            qy = 0.5 * sqrt(v_y);
+            qw = (R(1,3) - R(3,1)) / (4 * qy);
+            qx = (R(1,2) + R(2,1)) / (4 * qy);
+            qz = (R(2,3) + R(3,2)) / (4 * qy);
+        case 4
+            qz = 0.5 * sqrt(v_z);  
+            qw = (R(2,1) - R(1,2)) / (4 * qz);
+            qx = (R(1,3) + R(3,1)) / (4 * qz);
+            qy = (R(2,3) + R(3,2)) / (4 * qz);
+    end
+    q = [qw; qx; qy; qz];
+end
+
+function R = quaternion2rotation(q)
+    % Convert unit quaternion to rotation matrix
+    % Given by Gemini, I need to verify this
+
+    qw = q(1);
+    qx = q(2);
+    qy = q(3);
+    qz = q(4);
+
+    R = [
+        1 - 2*(qy^2 + qz^2), 2*(qx*qy - qw*qz), 2*(qx*qz + qw*qy);
+        2*(qx*qy + qw*qz), 1 - 2*(qx^2 + qz^2), 2*(qy*qz - qw*qx);
+        2*(qx*qz - qw*qy), 2*(qy*qz + qw*qx), 1 - 2*(qx^2 + qy^2)
+    ];
+end
+
+function psi = construct_global_psi(q)
+    % This constructs the psi matrix that interfaces between angular velocity and derivative of the rotational configuration in quaternion form
+    % This assumes angular velocity is given in global frame.
+    P = [0 -q(4) q(3);
+         q(4) 0 -q(2);
+         -q(3) q(2) 0];
+
+    psi = (1/2).*[-q(2:4).' ; 
+                  q(1).*eye(3) - P];
 end
