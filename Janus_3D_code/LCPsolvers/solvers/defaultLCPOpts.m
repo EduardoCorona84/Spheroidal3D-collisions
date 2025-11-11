@@ -60,14 +60,10 @@ if ~isfield(opts, 'stepSize')
     switch lower(opts.solver)
         case 'bbpgd'
             opts.stepSize.kappa = 'bb1';
-<<<<<<< HEAD
         case 'apgd'
             opts.stepSize.kappa = 'bb1';
-        otherwise 
-=======
             opts.stepSize.eta = 'uniform';
         case 'proxquasinewton'
->>>>>>> origin/njr
             opts.stepSize.kappa = 'uniform';
             opts.stepSize.eta = 'opt';
         case 'subspacemin'
