@@ -18,80 +18,8 @@ tolHi = tols(kHi);
 AHi = A{i,jHi, kHi};
 AHi = (AHi + AHi') /2;
 dtHi = dt{i, jHi, kHi};
-%% Timings pLot
-% figure()
-% f1 = figure;
-% for j = 1:numP
-%     for k = 1:numTol
-%         subpLot(numP, numTol, numTol*(j-1) + k);
-%         edges = 10.^(-6:.5:3);
-%         [counts,edges] = Histcounts(dt{i,j,k},edges);
-%         g = Histogram('BinEdges',edges,'BinCounts',counts);
-%         set(gca, "Xscale", "Log")
-%         xticks(edges)
-%         title({ ...
-%             sprintf('p = %d, tol = %.0e', ps(j), tols(k)), ...
-%             sprintf('mean = %.3f',mean(dt{i,j,k})),...
-%             sprintf('std = %.3f', std(dt{i,j,k}))}...
-%         );
-%     end
-% end
-% name = split(srcFile,'_');
-% name = join(name,'\_');
-% name = name{1};
-% sgtitle({sprintf('Run Time for mc=%d', i),name})
-% set(f1, 'Position',  [0, 0, 1000, 1200])
-% timingFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_runTime.png']);
-% disp(['Saving to ' timingFile])
-% saveas(f1, timingFile);
-%% Relative Error 
-% relErr = zeros(numP, numTol);
-% preCond = zeros(numP, numTol);
-% timePerHi = zeros(numP, numTol);
-% 
-% for jLo = 1:numP
-%     for kLo = 1:numTol
-%         ALo = A{i,jLo, kLo};
-%         ALo = (ALo + ALo') /2;
-%         sqrtALoinv = inv(sqrtm(ALo));
-%         relErr(jLo, kLo) = norm(AHi-ALo) / norm(AHi);
-%         preCond(jLo, kLo) = cond(sqrtALoinv*AHi*sqrtALoinv);
-%         timePerHi(jLo, kLo) = mean(dt{i,jHi,kHi}) / mean(dt{i,jLo,kLo});
-%     end
-% end
-% name = split(srcFile,'_');
-% name = join(name,'\_');
-% name = name{1};
-% 
-% f2 = figure;
-% subpLot(1,1,1)
-% heatmap(ps, tols, relErr', 'CoLorLimits', [0 1e2])
-% sgtitle(sprintf('Relative Error for mc=%d', i) )
-% title(name)
-% set(f2, 'Position',  [0, 0, 1000, 1200])
-% relErrFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_relErr.png']);
-% disp(['Saving to ' relErrFile])
-% saveas(f2, relErrFile);
-% 
-% f3 = figure;
-% subpLot(1,1,1)
-% heatmap(ps, tols, preCond', 'CoLorLimits', [1 1e2])
-% sgtitle(['Condition  Number of $\hat{A}^{-1/2}A\hat{A}^{-1/2}$ for ' sprintf('mc=%d', i)], 'Interpreter', 'latex');
-% title(name)
-% set(f3, 'Position',  [0, 0, 1000, 1200])
-% timePerHiFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_preCond.png']);
-% disp(['Saving to ' timePerHiFile])
-% saveas(f3, timePerHiFile);
-% 
-% f4 = figure;
-% subpLot(1,1,1)
-% heatmap(ps, tols, timePerHi', 'CoLorLimits', [1 1e2])
-% sgtitle(['Time to apply $\hat{A}$ vs $A$ for ' sprintf('mc=%d', i)], 'Interpreter', 'latex');
-% title(name)
-% set(f4, 'Position',  [0, 0, 1000, 1200])
-% timePerHiFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_timePerHi.png']);
-% disp(['Saving to ' timePerHiFile])
-% saveas(f4, timePerHiFile);
+%%
+plotDenseMats
 %% Lo-Fidelity
 jLo = 1;
 [~,kLo]= max(res_.tols);

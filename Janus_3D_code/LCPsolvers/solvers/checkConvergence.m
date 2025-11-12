@@ -10,14 +10,14 @@ if exist('x_km1_','var') && ~isempty(x_km1_)
 end
 if exist('grad_km1_','var') && ~isempty(grad_km1_)
     phi = min(grad_km1_,x_km1);
-    old_kkt = 0.5*dot(phi, phi);
+    old_kkt = dot(phi, phi);
 end
 % Check for convergence
 converged = false;
 %% kkt conditions / LCP being satisified is equivalent to
 % the grad_k(i) = 0 \perp x_k(i) = 0 (for symetric A)
 phi = min(grad_k,x_k);
-kkt = 0.5*dot(phi, phi);
+kkt = dot(phi, phi);
 %% If the sequence is a cauchy sequence we are converging.
 iterErr = Inf;
 if k > 0
