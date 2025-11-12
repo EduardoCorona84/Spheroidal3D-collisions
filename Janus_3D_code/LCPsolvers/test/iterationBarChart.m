@@ -5,12 +5,14 @@ metric = 'iters';
 hold on
 edges = [1:1:14 15:5:50, opts.max_iter];
 Ns = [];
-MC = length(results(1).iters);
-for i = 1:length(results)
+MC = size(results,1);
+numAlgo = size(results,2);
+for ixAlgo = 1:numAlgo
     iters = zeros(MC,1);
     matVecs = zeros(MC,1);
-    for mc = mcGood
-        errHist = results(i).errHist{mc};
+    for mcIx = 1:numel(mcGood)
+        mc = mcGood(mcIx);
+        errHist = results(mc,ixAlgo).errHist;
         errHist(1,2) = NaN;
         try
             iters(mc) = find(errHist(:,1) < abs_kkt | ...
@@ -40,6 +42,6 @@ title('Comparing LCP Solvers')
 subtitle(['n \in [' num2str(minSz) ',' num2str(maxSz) '], reltol_{kkt} = ' num2str(rel_kkt) ', abstol_{kkt} = ' num2str(abs_kkt)] )
 xticks(1:length(edges))
 xticklabels([string(edges(1:14)), (string(edges(15:end-1)) + "-" +string(edges(16:end)))])
-legend({results.name})
+legend({results(mcGood(1),:).name})
 fname = ['barChart_' xaxis_name '_n_' num2str(minSz) '_' num2str(maxSz)];
 saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig/' fname '.pdf'])

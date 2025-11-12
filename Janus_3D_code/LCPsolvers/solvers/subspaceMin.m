@@ -1,11 +1,15 @@
-function [x, info] = subspaceMin(fg, x0, opts)
+function [x, info] = subspaceMin(fg, x0, opts, debug)
+if ~exist('debug','var') || isempty(debug)
+    debug = false;
+end
 [opts, info] = defaultLCPOpts(opts, x0);
 % Check that options are set properly for this solver
 checkOpts(opts);
 % Reset memory to blank
-updateSubSpace(); 
+updateSubSpace([],[],opts); 
 %% Do one step of Projected Gradient Descent to Get things going
 x_k = x0;
+n = numel(x0);
 if all(x0 == 0)
     n = numel(x0);
     Ax_k = zeros(n,1);
@@ -16,17 +20,15 @@ end
 xprime = x0;
 Axprime = Ax_k;
 eta = 1;
-s=[]; y=[]; z_k=[]; x_km1=[]; grad_km1=[];
-xhat_k = x_k;
+s=[]; y=[]; x_km1=[]; grad_km1=[];
 %% Start the subspace minimization
 k = 0;
-burnIn = opts.subspaceMin.kThresh;
-m = opts.max_iter;
-X = zeros(n, opts.max_iter);
-AX = zeros(n, opts.max_iter);
-Eta = cell(opts.max_iter,1);
-P = cell(opts.max_iter,1);
+X = zeros(opts.n, opts.subspaceMin.m);
+AX = zeros(opts.n, opts.subspaceMin.m);
 while true
+    if debug 
+        fprintf('f_k = %.4g', f_k);
+    end
     [converged, info] = checkConvergence(k, f_k, x_k, ...
         grad_k, eta, info, opts, x_km1, grad_km1);
     if converged
@@ -35,111 +37,62 @@ while true
     end
     %% The next search direction should be a descent direction from where we currently are...
     k = k + 1;
-    x_km1 = x_k; Ax_km1 = Ax_k; grad_km1 = grad_k; z_km1 = z_k;
-    if opts.subspaceMin.useOneStepIter
-        x_km1 = xhat_k;
-    end
+    x_km1 = x_k; Ax_km1 = Ax_k; f_km1 = f_k; grad_km1 = grad_k; 
     %% Choose next step direction
-    [H, h0, U, V] = updateHk(k, s, y, opts);
-    % quasi-newton step direction
-    q = -H(grad_km1); 
-    % step size direction
-    kappa = stepSize(k, q, x_km1, Ax_km1, opts); % Should always be 1... 
-    y_k = x_km1 + kappa * q;
-    xhat_k = prox(y_k, h0, U, V, opts);
-    p = xhat_k - x_km1;
-    [~, Ap] = stepSize(-k, p, x_km1, Ax_km1, opts);
-    % if k <= 1
-    %     Eta_k = eta; 
-    %     P_k = p;
-    %     x_k = x_km1 + eta*p;
-    %     Ax_k = Ax_km1 + eta*Ap;
-    %     xprime = x_k;
-    %     Axprime = Ax_k;
-    % else
-        % if k - burnIn > m 
-        %     i = k-burnIn-m+1;
-        %     xprime = X(:, i);
-        %     Axprime = AX(:, i);
-        % end
-        % Update subspace matrix
-        [P_k, AP_k] = updateSubSpace(k, p, Ap, opts);
+    [H, opts] = updateHk(s, y, opts);
+    % Define this step 
+    q = -H(grad_km1);
+    prox_k = @(xtilde) prox(xtilde, opts);
+    step_k = @(t, opts) fwdBwdstep(t, x_km1, Ax_km1, q, prox_k, fg, opts);
+    % Linesearch 
+    [x_k, Ax_k, ~, ~, eta, p, Ap] = linesearch(x_km1, Ax_km1, f_km1, grad_km1, ...
+        step_k, opts);
+    [P_k, AP_k] = updateSubSpace(p, Ap, opts);
+    i = size(P_k,2);
+    if k > opts.subspaceMin.m
+        xprime = X(:,1);
+        Axprime = AX(:,1);
+        X(:,1:end-1) = X(:,2:end);
+        AX(:,1:end-1) = AX(:,2:end);
+    end
+    if k > 1 
         % Solve subproblem 
-        Eta_k = solveSubProblem(k, xprime, Axprime, P_k, AP_k, opts);
-        % update x1
-        x_k = xprime+P_k*Eta_k;
-        Ax_k = Axprime + AP_k*Eta_k;
-    % end
+        eta = solveSubProblem(k, xprime, Axprime, P_k, AP_k, opts);
+        x_k = xprime+P_k*eta;
+        Ax_k = Axprime + AP_k*eta;
+    end
     %% Check for convergence
     [f_k, grad_k] = fg(x_k, Ax_k);
-    f_k
     s = x_k - x_km1;
     y = grad_k - grad_km1;
-    X(:,k) = x_k;
-    AX(:,k) = Ax_k;
-    Eta{k} = Eta_k;
-    P{k} = P_k;
+    X(:,i) = x_k;
+    AX(:,i) = Ax_k;
 end
 
 end % subspaceMin
 
-function [H, h0, U, V] = updateHk(k, s, y_k, opts)
-switch lower(opts.qnUpdate)
-    case 'bfgs'
-        [H, h0, U, V] = get_H_BFGS(k, s, y_k, opts);
-    % case 'sr1'
-        
-    otherwise
-        error([opts.qnUpdate ' update not implement'])
-end
-end % updateHk
-
-function xstar = prox(y, h0, U, V, opts)
-if isempty(U) && isempty(V)
-    % Project with respect to the identity
-    xstar = max(0, y);
-elseif size(U,2) + size(V,2) == 1
-    % The sign on sigma is counter intuitive, but remember B = B0 + UU' - VV'
-    if ~isempty(U)
-        sigma = -1;
-        w = U; 
-    else 
-        sigma = 1;
-        w = V;
-    end
-    xstar = prox_rank1(y, h0, w, sigma, opts);
-    return  
-else
-    xstar = prox_rankr(y, h0, U, V, opts);
-end
-end % prox
-
-function [Pk, APk] = updateSubSpace(k, p, Ap, opts)
+function [Pk, APk] = updateSubSpace(p, Ap, opts)
 persistent P AP 
-
-if ~exist('k','var') 
+Pk = [];
+APk = [];
+n = opts.n;
+m = opts.subspaceMin.m;
+if ~exist('p','var') || isempty(p)
     % reset memory
-    P = [];
-    AP = [];
-    Pk = [];
-    APk = [];
-    return 
-end
-n = numel(p);
-m = opts.max_iter;
-burnIn = opts.subspaceMin.kThresh;
-i = min(m, k - burnIn);
-if isempty(P) || isempty(AP)
-    assert(k <= 2, 'This should only happen on the first iteration');
     P = zeros(n,m);
     AP = zeros(n,m);
-elseif k-burnIn > m
-    P = [P(:, 2:m) zeros(n,1)];
-    AP = [AP(:, 2:m) zeros(n,1)];
+    return 
+end
+
+i = find(arrayfun(@(i) all(P(:,i) == 0), 1:m), 1, 'first');
+if isempty(i)
+    P(:, 1:m-1) = P(:,2:m);
+    AP(:,1:m-1) = AP(:,2:m);
+    i = m;
 end
 P(:,i) = p;
 AP(:,i) = Ap;
-[Pk,R] = qr(P(:,1:i),0);%'econ');
+[Pk,R] = qr(P(:,1:i),0); % 'econ' mode in new syntax
 APk = AP(:,1:i) / R;
 
 B = Pk'*APk; 
@@ -152,7 +105,6 @@ end
 end
 
 function z = solveSubProblem(k, xprime, Axprime, P, AP, opts)
-k = k - opts.subspaceMin.kThresh;
 if k == 1 
     % The one dimentional optimal solution
     x = xprime;
@@ -234,7 +186,6 @@ end
 % apply dual-primal map
 z = dualToPrimalMap(u);
 if debug
-    k = size(P,2); %#ok<NASGU>
     cvx_begin
         variable zCVX(k)
         dual variable w
@@ -283,60 +234,60 @@ e = norm(u_k-u_km1) / max(norm(u_k) , norm(u_km1));
 u_km1 = u_k;
 end % rel_iter
 
-function eta = solveSubProblemCVX(xprime, Axprime, P, AP, b, debug) %#ok<STOUT>
+function z = solveSubProblemCVX(xprime, Axprime, P, AP, b, debug) %#ok<STOUT>
 if ~exist('debug','var') || isempty(debug)
     debug = false;
 end
-D = P'*AP; 
-D = 0.5*(D+D'); %#ok<NASGU>
-d = P'*(b + Axprime); 
+B = P'*AP; 
+B = 0.5*(B+B'); 
+d = -xprime;
+c = P'*(b + Axprime); 
 k = size(P, 2); %#ok<NASGU>
-if cond(D) > 1e12
-    warning('Conditioning of D is bad')
+if cond(B) > 1e12
+    warning('Conditioning of B is bad')
 elseif cond(P) > 1e12 
     warning('Conditioning of P is bad')
 end
 cvx_begin quiet
     % cvx_precision best
-    variable eta(k)
+    variable z(k)
     dual variable u
-    minimize dot(0.5*D*eta + d, eta)
+    minimize dot(0.5*B*z + c, z)
     subject to 
-    u : 0 <= P*eta + xprime  %#ok<NODEF,NOPRT>
+    u : d <= P*z   %#ok<NODEF,NOPRT>
 cvx_end 
 
 if debug
     dualToPrimalMap = @(u) B \ (P'*u-c);
     disp('Checking the relErr of the dualToPrimalMap')
-    norm(dualToPrimalMap(w) - z) / norm(z) %#ok<NOPRT>
+    disp(norm(dualToPrimalMap(u) - z) / norm(z))
     n = numel(xprime); %#ok<NASGU>
     C = P*(B\P'); %#ok<NASGU>
     r = P*(B\c) + d; %#ok<NASGU>
-
-    cvx_begin
-        variable u(n)
-        minimize dot(0.5*C*u-r, u)
+    cvx_begin quiet
+        variable u1(n)
+        minimize dot(0.5*C*u1-r, u1)
         subject to
-        0 <= u  %#ok<NOPRT>
-    cvx_end
+        0 <= u1  %#ok<NOPRT>
+    cvx_end;
     primalLoss = @(z) dot(0.5*B*z + c, z);
     disp("primal loss via cvx solving the dual problem ")
-    primalLoss(dualToPrimalMap(u))
+    disp(primalLoss(dualToPrimalMap(u1)))
     disp("primal loss via cvx solving the primal problem ")
-    primalLoss(z)
-    if primalLoss(dualToPrimalMap(u)) < primalLoss(z)
+    disp(primalLoss(z))
+    if primalLoss(dualToPrimalMap(u1)) < primalLoss(z)
         disp("dual is better")
     else
         disp('primal is better')
     end
     disp('relPrimal Loss Gap')
-    abs( (primalLoss(dualToPrimalMap(u)) - primalLoss(dualToPrimalMap(w))) / primalLoss(z))
+    disp(abs( (primalLoss(dualToPrimalMap(u)) - primalLoss(dualToPrimalMap(u1))) / primalLoss(z)))
     disp("primal rel argmin gap ")
-    norm(dualToPrimalMap(u) - z) / norm(z) %#ok<NOPRT>
+    disp(norm(dualToPrimalMap(u1) - z) / norm(z))
 end
 end % solveSubProblemCVX
 
-function checkOpts(opts)
+function checkOpts(opts) %#ok<INUSD>
     % assert(isfield(opts, 'subspaceMin'), 'Necessary to have specification for the subspaceMin algo')
     % assert(isfield(opts.subspaceMin, 'innerSolver'), 'Necessary to have specify for the innerSolver')
 end

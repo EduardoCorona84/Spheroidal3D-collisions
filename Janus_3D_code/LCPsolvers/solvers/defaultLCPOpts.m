@@ -5,13 +5,13 @@ if ~exist('opts','var') || isempty(opts)
 end
 
 if ~isfield(opts, 'solver')
-    opts.solver = 'bbpgd';
+    opts.solver = 'proxquasinewton';
 end
 
 if ~isfield(opts, 'n')
     opts.n = n;
 end
-
+%% Convergence Parameters
 if ~isfield(opts, 'max_iter')
     opts.max_iter = 100;
 end
@@ -35,90 +35,88 @@ end
 if ~isfield(opts, 'step_abs')
     opts.step_abs = [];
 end
-
-if ~isfield(opts, 'gamma')
-    opts.gamma = 0.8;
-end
-
-if ~isfield(opts, 'tau')
-    % warning("Tau should be set as the 1/Lhat the the best estimate of the lipschitz constant of the the A mat");
-    opts.tau = 1;
-end
-
-if ~isfield(opts, 'tau_min')
-    opts.tau_min = 1e-14;
-end
-
-if ~isfield(opts, 'tau_max')
-    opts.tau_max = Inf;
-end
-
+%% Step Size Parameters
 if ~isfield(opts, 'stepSize')
-    opts.stepSize = struct('init', 'uniform',...
-        'kappa', [],...
-        'eta', []);
+    opts.stepSize = struct('fwd', [], 'bwd', []);
     switch lower(opts.solver)
         case 'bbpgd'
-            opts.stepSize.kappa = 'bb1';
-            opts.stepSize.eta = 'uniform';
+            opts.stepSize.fwd = 'bb1';
+            opts.stepSize.bwd = 'uniform';
         case 'proxquasinewton'
-            opts.stepSize.kappa = 'uniform';
-            opts.stepSize.eta = 'opt';
+            opts.stepSize.fwd = 'uniform';
+            opts.stepSize.bwd = 'opt';
         case 'subspacemin'
-            opts.stepSize.kappa = 'uniform';
-            opts.stepSize.eta = 'opt';
+            opts.stepSize.fwd = 'uniform';
+            opts.stepSize.bwd = 'opt';
         case 'semismoothnewton'
             opts.stepSize.init = 'uniform';
-            opts.stepSize.kappa = 'uniform';
-            opts.stepSize.eta = 'uniform';
+            opts.stepSize.fwd = 'uniform';
+            opts.stepSize.bwd = 'uniform';
         otherwise
-            opts.stepSize.kappa = 'uniform';
-            opts.stepSize.eta = 'opt';
+            opts.stepSize.fwd = 'uniform';
+            opts.stepSize.bwd = 'opt';
     end
     % For testing scripts, all the name of the algo 
     if isfield(opts, 'name')
-        if contains(opts.name, 'kappa') && contains(opts.name, 'bb')
-            opts.stepSize.kappa = 'bb1';
-        elseif contains(opts.name, 'kappa = 1')
-            opts.stepSize.kappa = 'uniform';
-        elseif contains(opts.name, 'kappa^*')
-            opts.stepSize.kappa = 'opt';
+        if contains(opts.name, 'tau') && contains(opts.name, 'bb')
+            opts.stepSize.fwd = 'bb1';
+        elseif contains(opts.name, 'tau = 1')
+            opts.stepSize.fwd = 'uniform';
+        elseif contains(opts.name, 'tau^*')
+            opts.stepSize.fwd = 'opt';
         end
         if contains(opts.name, 'eta = 1')
-            opts.stepSize.eta = 'uniform';
+            opts.stepSize.bwd = 'uniform';
         elseif contains(opts.name, 'eta^*')
-            opts.stepSize.eta = 'opt';
+            opts.stepSize.bwd = 'opt';
         end
     end
 end
-
-if ~isfield(opts, 'r')
-    opts.r = min(20, n);
-else 
-    assert(opts.r > 0, 'Memory/effective-rank or hessian must by positive');
-    opts.r = min(opts.r, n);
+%% Linesearch Parameters
+if ~isfield(opts, 'linesearch')
+    % Hyper parameters from pg 62 of N&W
+    opts.linesearch = struct('budget', 1,...
+        'c1', 1e-4, ... 
+        'c2', 0.9, ...
+        'tol',  1e-8);
 end
-
-if ~isfield(opts, 'qnUpdate') || isempty(opts.qnUpdate)
-    opts.qnUpdate = 'bfgs';
-else 
-    assert( strcmpi('bfgs', opts.qnUpdate) ...
-        || strcmpi('sr1', opts.qnUpdate), 'Must choose SR1 or BFGS')
+%% QN Parameters
+if ~isfield(opts, 'qn')
+    opts.qn= struct('m',[],'update',[],'resetMem',[],'rho',[],'S',[],'Y',[]);
 end
+if ~isfield(opts.qn, 'm') || isempty(opts.qn.m)
+    opts.qn.m = n;
+end
+if ~isfield(opts.qn, 'update') || isempty(opts.qn.update)
 
-  
+    opts.qn.update = 'bfgs';
+end
+if ~isfield(opts.qn, 'S') || isempty(opts.qn.S)
+    m = opts.qn.m;
+    opts.qn.rho = zeros(m,1);
+    opts.qn.S = zeros(n, m);
+    opts.qn.Y = zeros(n, m);
+end
+%% Proximal operator parameters
 if ~isfield(opts, 'prox')|| isempty(opts.prox)
-    opts.prox = struct( ...
+    opts.prox = struct('prox_B0',@(xtilde) max(xtilde,0), ...
         'maxiter', 1000, ...
         'res_abstol', 0, ...
         'res_reltol', 0, ...
         'alp_abstol', 0, ...
-        'alp_reltol', 1e-12, ...
+        'alp_reltol', 1e-5, ...
         'verbose', false, ...
         'runCVX', false);
 end
-
-%% initialize info
+%% Parameters specific to subspaceMin
+if ~isfield(opts, 'subspaceMin') 
+    opts.subspaceMin = struct( ...
+        'innerSolver','cvx', ...
+        'orthoMethod','qr', ...
+        'm', n ...
+    );
+end
+%% Initialize info struct
 info = struct('kkt', [], ...
     'iter',[],...
     'flag', [],...
@@ -142,15 +140,5 @@ if ~isfield(opts, 'storeIts') || isempty(opts.storeIts)
     opts.storeIts = false;
 elseif opts.storeIts
     info.iterHist = zeros(opts.max_iter+1, n);
-end
-
-if ~isfield(opts, 'subspaceMin') 
-    opts.subSpaceMin = struct( ...
-        'innerStepSelection', 'pqn', ...
-        'innerSolver','cvx', ...
-        'orthoMethod','qr', ...
-        'kThresh', 0, ...
-        'useOneStepIter', false ...
-    );
 end
 end % defaultLCPOpts

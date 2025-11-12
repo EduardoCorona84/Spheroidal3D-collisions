@@ -1,14 +1,17 @@
-function plotSubProblem(results, A, vals, plotFlag)
-if ~exist('vals','var') || isempty(vals)
-    vals = eig(A);
-end 
+function plotSubProblem(results, A, plotFlag, ttlStr, vals)
 if ~exist('plotFlag','var') || isempty(plotFlag)
     plotFlag = true;
+end 
+if ~exist('ttlStr','var') || isempty(ttlStr)
+    ttlStr = 'Example Problem';
+end 
+if ~exist('vals','var') || isempty(vals)
+    vals = eig(A);
 end 
 if ~plotFlag
     return 
 end
-linespec = {"-o", "-s","-*","-diamond","-^","-+" };
+markers = {"o", "s","*","diamond","^","+" };
 plotlyjs_colors = {"#1f77b4";  % muted blue
     "#ff7f0e";  % safety orange
     "#2ca02c";  % cooked asparagus green
@@ -33,13 +36,44 @@ for ixAlgo = 1:numel(results)
     end
 end
 % minObjVal = min(cellfun(@min, objVal));
-figure()
+gcf
+clf
+ps = 4:7;
+tols = [1e-5, 1e-6, 1e-7, 1e-8];
+dashOpts= {"-", "--", ":", "-."};
 for ixAlgo = 1:numel(results)
-    % name = algoNames{ixAlgo};
+    name = results(ixAlgo).name;
     errHist = results(ixAlgo).errHist;
     % numIter = size(errHist,1)-1;
-    kk = mod(ixAlgo-1, numel(linespec)) + 1;
-    jj = mod(ixAlgo-1, numel(plotlyjs_colors)) + 1;
+    if contains(name, 'B_0')
+        prts = split(name, 'p=');
+        prts =split(prts{end},',');
+        p = str2double(prts{1});
+        jj = 2+ find(p == ps, 1,'first');
+        prts =split(prts{end},'=');
+        prts = split(prts{end},'$)');
+        tol = str2double(prts{1});
+        % dash = dashOpts{tol == tols}; 
+        if contains(name, 'B(')
+            kk = 3;
+            dash = '-';
+        elseif contains(name, '\%') 
+            kk =4;
+            dash = ':';
+        elseif contains(name, 'x_0') 
+            kk = 6;
+            dash = '-.';
+        else 
+            kk =5;
+            dash = '--';
+        end
+        
+    else
+        dash = '-';
+        jj = mod(ixAlgo-1, numel(plotlyjs_colors)) + 1;
+        kk = mod(ixAlgo-1, numel(markers)) + 1;
+    end
+    
     %% objective value top left
     % subplot(3,1,1)
     % hold on
@@ -59,7 +93,9 @@ for ixAlgo = 1:numel(results)
     hold on
     % semilogy(0:numIter, errHist(:,1), linespec{kk}, 'LineWidth',4, 'MarkerSize',10, 'Color', plotlyjs_colors{kk});
 
-    semilogy(errHist(:,3), errHist(:,1), linespec{kk}, 'LineWidth',4, 'MarkerSize',10, 'Color', plotlyjs_colors{jj});
+    semilogy(errHist(:,3), errHist(:,1), 'LineStyle', dash, ...
+        'Marker',markers{kk}, 'LineWidth',4, 'MarkerSize',10, ...
+        'Color', plotlyjs_colors{jj});
     xlabel('MVPs','FontSize', 20)
     ylabel('$\min(Ax^{(k)}+b, x^{(k)})$','interpreter', 'latex','FontSize', 25)
     set(gca,'YScale','log')
@@ -67,14 +103,15 @@ end
 %% Legend Top Left 
 % subplot(1,2,1)
 % legend({results.name},'FontSize', 20,'Location','northeastoutside')
-legend({results.name},'FontSize', 20,'Location','northeast')
+% xlim([0,25])
+legend({results.name},'FontSize', 20,'Location','northeast', 'interpreter', 'latex')
 %% Eigen values Middle Right
 subplot(1,3,3)
 semilogy(sort(vals,1,'descend'), '-o', 'Color', '#808080', ...
     'LineWidth',4, 'MarkerSize',10)
+
 ylabel('Eigen Values of $A$', 'interpreter', 'latex','FontSize', 25)
 %% Large Title
-sgtitle({'Exmample Problem', ...
-    sprintf('n = %d, \\kappa(A) = %.2g', ...
-    size(A,1),  cond(A))},'FontSize', 30)
+sgtitle(ttlStr,'FontSize', 30, 'interpreter', 'latex')
+title(sprintf('n = %d, \\kappa(A) = %.2g', size(A,1),  cond(A)),'FontSize', 20)
 end
