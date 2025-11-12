@@ -37,17 +37,21 @@ opts = struct( ...
     ) ...
     );
 %% Switch load LCP's saved in a file
-res_ = load('/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/data.11.03.2025/amphi.lattice.n_5.p_8.cDist_2.5.allMats.mat');
+res_ = load('/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/data.11.12.2025/amphi.lattice.n_5.p_8.cDist_2.5.allMats.mat');
 [~,j] = max(res_.ps);
-j = j - 1; % p =8 is not all done yet
 [~,k]= min(res_.tols);
-MC = size(res_.A,1);
+Nt = size(res_.A,1);
 ttlStr = [sprintf('A($p=%d', res_.ps(j)) ', \epsilon_{\mathrm{gmres}}=' sprintf('%.1g)', res_.tols(k)) '$'];
-A_list = arrayfun(@(i) (res_.A{i,j,k} + res_.A{i,j,k}')/2, 1:MC, 'UniformOutput',false);
+A_list = arrayfun(@(i) (res_.A{i,j,k} + res_.A{i,j,k}')/2, 1:Nt, 'UniformOutput',false);
 b_list = res_.b;
-dt_list = arrayfun(@(i) res_.dt{i,j,k} , 1:MC, 'UniformOutput',false);
-lid = find(arrayfun(@(i) ~isempty(A_list{i}) , 1:MC), 1, 'first');
-MC = find(arrayfun(@(i) ~isempty(A_list{i}) , 1:MC), 1, 'last');
+dt_list = arrayfun(@(i) res_.dt{i,j,k} , 1:Nt, 'UniformOutput',false);
+IX = find(cellfun(@(A) ~isempty(A), res_.A(:,6,k)) & ...
+cellfun(@(A) ~isempty(A), res_.A(:,5,k)) &...
+cellfun(@(A) ~isempty(A), res_.A(:,4,end)) & ...
+cellfun(@(A) ~isempty(A), res_.A(:,3,end)) & ...
+cellfun(@(A) ~isempty(A), res_.A(:,2,end)) & ...
+cellfun(@(A) ~isempty(A), res_.A(:,1,end))); 
+I = numel(IX);
 %% Set up all algorithm callers
 algoNames = {
     'PGD ($\kappa = \tau_{bb_1}, \eta = 1$)';
@@ -62,17 +66,14 @@ algoHndls = {
     @proxQuasiNewton;
     };
 % TODO CHECK MORE
-MC = lid+10;
 mRatio = .5;
-for p = 4:7
+for p = 3:7
     for tol = [1e-5] %, 1e-6, 1e-7, 1e-8]
         jMid = find(res_.ps == p,1,'first');
-        kMid = find(res_.tols == tol, 1,'first');
-        if any(arrayfun(@(i)isempty(res_.A{i,jMid,kMid}),lid:MC))
-            continue
-        elseif any(arrayfun(@(i) any(eig((res_.A{i,jMid,kMid} +res_.A{i,jMid,kMid}) /2) <0) ,lid:MC))
-            continue 
-        end
+        kMid = find(abs(res_.tols - tol) < eps*10, 1,'first');
+        % if any(arrayfun(@(i) any(eig((res_.A{i,jMid,kMid} +res_.A{i,jMid,kMid}) /2) <0) ,IX))
+        %     continue 
+        % end
         % Use the full Ahat (basically cheat)
         algoNames{end+1} = ['PQN (BFGS, $B_0 = \hat{A}(' sprintf('p=%d', p) ...
             ', \epsilon_{\mathrm{gmres}}=' sprintf('%.1g', tol) '$)']; %#ok<*AGROW>
@@ -120,11 +121,12 @@ results = repmat(...
     'x', [], ...
     'errHist', [], ...
     'iterHist', [] ...
-    ), [MC,numAlgo] ...
+    ), [I,numAlgo] ...
     );
-mcGood = false(MC,1);
-for i = lid:MC
-    disp(['i = ' num2str(i) '/' num2str(MC)])
+mcGood = false(I,1);
+for ii = 1:I
+    i = IX(ii);
+    disp(['i = ' num2str(ii) '/' num2str(I)])
     %% Load problem from list
     A = A_list{i};
     dt = dt_list{i};
@@ -228,6 +230,12 @@ opts.A = AHatCnt;
 fgMid =  @(x, Ax) quadraticLoss(x, AHatCnt, b, Ax);
 [x0, ~, opts] = proxQuasiNewton(fgMid, x0, opts);
 opts.A = ACnt;
+for ixMetric = 1:numel(opts.errFcn)
+    hndl = opts.errFcn{ixMetric};
+    try %#ok<TRYNC>
+        hndl('reset');
+    end
+end
 switch mode
     case 'fullAhat'
         n = opts.n;

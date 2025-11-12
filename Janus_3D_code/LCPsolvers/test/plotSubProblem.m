@@ -38,7 +38,7 @@ end
 % minObjVal = min(cellfun(@min, objVal));
 gcf
 clf
-ps = 4:7;
+ps = 3:7;
 tols = [1e-5, 1e-6, 1e-7, 1e-8];
 dashOpts= {"-", "--", ":", "-."};
 for ixAlgo = 1:numel(results)
@@ -93,7 +93,7 @@ for ixAlgo = 1:numel(results)
     hold on
     % semilogy(0:numIter, errHist(:,1), linespec{kk}, 'LineWidth',4, 'MarkerSize',10, 'Color', plotlyjs_colors{kk});
 
-    semilogy(errHist(:,3), errHist(:,1), 'LineStyle', dash, ...
+    plot(errHist(:,3), errHist(:,1), 'LineStyle', dash, ...
         'Marker',markers{kk}, 'LineWidth',4, 'MarkerSize',10, ...
         'Color', plotlyjs_colors{jj});
     xlabel('MVPs','FontSize', 20)
