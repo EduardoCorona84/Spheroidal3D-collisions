@@ -6,7 +6,7 @@ if ischar(x) && strcmpi(x,'reset')
     return
 end
 phi = min(x,A*x + b);
-e = 1/2*dot(phi, phi);
+e = dot(phi, phi);
 if isempty(olde)
     diff = NaN;
 else

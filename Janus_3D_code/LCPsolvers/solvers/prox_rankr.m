@@ -1,11 +1,8 @@
-function xstar = prox_rankr(y, h0, U, V, opts)
+function xhat = prox_rankr(xtilde, opts)
 %% Return simple answer in the trivial cases
-if all(y >= 0) 
-    xstar = y;
+if all(xtilde >= 0) 
+    xhat = xtilde;
     return
-elseif isempty(U) && isempty(V)
-    xstar = max(y,0);
-    return 
 end
 %% Unpack parameters
 maxiter = opts.prox.maxiter;
@@ -13,37 +10,55 @@ res_abstol = opts.prox.res_abstol;
 res_reltol = opts.prox.res_reltol;
 alp_abstol = opts.prox.alp_abstol;
 alp_reltol = opts.prox.alp_reltol;
+prox_B0 = opts.prox.prox_B0;
+B0 = opts.prox.B0;
+H0 = opts.prox.H0;
+U = opts.prox.U;
+V = opts.prox.V;
 verbose = opts.prox.verbose;
 runCVX = opts.prox.runCVX;
-n = length(y);
+%% Base case of no low rank update
+if isempty(U) && isempty(V)
+    xhat = prox_B0(xtilde);
+    return 
+end
+n = length(xtilde);
 r1 = size(U,2);
 r2 = size(V,2);
 r = r1 + r2;
-%% Make as efficient as possible by using matrix free implementations where
-% we can
-B0 = @(x) x ./ h0;
-H0 = @(x) x .* h0;
-C = B0(eye(n,n)) + U*U';
-R = chol(C);
-B1inv = @(x) R\(R'\x);
-Utilde = cat(2, -H0(U) , B1inv(V));
-xa = @(a) max(0, y + Utilde * a);
-L = @(a) cat(1, ...
-    U' * (y + B1inv(V*a(r1+1:end,:)) - xa(a)), ...
-    V' * (y - xa(a))...
-    ) + a;
-Lambda = @(a) diag(sign(xa(a)));
-J_L = @(a) cat(1, ...
-    cat(2, U'*Lambda(a)*H0(U), U'*(eye(n) - Lambda(a))*B1inv(V)), ...
-    cat(2, V'*Lambda(a)*H0(U), -V'*Lambda(a)*B1inv(V)) ...
-    ) + eye(r);
+%% Make as efficient as possible by using matrix free implementations 
+if isempty(V)
+    Utilde = -H0(U);
+    xa = @(a) prox_B0(xtilde + Utilde * a);
+    L = @(a,xa) U' * (xtilde - xa) + a;
+    % This is a bad approximation in the non-diagonal B0 case...
+    Lambda = @(xa) diag(abs(xa) >= 1e-8);
+    J_L = @(a,xa) U'*Lambda(xa)*H0(U) + eye(r);
+else
+    C = B0(eye(n,n)) + U*U';
+    R = chol(C);
+    B1inv = @(x) R\(R'\x);
+    Utilde = cat(2, -H0(U) , B1inv(V));
+    xa = @(a) prox_B0(xtilde + Utilde * a);
+    L = @(a,xa) cat(1, ...
+        U' * (xtilde + B1inv(V*a(r1+1:end,:)) - xa), ...
+        V' * (xtilde - xa)...
+        ) + a;
+    % This is a bad approximation in the non-diagonal B0 case...
+    Lambda = @(xa) diag(abs(xa) >= 1e-8);
+    J_L = @(a,xa) cat(1, ...
+        cat(2, U'*Lambda(xa)*H0(U), U'*(eye(n) - Lambda(xa))*B1inv(V)), ...
+        cat(2, V'*Lambda(xa)*H0(U), -V'*Lambda(xa)*B1inv(V)) ...
+        ) + eye(r);
+end
 %% Start semi-smooth newton iterations
 k = 0;
 a_km1 = zeros(r,1); % a0
-L_km1 = L(a_km1);
+xa_km1 = xa(a_km1);
+L_km1 = L(a_km1, xa_km1);
 while true
     k = k + 1;
-    J_L_km1 = J_L(a_km1);
+    J_L_km1 = J_L(a_km1, xa_km1);
     p = -J_L_km1\L_km1;
     a_k = a_km1 + p;
     alp_abserr = norm(a_k - a_km1);
@@ -59,7 +74,8 @@ while true
         end
         break 
     end
-    L_k = L(a_k);
+    xa_k = xa(a_k);
+    L_k = L(a_k,xa_k);
     res_abserr = norm(L_k);
     res_relerr =  norm(L_k - L_km1) / norm(L_k);
     if res_abserr < res_abstol 
@@ -80,24 +96,25 @@ while true
         break
     end
     a_km1 = a_k;
+    xa_km1 = xa_k;
     L_km1 = L_k;
 end
 %% Now that we have the root of L, we apply use it to obtain x(alphastar)
-xstar = xa(a_k);
+xhat = xa(a_k);
 
 if runCVX 
     %% Debug with CVX if necessary
-    B = 1/h0 * eye(n) + U*U' - V*V';
+    B = B0(eye(n)) + U*U' - V*V';
     % cvx
     tic
-    f = @(x)1/2*dot(x-y, B*(x-y)) ;
+    f = @(x)1/2*dot(x-xtilde, B*(x-xtilde)) ; %#ok<NASGU>
     cvx_begin quiet
             variable xRef(n)
             minimize f(xRef)
             subject to 
-            0 <= xRef
+            0 <= xRef %#ok<NOPRT>
     cvx_end 
-    cvxErr = norm(xRef - xstar) / norm(xRef);
+    cvxErr = norm(xRef - xhat) / norm(xRef);
     assert(cvxErr < 1e-4, 'Compared to CVX we have a bad answer')
 end
 

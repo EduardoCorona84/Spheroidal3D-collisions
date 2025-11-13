@@ -1,42 +1,44 @@
-function [H, h0, U, V] = get_H_BFGS(k, s, y, opts, bMask, debug)
-
-n = numel(s);
+function [H, opts] = get_H_BFGS(s, y, opts, bMask, debug)
+n = numel(opts.b);
 if ~exist('bMask', 'var') || isempty(bMask)
     bMask = false(n,1);
 end
-
 if ~exist('debug', 'var') || isempty(debug)
     debug = false;
 end
-n = numel(s);
-[r, h0, rho, S, Y] = updateQNMemory(k, s, y, opts);
-if r == 0
-    H = @(g) g; 
-    h0 = 1;
-    U = [];
-    V = [];
+
+[h0, rho, S, Y, opts] = updateQNMemory(s, y, opts);
+B0 = @(x) x ./ h0;
+H0 = @(x) x .* h0;
+opts.prox.H0 = H0;
+opts.prox.B0 = B0;
+
+if isempty(S)
+    H = H0; 
+    opts.prox.U = [];
+    opts.prox.V = [];
+    opts.prox.B = B0; 
     return 
 end
 
 
 % Get a matrix free implementation of the inverse hessian approximation
-H = @(g) apply_H(g, bMask, r, rho, S, Y, h0);
-
-
-if nargout <= 2
+H = @(g) apply_H(g, bMask, rho, S, Y, H0);
+if nargout == 1
     return 
 end
-% If requested provide U and V such that B = 1/h0 I + U*U' + V*V'
+% If requested provide U and V such that B = B0 + U*U' + V*V'
 % see N&W pg 184 for the unrolled formulas
 % we don't use the compact representation because a sqrt may not exist of
 % the inner matrix
+r = size(S,2);
 U = zeros(n, r);
 V = zeros(n, r);
 for i = 1:r
     s = S(~bMask,i); 
     y = Y(~bMask,i);
     U(~bMask,i) = y / sqrt(dot(s,y));
-    v = s/h0 ;
+    v = B0(s);
     if i > 1 
         ucoeff = arrayfun(@(j) dot(U(~bMask,j),s), 1:i-1)';
         vcoeff = arrayfun(@(j) dot(V(~bMask,j),s), 1:i-1)';
@@ -44,15 +46,20 @@ for i = 1:r
     end
     V(~bMask,i) = v / sqrt(dot(s,v));
 end
-
-% Check the implmentation
+B = @(g) apply_B(g, bMask, rho, B0, U, V);
+opts.prox.U = U; 
+opts.prox.V = V;
+opts.prox.B = B;
+% Check the implementation
 if debug 
-    [Hexp, Bexp, Uexp, Vexp] = form_H_explicit(S(~bMask,:),Y(~bMask,:), r, h0);
+    [Hexp, Bexp, Uexp, Vexp] = form_H_explicit(S(~bMask,:),Y(~bMask,:), ...
+        H0, B0);
     Htest = eye(n);
+    Btest = eye(n);
     for i = 1:n 
         Htest(:, i) = H(Htest(:,i));
+        Btest(:, i) = B(Btest(:,i));
     end
-    Btest = 1/h0*eye(n) + U*U' - V*V';
     assert(norm(Htest(~bMask, ~bMask) - Hexp) / norm(Hexp) < 1e-6);
     assert(norm(Btest(~bMask, ~bMask)  - Bexp) / norm(Bexp) < 1e-6);
     assert(norm(U(~bMask,:) - Uexp) / norm(Uexp) < 1e-6);
@@ -60,9 +67,9 @@ if debug
 end 
 end % get_H_BFGS
 
-function p = apply_H(g, bMask, r, rho, S, Y, h0)
-
+function p = apply_H(g, bMask, rho, S, Y, H0)
 p = g(~bMask);
+r = size(S,2);
 alp = zeros(r,1);
 rs = zeros(r,1);
 for i = r:-1:1 
@@ -77,7 +84,7 @@ for i = r:-1:1
     p = p - alp(i) * y;
 end
 
-p = h0 * p;
+p = H0(p);
 
 for i = 1:r
     s = S(~bMask, i);
@@ -92,15 +99,38 @@ p = g;
 
 end
 
-function [H, B, U, V] = form_H_explicit(S,Y, r, h0)
-if ~exist('h0','var')
-    h0 = 1;
+function p = apply_B(g, bMask, rho, B0, U, V) %#ok<INUSD>
+
+p = g(~bMask);
+% r = size(S,2);
+% alp = zeros(r,1);
+% rs = zeros(r,1);
+% for i = r:-1:1 
+%     s = S(~bMask, i);
+%     y = Y(~bMask, i);
+%     if any(bMask)
+%         rs(i) = 1/ dot(s,y);
+%     else 
+%         rs(i) = rho(i);
+%     end
+%     alp(i) = rs(i) * dot(s, p);
+%     p = p - alp(i) * y;
+% end
+
+p = B0(p) + U*(U'*p) - V*(V'*p);
+
+g(bMask) = 0;
+g(~bMask) = p;
+p = g;
+
 end
-[n, ~] = size(S);
+
+function [H, B, U, V] = form_H_explicit(S,Y, H0, B0)
+[n, r] = size(S);
 U = zeros(n, r);
 V = zeros(n, r);
-H = eye(n) * h0;
-B = eye(n) / h0;
+H = H0(eye(n));
+B = B0(eye(n));
 for i = 1:r
     s = S(:,i); 
     y = Y(:,i); 

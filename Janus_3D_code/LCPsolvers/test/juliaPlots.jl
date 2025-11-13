@@ -11,13 +11,13 @@ rel_tol_kkt = 1e-8
 abs_tol_kkt = 1e-8
 nMin = 100 
 nMax = 150
-fname = "randProblems_noStructure_updateStepSize_n_$(nMin)_$(nMax)"
-matdic = matread("/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/10.30.2025.results_randProblems_percentLarge_0.1_n_100_150.mat")
+fname = "amphi.lattice.n_5.p_8.cDist_2.5.warmStart"
+matdic = matread("/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/$fname.mat")
 _results = matdic["results"]
 mcGood = Int.(matdic["mcGood"])[:]
-algoNames = _results["name"]
+algoNames = _results["name"][mcGood[1], :]
 results = Dict()
-for (ix, name) in enumerate(algoNames)
+for (ixAlgo, name) in enumerate(algoNames)
     if name == "CVX"
         continue
     end
@@ -26,11 +26,7 @@ for (ix, name) in enumerate(algoNames)
         if k == "name" || k == "algo"
             continue 
         end
-        # try
-        results[name][k] = v[ix][:][mcGood]
-        # catch 
-        #     @show k
-        # end
+        results[name][k] = v[mcGood,ixAlgo]
     end
 end
 ##
@@ -82,7 +78,7 @@ for (kk,name) in enumerate(algoNames)
         )
     )
 end
-problem_size_string = "\$n \\in [$(nMin),$(nMax))\$"
+problem_size_string = "\$"#"\$n \\in [$(nMin),$(nMax)), "
 num_problems = length(mcGood)
 
 p = plot(
@@ -96,7 +92,7 @@ p = plot(
         xaxis_type="log",
         showlegend=false,
         annotations=[attr(
-            text="$(problem_size_string[1:end-1]), \\varepsilon_\\text{rel} = $(rel_tol_kkt), \\varepsilon_\\text{abs} = $(abs_tol_kkt)\$",
+            text="$(problem_size_string)\\varepsilon_\\text{rel} = $(rel_tol_kkt), \\varepsilon_\\text{abs} = $(abs_tol_kkt)\$",
             font=attr(
                 size= 13, # Adjust font size as needed
                 color= "rgb(116, 101, 130)" # Set subtitle color

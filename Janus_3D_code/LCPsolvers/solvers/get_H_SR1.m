@@ -1,5 +1,6 @@
-function [H, h0, U, V] = get_H_SR1(k, s, y, opts, bMask)
+function [H, opts] = get_H_SR1(s, y, opts)
 
+error('Currently this impementation is unfinished')
 % if ~exist('bMask', 'var') || isempty(bMask)
 %% TODO Allow this to be used
     bMask = false(n,1);
