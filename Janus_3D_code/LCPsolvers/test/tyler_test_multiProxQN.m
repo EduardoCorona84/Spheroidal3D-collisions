@@ -10,8 +10,11 @@ file_name = 'amphi.special.n_3.p_8.cDist_2.3.allMats.mat';
 load(file_name);
 
 %find reference high-fidelity solution
-high_fidelity_mat = A{32, length(ps), 1};
+high_fidelity_mat = A{32, length(ps), 4};
 b_vec = b{32};
+
+% compute condition number (use condest(high_fidelity_mat) for large/sparse)
+cond_high = cond(high_fidelity_mat);
 
 clear opts;
 opts.solver = 'proxquasinewton';
@@ -28,41 +31,36 @@ fg_high = @(x, Ax) quadraticLoss(x, opts.A, b_vec, Ax);
 
 
 %now find the low fidelities
-errors = cell(length(tols), length(ps));
-for row = 1:length(tols)
-    for col = 1:length(ps)
-        low_fidelity_mat = A{32, col, row};
-        clear opts;
-        opts.high.solver = 'proxquasinewton';
-        opts.high.errFcn = error_function;
-        opts.high.storeIts = true;
-        opts.high.A = @(x) high_fidelity_mat*x;
-        opts.high.b = b_vec;
-        opts.high.max_iter = 8;
-        opts.sub.solver = 'proxquasinewton';  
-        opts.low.A = @(x) low_fidelity_mat*x;
-        opts.low.b = b_vec;
-        opts.low.max_iter = 4;
-        [x_low, info_low] = multifidelityProxQuasiNewton(fg_high, zeros(size(b_vec)), opts);
-
-        errors{row, col} = info_low.errHist;
-
-    end
-
+errors = cell(1, length(ps));
+for p = 1:length(ps)
+    low_fidelity_mat = A{32, p, 4};
+    clear opts;
+    opts.high.solver = 'proxquasinewton';
+    opts.high.errFcn = error_function;
+    opts.high.storeIts = true;
+    opts.high.A = @(x) high_fidelity_mat*x;
+    opts.high.b = b_vec;
+    opts.high.max_iter = 8;
+    opts.sub.solver = 'proxquasinewton';  
+    opts.low.A = @(x) low_fidelity_mat*x;
+    opts.low.b = b_vec;
+    opts.low.max_iter = 3;
+    [x_low, info_low] = multifidelityProxQuasiNewton(fg_high, zeros(size(b_vec)), opts);
+    errors{p} = info_low.errHist;
 end
 
 %create figures for different p's. 
-for col = 1:length(ps)
-    figure;
-    semilogy(info_high.errHist, '-o', 'DisplayName', 'High');
-    hold on;
-    for row = 1:length(tols)
-        semilogy(errors{row, col}, '-o', 'DisplayName', sprintf('p=%d, tol=%.1e', ps(col), tols(row)));
-    end
-    xlabel('Outer Iteration');
-    ylabel('KKT Error');
-    title(sprintf('No Correction Convergence for p=%d', ps(col)));
-    legend('show', 'Location', 'best');
-    saveas(gcf, sprintf('no_correction_convergence_p_%d.fig', ps(col)));
-    hold off;
+
+cond_high = cond(high_fidelity_mat);
+figure;
+semilogy(info_high.errHist, '-o', 'DisplayName', sprintf('High Only p=%d, tol=%.1e', ps(length(ps)), tols(4)));
+hold on;
+for p = 1:length(ps)
+    semilogy(errors{p}, '--o', 'DisplayName', sprintf('Multi p=%d, tol=%.1e', ps(p), tols(4)));
 end
+xlabel('Outer Iteration');
+ylabel('KKT Error');
+title(sprintf('Convergence of Multi-Fidelity proximal Quasi-Newton (cond(A)=%.2e)', cond_high));
+legend('show', 'Location', 'best');
+saveas(gcf, 'multifidelityProxQN_varyingLowFidelity.svg');
+hold off;
