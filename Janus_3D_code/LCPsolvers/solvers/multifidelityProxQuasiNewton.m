@@ -2,12 +2,11 @@ function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
 
     %Warm Start with Low Fidelity/Need to look into this more.
     opts.sub.max_iter = 4;
-    AHatCnt = @(x) Acounter(x, AHat, false);
-    ACnt = opts.A;
-    opts.A = AHatCnt;
-    fgMid =  @(x, Ax) quadraticLoss(x, AHatCnt, b, Ax);
+    fgMid =  @(x, Ax) quadraticLoss(x, opts.low.A, opts.low.b, Ax);
+    opts.sub.b = opts.low.b;
+    opts.sub.A = opts.low.A;
     [x0, ~, opts.sub] = proxQuasiNewton(fgMid, x0, opts.sub);
-
+    Ahatx_k = opts.sub.Ax_k;
     % For the outer part of the struct, we will use default opts
     % The memory will be the same size as max_iter (we will set this to be small).
     opts.high.m = opts.high.max_iter;
@@ -36,13 +35,13 @@ function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
         x_km1 = x_k; Ax_km1 = Ax_k; f_km1 = f_k; grad_km1 = grad_k; Ahatx_km1 = Ahatx_k;
         % Update the low fidelity Hessian with high fidelity data.
         % The implementation for prox quasi-Newton will not work. Need something here.
-        [~, opts] = updateBk(s, y, Ahats, opts);
+        opts = updateBk(s, y, Ahats, opts);
         % This solves the subproblem and saves the new low fidelity memory. 
-        [x_k, Ahatx_k, opts, info] = solveSubProblem(grad_km1, opts, info);
+        [x_k, Ahatx_k, opts, info_low] = solveSubProblem(x_km1, grad_km1, opts);
         
         % Use the optimal step size 
         p = x_k - x_km1;
-        [eta, Ap] = stepSize(-1, p, x_km1, Ax_km1, opts);
+        [eta, Ap] = stepSize(-1, p, x_km1, Ax_km1, opts.high);
         x_k = x_km1 + eta*p;
         Ax_k = Ax_km1 + eta*Ap;
         [f_k, grad_k] = fg(x_k, Ax_k);
@@ -66,6 +65,10 @@ function opts = updateBk(s, y, Ahats, opts)
         case 'sr1'
             
         case 'bfgs'
+            %curvature check 
+            if y'*s < 1e-7 * norm(s)*norm(y)
+                return;
+            end
             % Because there are so few iterations, we can store BFGS with the unrolled update and not use the compact representation. 
             % (Memory does not fall out of the window).
             % Will use the S and Y arrays for U and V instead
@@ -74,8 +77,13 @@ function opts = updateBk(s, y, Ahats, opts)
             % Find the first empty (zeros) column.
             r = find(all(U == 0, 1), 1, 'first');
             % Compute the Ahat_k(s) matvec
-            quantity = Ahats + U(1:r - 1)*(U(1:r - 1)'*s) - V(1:r - 1)*(V(1:r - 1)'*s);
-            % Form and store the BFGS update (probably want to add a curvature check here)
+            if r == 1
+                quantity = Ahats;
+            else
+                quantity = Ahats + U(:, 1:r - 1)*(U(:, 1:r - 1)'*s) - V(:, 1:r - 1)*(V(:, 1:r - 1)'*s);
+            end
+
+            % Form and store the BFGS update (TODO NEED to add some sort of curvature check/similar or we end up with NaNs)
             U(:, r) = y/sqrt(y'*s);
             V(:, r) = quantity/sqrt(s'*quantity);
             opts.high.qn.S = U;
@@ -113,8 +121,14 @@ function [x_k, Ahatx_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts)
     opts.sub.Ax_k = opts.sub.Ax_k + U * (U' * opts.sub.Ax_k) - V * (V' * opts.sub.Ax_k);
 
     % Sub Problem Opts
-    opts.sub.A(x) = opts.low.A(x) + opts.outer.qn.S(:, opts.outer.qn.r)*(opts.outer.qn.S(:, opts.outer.qn.r)'*x) - opts.outer.qn.Y(:, opts.outer.qn.r)*(opts.outer.qn.Y(:, opts.outer.qn.r)'*x);
+    opts.sub.A = @(x) opts.low.A(x) + opts.high.qn.S(:, opts.high.qn.r)*(opts.high.qn.S(:, opts.high.qn.r)'*x) - opts.high.qn.Y(:, opts.high.qn.r)*(opts.high.qn.Y(:, opts.high.qn.r)'*x);
     opts.sub.b = grad_km1 - opts.sub.Ax_k;
+
+    %line search opts
+    opts.sub.linesearch = struct('budget', 1,...
+    'c1', 1e-4, ... 
+    'c2', 0.9, ...
+    'tol',  1e-8);
 
     % TODO: Set subproblem tolerance and max_iter
     opts.sub.max_iter = opts.low.max_iter;
@@ -128,7 +142,7 @@ function [x_k, Ahatx_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts)
     % After solving the subproblem, we need to update the secant conditions again to remove the low rank updates (and the last iterate).
     opts.sub.qn.Y = opts.sub.qn.Y - U * (U' * opts.sub.qn.S) + V * (V' * opts.sub.qn.S);
 
-    opts.sub.Ax_k = opts.sub.Ax_k - U * (U' * opts.sub.qn.S) + V * (V' * opts.sub.qn.S);
+    opts.sub.Ax_k = opts.sub.Ax_k - U * (U' * opts.sub.Ax_k) + V * (V' * opts.sub.Ax_k);
     Ahatx_k = opts.sub.Ax_k; %
 
 
