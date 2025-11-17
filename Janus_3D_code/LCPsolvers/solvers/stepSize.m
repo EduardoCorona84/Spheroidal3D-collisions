@@ -26,10 +26,6 @@ switch lower(mode)
         end
         t = (s'*y)/(y'*y);
     case 'lipschitz'
-        if isempty(s)
-            t = 1;
-            return 
-        end
         t = 1/opts.stepSize.L;
     case 'opt'
         % For QP, this is the optsimal step length (see page 56 of n&W)

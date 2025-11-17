@@ -45,6 +45,9 @@ if ~isfield(opts, 'stepSize')
         case 'proxquasinewton'
             opts.stepSize.fwd = 'uniform';
             opts.stepSize.bwd = 'opt';
+        case 'fista'
+            opts.stepSize.fwd = 'bb1';
+            opts.stepSize.bwd = 'opt';
         case 'subspacemin'
             opts.stepSize.fwd = 'uniform';
             opts.stepSize.bwd = 'opt';
