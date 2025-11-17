@@ -71,10 +71,42 @@ function spheroidal_mobility(fname,Fparams,init)
      
     %%(0.0) Input validation
     if ~isempty(Fparams)
-        % Generic property validation
+        % Generic property and parbd validation with defaults
+        assert(isscalar(Fparams.Nt) && Fparams.Nt>=1,...
+            'Fparams.Nt must be a positive integer.');
+        assert(isfield(Fparams,'dt') && isnumeric(Fparams.dt) && isscalar(Fparams.dt) && Fparams.dt>0,...
+            'Fparams.dt must be a strictly positive scalar.');
+        assert(any(strcmp(Fparams.tdisc, {'euler','trapz','rk4','abash'})), ...
+            'Fparams.tdisc must be one of: euler, trapz, rk4, abash.');
+        assert(any(strcmp(Fparams.type, {'FTfun'})), ...
+            'Fparams.type must be one of: FTfun.');
+        assert(islogical(Fparams.denseMV) || ismember(Fparams.denseMV,[0,1]), ...
+            'Fparams.denseMV must be true or false.');
+        assert(islogical(Fparams.comp) || ismember(Fparams.comp,[0,1]), ...
+            'Fparams.comp must be true or false.');
 
-        % parbd validation
-        assert()
+        % parbd
+        req = {'p','Ct','equ_radii','polar_radii','eps','mdist','out'};
+        for k = 1:numel(req)
+            assert(isfield(Fparams.parbd,req{k}), ...
+                'Missing required field Fparams.parbd.%s', req{k});
+        end
+
+        assert(isnumeric(Fparams.parbd.Ct) && size(Fparams.parbd.Ct,2)==3, ...
+            'Fparams.parbd.Ct must be an n3-by-3 double array.');
+        assert(isscalar(Fparams.parbd.p) && Fparams.parbd.p>=2, ...
+            'Fparams.parbd.p must be a positive integer greater than 2.');
+        assert(numel(Fparams.parbd.equ_radii)==size(Fparams.parbd.Ct,1) && numel(Fparams.parbd.polar_radii)==size(Fparams.parbd.Ct,1), ...
+            'Fparams.parbd.equ_radii and Fparams.parbd.polar_radii must have length equal to size(parbd.Ct,1).');
+        assert(isscalar(Fparams.parbd.eps)  && Fparams.parbd.eps > 0, ...
+            'Fparams.parbd.eps must be a strictly positive scalar.');
+        assert(isscalar(Fparams.parbd.mdist) && Fparams.parbd.mdist > 0, ...
+            'Fparams.parbd.mdist must be a strictly positive scalar.');
+        assert(islogical(Fparams.parbd.out) || ismember(Fparams.parbd.out,[0,1]), ...
+            'Fparams.parbd.out must be true or false.');
+
+        assert(Fparams.parbd.n3 == Fparams.parbd.n3, ...
+            'Fparams.parbd.n3 must equal size(Fparams.parbd.Ct,1).');
     end
 
     %%(0.1) (optional) Load data in init, initialize output arrays
@@ -152,7 +184,7 @@ function spheroidal_mobility(fname,Fparams,init)
     tic;
     Fparams = SpheroidalMS_initparams(Fparams);
     timings.setup_surace = toc;
-    timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc; 
+    timedisc = Fparams.tdisc; 
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %(0.3) Initialize kernels (for MatVecs) and nullspace info
@@ -343,28 +375,71 @@ end
 %% Mobility solver system code
 function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist,t,dt,it)
     %{
-    Given the BIE matrices at timestep t and the known boundary conditions, calculate 
-    the velocities at timestep t+1 and advance all bodies with the new velocities.
+    Performs a single forward-Euler step of the system of rigid-body particles.
+    Uses the BIE operators and boundary information at time t to compute surface
+    velocities and rigid-body motions, advances centers and orientations,
+    updates operators for the new geometry at the next timestep.
 
     Inputs
-    
+    Xt       - (double np*n3 x 3)
+        current surface points at time t (rotated)
+    X0       - (double np*n3 x 3)
+        reference (unrotated) surface points
+    X2       - (double np2*n3 x 3)
+        model surface points for collision checks?
+        (may be empty/unused...?)
+    Mt       - (1-by-n3 cell)
+        array of 3x3 rotation matrices at time t
+    Ct       - (double n3 x 3)
+        centers of bodies at time t
+    Kernels  - struct
+        BIE operator MatVecs (e.g., TD, SD and diagonals)
+    Nullsp   - struct
+        nullspace operators (C, B, D, L)
+    Fparams  - struct
+        simulation parameters
+    colevent - boolean
+        collision status entering the step
+    collist  - (integer k x 2)
+        list of candidate colliding body index pairs
+    t        - double
+        current simulation time
+    dt       - double
+        timestep size
+    it       - integer
+        timestep index used for timings bookkeeping
 
     Outputs
-    Xtp - 
-    Mtp -
-    Ctp -
-    U -
-    FT -
-    sigma -
-    mu -
-    VW -
-    Nullsp
-    Fparams - (struct) parameters of problem
-    colevent - (boolean) did a collision event happen in advancing the timestep?
-    collist
-    dt
-    psi_Lap - unused variable
-    Energy - unused variable
+    Xtp      - (double np*n3 x 3)
+        surface points at time t+dt
+    Mtp      - (1-by-n3 cell)
+        array of 3x3 rotation matrices at time t+dt
+    Ctp      - (double n3 x 3)
+        centers at time t+dt
+    U        - (double 3*np*n3 x 1)
+        stacked surface velocity vector (interleaved)
+    FT       - (double 6*n3 x 1)
+        total forces/torques at time t
+    sigma    - (double 3*np*n3 x 1)
+        incident traction density (particular)
+    mu       - (double 3*np*n3 x 1)
+        scattered density from Fredholm solve
+    VW       - (double 6 x n3)
+        rigid-body velocities; 1:3 translational V, 4:6 angular W per body
+    Kernels  - struct
+        BIE operators updated for geometry at t+dt
+    Nullsp   - struct
+        nullspace operators updated for geometry at t+dt
+    Fparams  - struct
+        simulation parameters (with updated point clouds (?))
+    colevent - boolean
+        collision status after advancing centers
+    collist  - (integer k x 2)
+        updated candidate collision pairs
+    dt       - double
+        step size
+    psi_Lap  - placeholder
+    Energy   - placeholder
     %}
     
     global timings; 

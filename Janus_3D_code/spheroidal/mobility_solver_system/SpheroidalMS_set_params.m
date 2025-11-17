@@ -1,4 +1,5 @@
-function parbd = SpheroidalMS_set_params(equ_radii,polar_radii,p,C,eps,mdist,out,doAna,flag_pot,kerd,dense) 
+function parbd = SpheroidalMS_set_params(opts)
+% function parbd = SpheroidalMS_set_params(equ_radii,polar_radii,p,C,eps,mdist,out,doAna,flag_pot,kerd,dense) 
 %{
 Construct parbd for Fparams in the mobility solver code.
 Note that this pre-computes points, so this is a place for memory optimization if we're
@@ -7,8 +8,7 @@ struggling on this aspect.
 Inputs
     equ_radii   - (double) n_b x 1 array of equatorial radii for spheres/spheroids
     polar_radii - (double) n_b x 1 array of polar radii for spheres/spheroids
-    shape_type  - (string) n_b x 1 array of strings: should be 'prolate', 'oblate', or 'sphere'.
-    p           - (int) spheroidal harmonic order (bodies) 
+    p           - (int) spheroidal harmonic order
     C           - (double) n_b x 3 array of centers 
     eps         - (double) epsilon buffer (collision dist)
     mdist       - (double) collision buffer for body-body interactions
@@ -21,6 +21,33 @@ Inputs
 Outputs
     parbd       - (struct) struct with rigid body parameters; see spheroidal_mobility for properties.
 %}
+
+arguments
+    opts.equ_radii (:,1) double 
+    opts.polar_radii (:,1) double
+    opts.p (1,1) double
+    opts.C (:,3) double
+    opts.eps (1,1) double
+    opts.mdist (1,1) double
+    opts.out (1,1) logical
+    opts.doAna (1,1) logical
+    opts.flag_pot (1,1) string {mustBeMember(opts.flag_pot,["SL_Stk_3D", "TSL_Stk_3D"])}
+    opts.kerd (1,1) double
+    opts.dense (1,1) logical
+end
+
+% Alias variables
+equ_radii = opts.equ_radii;
+polar_radii = opts.polar_radii;
+p = opts.p;
+C = opts.C;
+eps = opts.eps;
+mdist = opts.mdist;
+out = opts.out;
+doAna = opts.doAna;
+flag_pot = opts.flag_pot;
+kerd = opts.kerd;
+dense = opts.dense;
 
 np=2*p*(p+1); 
 Nb = kerd*np; % DOF per particle   
@@ -37,7 +64,7 @@ tau = cell(n3,1);
 Cg = reshape(repmat(C.',np,1),3,[]).';
 Xg = zeros(np*n3,3); Wg=zeros(np*n3,1); Nrg=Xg; Xrp = Xg;
 
-shape_type = LOCAL_build_shape_types(equ_radii, polar_radii);
+shape_type = calculate_shape_type(equ_radii, polar_radii);
 
 for j=1:n3
     shape_type = shape_type(j);
@@ -127,25 +154,12 @@ end
 
 end
 
-function shape_type = LOCAL_build_shape_types(equ_radii, polar_radii)
-    EQUALITY_TOL = 1e-14;
-    ns = size(equ_radii, 1);
-    shape_type = strings(ns, 1);
-    for j=1:ns
-        if abs(equ_radii - polar_radii) < EQUALITY_TOL
-            shape_type(j) = 'sphere';
-        elseif equ_radii > polar_radii
-            shape_type(j) = 'oblate';
-        else
-            shape_type(j) = 'prolate';
-        end
-    end
-end
-
 function surface = LOCAL_build_axisymmetric_shape(p, shape_type, equatorial_radius, polar_radius)
     switch shape_type
         case 'sphere'
-            error('not implemented');
+            % The matvec will scale back to a radius 1 sphere anyways, so 
+            % let's just build the desired sphere for consistency sake.
+            surface = SurfaceSph(equatorial_radius*shape_gallery(p,''));
         case 'prolate'
             [u0, a] = calculate_u0_and_a_from_radii(shape_type, equatorial_radius, polar_radius);
             surface = SurfaceSph(prolate_spheroid_shape(p, u0, a));

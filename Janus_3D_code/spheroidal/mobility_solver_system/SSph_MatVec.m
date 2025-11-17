@@ -1,0 +1,503 @@
+function Y = SSph_MatVec(V, L, params)
+%{
+Matvec handler for the mobility solver. The main purpose of this is to decode
+the inputs so that we can pass it to the correct functions.
+
+Note that this is modeled after VSh_MatVec_RB2.m.
+
+IMPORTANT NOTE: This does not implement the principal-valued part only;
+this implements the entire BIO on-surface (so there is an associated jump 
+relation that is being added).
+
+Inputs
+params - parameter struct with fields such as: 
+    p - (int) - spherical harmonic degree
+    n3 - (int) - number of objects 
+    kerd - (int) - kernel dimension 
+    dense - (bool) - Dense vs FMM far interactions
+    out - (bool) exterior or interior problem
+    C - (double n_c x 3) - centers in original box [a,b]^3
+    rd -  (double n_c x 1) - sphere radii
+    flag_pot - (string) - the following cases are supported: 
+        'SL_L_3D'     single layer, Laplace
+        'dSL_L_3D'    normal derivative of single layer, Laplace
+        'DL_L_3D'     double layer, Laplace
+        'SL_Stk_3D'   single layer, Stokes
+        'DL_Stk_3D'   double layer, Stokes
+        'dSL_Stk_3D'  normal derivative of single layer, Stokes
+        'TSL_Stk_3D'  traction kernel of single layer, Stokes
+    Xv - (double 3*np*n3 x 3) duplicated list of points; seems to be only
+    used for Kernel_Eval/FMM
+    X - (double 3*np*n3 x 3) list of points; should be in the global frame
+    (i.e. the points are already rotated and in their respective centered
+    positions)
+V - (double n_c*N_deg x 1) array of density or densities
+    should (probably) be formatted like
+    [sig_x(p_1) ; sig_y(p_1) ; sig_z(p_1) ; sig_x(p_2) ; ...]
+L - (sparse array) Extra matrix for completion flow / nullspace correction
+
+Outputs
+Y - (double) 3*N_trg x 1 array
+    also is in interleaved format; see the comment for the input V.
+%}
+
+%% SETUP
+p  = params.p;      % Spharm degree p 
+n3 = params.n3;     % Number of objects
+kerd = params.kerd; % Kernel dimension
+dense = params.dense; % Dense vs FMM off diagonal 
+C = params.C;       % object centers
+out = params.out;   % outside vs inside sphere
+
+equ_radii = params.equ_radii;
+polar_radii = params.polar_radii;
+
+% Input validation
+assert(kerd==3, 'Kernel dimension 1 is not implemented.');
+
+% Rotation of bodies
+if isfield(params,'MRot')
+    MRot = params.MRot;
+    rot = true;
+else
+    MRot = cell(1,n3);  
+    rot = false;
+end
+
+% Handle neighbors
+% TODO: remove params.neigh, as it's just clutter
+if isfield(params,'neigh')
+    neigh=params.neigh; % Neighbor list (cell(n3,1)) 
+else
+    distC = get_distances_between_centers(C);  
+    neigh = cell(n3,1);
+
+    % Circumscribe a sphere around each body
+    for i=1:n3
+        max_radius_i = max(equ_radii(i), polar_radii(i));
+        neigh{i} = find(distC(i,:)<max_radius_i*params.mdist); 
+    end
+    params.neigh=neigh;  
+end
+ 
+pot = params.flag_pot;
+
+% Determine whether Kernel_Eval needs target normals
+nortrg = true;
+switch pot(1:3)
+    case {'DL_','SDL','dDL'}
+        nortrg = false;
+end
+
+np = 2*p*(p+1); 
+Nb = kerd*np; % 3*np
+N = Nb*n3; % Number of "data points" needed for entire system
+X = params.Xp;
+Xv = params.X; 
+
+%% ACTUAL MATVEC
+if strcmp(V, 'Mat')
+    error('Dense matrix requested; this is not implemented yet.');
+
+    % Start with Kernel Eval (correct for far-interactions)
+    % Then, replace self-to-self and self-to-near appropriately.
+    Y = Kernel_Eval(Xv,Xv,params); 
+
+    for body_ind=1:n3
+        % Indices for source particle
+        I_box = (1:Nb)+Nb*(body_ind-1);
+
+        % Number of neighbors for source particle (i.e. number of particles
+        % that are needed for near-evaluation).
+        num_ngh = length(neigh{body_ind});
+
+        % Build neighbor sphere index
+        neigh{body_ind} = reshape(neigh{body_ind},1,[]);         
+        I_nghv = repmat((1:Nb)',1,num_ngh)+Nb*(repmat(neigh{body_ind},Nb,1)-1);  
+        I_nghv = I_nghv(:);
+
+        equ_radius = equ_radii(body_ind);
+        polar_radius = polar_radii(body_ind);
+        body_shape_type = params.shape_type(body_ind);
+    end
+
+    if ismember(params.shape_type, 'sphere')
+        error('Dense matrix is not implemented for spheres and spheroids.');
+    end
+elseif ~isempty(V) && isnumeric(V)
+    % Actually do the matvec given a numeric input
+    V = reshape(V,N,[]); % TODO: Remove this. Not sure why this is needed.
+    Y = zeros(N,size(V,2));
+
+    for body_ind=1:n3
+        % Indices for source particle
+        I_box = (1:Nb)+Nb*(body_ind-1);
+
+        % Number of neighbors for source particle (i.e. number of particles
+        % that are needed for near-evaluation).
+        num_ngh = length(neigh{body_ind});
+
+        % Build neighbor sphere index
+        neigh{body_ind} = reshape(neigh{body_ind},1,[]);         
+        I_nghv = repmat((1:Nb)',1,num_ngh)+Nb*(repmat(neigh{body_ind},Nb,1)-1);  
+        I_nghv = I_nghv(:);
+
+        equ_radius = equ_radii(body_ind);
+        polar_radius = polar_radii(body_ind);
+        body_shape_type = params.shape_type(body_ind);
+
+        target_pts = params.X(I_nghv(1:kerd:end),:);
+        target_normals = params.nor(I_nghv(1:kerd:end),:);
+
+        %% Near-interaction
+        % No matter what, we need to rotate the target spheres and spheroids to be in the local frame
+        % of the current body.
+        if rot % It seems that the target points are already in the local frame. Is this a good idea?
+            target_pts = (target_pts - C(body_ind, :)) * MRot{body_ind};
+            target_normals = target_normals * MRot{body_ind};
+        else
+            % Translate to local frame (no rotation)
+            target_pts = (target_pts - repmat(C(body_ind,:), size(target_pts,1), 1));
+        end
+
+        if strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate')
+            if kerd==1
+                error('not implemented.');
+            else
+                % Grab density on source particle
+                sig_x = V(I_box(1:3:end));
+                sig_y = V(I_box(2:3:end));
+                sig_z = V(I_box(3:3:end));
+
+                % Calculate u0, a, and oblate for L2Stk.
+                [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
+                if num_ngh > 1
+                    % Get indices of target sources (self vs off-diagonal within neighbor list)
+                    slf = find(neigh{body_ind}==body_ind); 
+                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+                    Ynear = zeros(Nb*num_ngh,1);
+                    
+                    % Evaluate desired layer potential on source particle on off-diagonal neighbor targets
+                    target_pts_off = target_pts(ind_off,:);
+                    target_normals_off = target_normals(ind_off,:);
+                    Ynear(indv_off) = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, sig_x, sig_y, sig_z, target_pts_off, target_normals_off);
+                    
+                    % Add self-evaluation
+                    Ynear(Nb*(slf-1)+1:Nb*slf) = SpheroidalMS_L2Stk_MatVec_near(pot,u0,a,oblate,sig_x,sig_y,sig_z,[],[]);
+                else
+                    Ynear = SpheroidalMS_L2Stk_MatVec_near(pot,u0,a,oblate,sig_x,sig_y,sig_z,[],[]);
+                end
+            end
+        elseif strcmp(body_shape_type, 'sphere')
+            if kerd==1
+                error('Scalar kernels on spheres not implemented here.');
+            end
+
+            % Map pot to kernel type (as in VSh_MatVec_RB2)
+            switch pot(1:3)
+                case 'SL_'
+                    pMat = 'SMat';
+                case 'SDL'
+                    pMat = 'SDMat';
+                case 'dSL'
+                    pMat = 'SpMat';
+                case 'TSL'
+                    pMat = 'TSMat';
+                case 'DL_'
+                    pMat = 'DMat';
+                case 'dDL'
+                    pMat = 'DpMat';
+                case 'TDL'
+                    pMat = 'TDMat';
+                otherwise
+                    error('Unsupported pot for spherical near-eval.');
+            end
+
+            % Rescale geometry to unit sphere for spectral near-eval
+            % target_pts are already translated (and rotated if rot) into the local frame
+            Xtrg = (1/equ_radius) * target_pts;
+
+            % Target normals in the local frame, duplicated per component
+            Nrtrg = params.nor(I_nghv,:);
+            if rot
+                Nrtrg = Nrtrg * MRot{body_ind};
+            end
+
+            % Spherical coordinates on unit sphere frame
+            [th, phi, rho] = cart2sph(Xtrg(:,1), Xtrg(:,2), Xtrg(:,3));
+            th(th<0) = th(th<0) + 2*pi;
+            phi = pi/2 - phi;
+
+            % Build vector SH coefficients for the source body's density
+            Vloc = V(I_box,:);
+            % Densities are assumed in the local body frame
+            Vh_loc = VshAna([Vloc(1:3:end,:); Vloc(2:3:end,:); Vloc(3:3:end,:)],'VW');
+
+            if num_ngh>1
+                slf = find(neigh{body_ind}==body_ind); 
+                indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+                Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
+
+                % Self term (evaluate at unit radius)
+                Ynear(Nb*(slf-1)+1:Nb*slf, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                % Off-diagonal neighbor terms at specified spherical coordinates and normals
+                if ~isempty(ind_off)
+                    Ynear(indv_off, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off,:));
+                end
+            else
+                Ynear = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+            end
+
+            if size(Ynear,2) > 1
+                Ynear = sum(Ynear, 2);
+            end
+
+            % Scale from unit sphere back to radius r
+            if strncmp(pot,'SL_',3)
+                rda = equ_radius; % SLP scales like r
+            elseif strncmp(pot,'dDL',3)
+                rda = 1/equ_radius; % dDL scales like 1/r
+            else
+                rda = 1;
+            end
+            Ynear = rda * Ynear;
+        else
+            error('Invalid body shape type; should be "sphere" or "prolate" or "oblate".');
+        end
+
+        % Post-processing of Ynear
+        if rot && kerd==3
+            % Rotate back
+            Ynear = [Ynear(1:3:end,:), Ynear(2:3:end,:), Ynear(3:3:end,:)];  
+            Ynear = Ynear*MRot{body_ind};       
+
+            % Go back to interleaved format
+            Ynear = reshape(reshape(Ynear,[],3).',[],1);
+        end
+
+        %% Far-interaction
+        % This should not change too much from VSh_MatVec_RB2.m.
+        far_idx_v = true(N,1);
+        far_idx_v(I_nghv) = false; 
+
+        % Local params copy for Kernel_Eval
+        parnear = params;
+
+        if dense
+            if nortrg
+                parnear.nor = params.nor(far_idx_v,:);
+            else
+                % DL/SDL: source normals per source block
+                parnear.nor = params.nor(I_box,:);
+            end
+            parnear.W2 = params.W2(I_box);
+            if isfield(parnear,'ci')
+                parnear.ci = repmat((1:kerd)',sum(far_idx_v)/kerd,1);
+            end
+            if isfield(parnear,'cj')
+                parnear.cj = params.cj(I_box);
+            end
+
+            % Add near spectral contribution
+            Y(I_nghv,:) = Y(I_nghv,:) + Ynear;
+
+            % Add far-away interactions via direct Kernel_Eval
+            if any(far_idx_v)
+                ke_eval = Kernel_Eval(Xv(far_idx_v,:), Xv(I_box,:), parnear) * V(I_box,:);
+                Y(far_idx_v,:) = Y(far_idx_v,:) + ke_eval;
+            end
+        else
+            if nortrg
+               parnear.nor = params.nor(I_nghv,:);  
+            else
+               parnear.nor = params.nor(I_box,:);
+            end
+            parnear.W2 = params.W2(I_box); 
+            if isfield(parnear,'ci')
+                parnear.ci = repmat((1:kerd)',sum(~far_idx_v)/3,1);
+            end
+            if isfield(parnear,'cj')
+                parnear.cj = params.cj(I_box);
+            end
+            parnear.a = 0; 
+            
+            % Subtract neighbor Kernel_Eval; keep near spectral contribution
+            Y(I_nghv,:) = (Y(I_nghv,:) + Ynear) - Kernel_Eval(Xv(I_nghv,:), Xv(I_box,:), parnear) * V(I_box,:);
+        end
+    end
+
+    % If using FMM flag (dense==false), add far interactions via FMM
+    if ~dense
+        Nr = params.nor(1:kerd:end,:);
+        W = params.W2.';
+        Y = Y + LOCAL_FMM_Eval(V, W, kerd, pot, X, X, Nr);
+    end
+
+    if out
+        ct = 0.5;
+    else
+        ct = -0.5;
+    end
+
+    % For non-continuous potentials (i.e. everything except single-layer and normal derivative of double-layer), 
+    % need to add contribution from jump relation--if requested by user (i.e. set params.a to be non-zero).
+    if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
+        if isfield(params,'a')
+            if strcmp(pot(2:3),'SL') 
+                if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
+                    Y = params.eta*Y + (params.a+ct)*V; 
+                else
+                    Y = Y + (params.a+ct)*V; 
+                end
+            else
+                Y = Y + (params.a-ct)*V; 
+            end
+        end
+    end
+
+    % Add nullspace correction term (block-diagonal)
+    if ~isempty(L)
+        Y = Y + L*V;
+    end
+
+elseif isempty(V)
+    % Matrix-free
+    Y = @(V) SSph_MatVec(V,L,params);
+else
+    error('Invalid input passed into SSph_MatVec. Supposed to be a string "Mat" or empty or a numeric matrix.');
+end
+
+end %% END SSph_MatVec
+
+function Y = LOCAL_FMM_Eval(Q, W, kerd, pot, Xtrg, Xsrc, Nr)
+    %{
+    Wrapper function to call the external FMM library. Note that FMM evaluates the operator
+    with the jump relation instead of just the principal-valued component. Thus, we automatically negate
+    the effect of the jump in this function.
+    Inputs
+    Q - (double) kerd*N_src × 1 column vector 
+        source densities per DOF, ordered as follows:
+        [q1(p1); q2(p1); ...; q3(p1); q1(p2); ...].
+    W - (double)  kerd*N_src × 1 column vector 
+        quadrature weights aligned with Q (typically W2 from params)
+    kerd - (int) dimension of kernel (should be 1 or 3 for now)
+    pot - (string) list of potentials; see main function for description
+    Xtrg - (double)
+    Xsrc - (double)
+    Nr - (double) N_trg x 3 array
+        target normals; required for certain potentials
+    %}
+
+    % source and target points variables
+    target = Xtrg.';     
+    ntarget = size(Xtrg,1);
+    if nargin<7
+        Xsrc=Xtrg; 
+    end
+    source  = Xsrc.'; 
+    nsource = size(Xsrc,1);  
+
+    % Determine SL/DL and whether gradient (target normals) is needed
+    if strcmp(pot(1:2),'SL') || strcmp(pot(2:3),'SL')
+        % SL and dSL/TSL
+        sigma_sl = reshape(W.*Q,kerd,nsource); 
+        ifsingle=1; 
+        ifdouble=0; 
+        sigma_dl=zeros(kerd,nsource); 
+        sigma_dv=zeros(3,nsource); 
+        ifpot=1;  ifpottarg=0;
+        ifgradtarg=0;
+    else
+        % DL and dDL/TDL
+        sigma_dl = reshape(W.*Q,kerd,nsource); 
+        ifsingle=0; 
+        ifdouble=1; 
+        sigma_sl=zeros(kerd,nsource); 
+        sigma_dv=Nr.'; 
+        ifpot=1;  ifpottarg=0;
+        ifgradtarg=0;
+    end
+
+    if ~strcmp(pot(1:2),'SL') && ~strcmp(pot(1:2),'DL') 
+        ifgrad=1;
+    else
+        ifgrad=0; 
+    end
+
+    % precision for FMM, roughly 3*iprec digits of acc
+    iprec=2; 
+
+    if kerd==1
+        % Laplace particle FMM 
+        U=lfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
+            sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);  
+    else
+        % Stokes particle FMM 
+        U=stfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
+            sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);
+    end
+
+    % Evaluate depending on pot
+    switch pot
+        case 'SL_L_3D'
+            % Single layer potential at targets
+            Y    = (1/4/pi)*U.pot.'; 
+        case 'dSL_L_3D'
+            % compute du/dNrtrg
+            GSF = -(1/4/pi)*U.fld; % Gradient, size 3 x ntarget
+            Y = sum(GSF.*Nr.'); Y=Y(:); 
+        case 'DL_L_3D'
+            % Double layer potential at targets
+            Y    = (1/4/pi)*U.pot.'; 
+        case 'SL_Stk_3D'
+            % Single layer potential at targets
+            Y    = (1/4/pi)*U.pot.'; 
+            Y = real(reshape(Y.',[],1));
+        case 'DL_Stk_3D'
+            % Double layer potential at targets (check ct 1/4/pi)
+            Y    = (1/4/pi)*U.pot.'; 
+            Y = real(reshape(Y.',[],1));
+        case 'TSL_Stk_3D'
+            % Pressure
+            SFpre = (1/4/pi)*U.pre; 
+            % Gradient and Gradient transposed
+            GSF   = (1/4/pi)*U.grad; 
+            GTSF  = permute(GSF,[2 1 3]);  
+
+            % Compute -pNr+Gu*Nr+Gut*Nr
+            PNF = repmat(SFpre.',1,3).*Nr; 
+            NrT = zeros(3,3,ntarget); NrT(:,1,:)=Nr.'; NrT(:,2,:)=Nr.'; NrT(:,3,:)=Nr.';
+            GuN = reshape(sum(GSF.*NrT),[3 ntarget])+reshape(sum(GTSF.*NrT),[3 ntarget]); 
+
+            Y  = -PNF.'+GuN; 
+            Y = reshape(Y,[],1);   
+        case 'TDL_Stk_3D'
+            % Pressure
+            SFpre = (1/4/pi)*U.pre; 
+            % Gradient and Gradient transposed
+            GSF   = (1/4/pi)*U.grad; 
+            GTSF  = permute(GSF,[2 1 3]);  
+
+            % Compute -pNr+Gu*Nr+Gut*Nr
+            PNF = repmat(SFpre.',1,3).*Nr; 
+            NrT = zeros(3,3,ntarget); NrT(:,1,:)=Nr.'; NrT(:,2,:)=Nr.'; NrT(:,3,:)=Nr.';
+            GuN = reshape(sum(GSF.*NrT),[3 ntarget])+reshape(sum(GTSF.*NrT),[3 ntarget]); 
+
+            Y  = -PNF.'+GuN; 
+            Y = reshape(Y,[],1); 
+        otherwise
+            Y = zeros(ntarget,size(Q,2)); 
+    end
+end
+
+function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_type)
+    %{
+    TODO: Don't do this.
+    %}
+    [u0, a] = calculate_u0_and_a_from_radii(shape_type, equ_radius, polar_radius);
+    oblate = strcmp(shape_type,'oblate');
+end
