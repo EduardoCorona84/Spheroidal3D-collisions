@@ -2,6 +2,9 @@
 Test of spheroids in free Stokes flow subjected to gravity.
 %}
 
+addpath(genpath('../../../spheroidal'));
+addpath(genpath('../../../support'));
+
 %% SETUP
 % Simulation parameters
 kerd = 3; % Kernel dimension
