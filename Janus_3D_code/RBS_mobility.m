@@ -47,17 +47,12 @@ Ffun,Tfun = @(t,C) with output of size 3 x n_b.
 recorded timestep
 %}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-<<<<<<< HEAD
-addpath('LCPsolvers/solvers/');
-global timings;
-=======
 global timings DATA_DIR; %#ok<GVMIS>
 
 DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), [num2str(Fparams.parbd.n3) '_' num2str(Fparams.parbd.p)]);
 if ~exist(DATA_DIR, 'dir')
     mkdir(DATA_DIR)
 end
->>>>>>> origin/njr
 diaryFile = [fname '.diary.log'];
 diary(diaryFile);
 %(0.1) (optional) Load data in init, initialize output arrays
