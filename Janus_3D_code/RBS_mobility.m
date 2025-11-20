@@ -327,7 +327,6 @@ MRot = @(wh,t) RotationMat(wh,t);
 % Get incoming force distribution: 
 tic; 
 [FT,sigma,VW,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt,Sc); 
-Ct
 fprintf('\n Time to compute incoming force: %e ',toc)
 timings.incoming(it) = timings.incoming(it) + toc; 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -923,6 +922,24 @@ if Fparams.denseMV
     % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
     Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
     A = @(x) Amat*x;
+
+    %save out block diagonal version
+    if saveLCPs
+        Nb = Fparams.parbd.Nb;
+        TD_diag = zeros(size(TD));
+        total_blocks = size(TD, 1)/Nb;
+        for i = 1:total_blocks
+            TD_diag((i-1)*Nb+1:i*Nb,(i-1)*Nb+1:i*Nb) = TD((i-1)*Nb+1:i*Nb,(i-1)*Nb+1:i*Nb);
+        end
+        SD_diag = zeros(size(SD));
+        for i = 1:total_blocks
+            SD_diag((i - 1)*Nb+1:i*Nb,(i - 1)*Nb+1:i*Nb) = SD((i - 1)*Nb+1:i*Nb,(i - 1)*Nb+1:i*Nb);
+        end
+        MNS_diag = -Lapp(TD_diag, Bf) + Lk*Bf;
+        MuNS_diag = Lslv(TD_diag, MNS_diag, parslv);
+        Amat_diag = real(F.'*(Ck*Lapp(SD_diag, MuNS_diag+Bf)));
+
+    end
 else % matfree
     Bf = @(x) (Bk.')*(F*x);
     if parslv.prLCP

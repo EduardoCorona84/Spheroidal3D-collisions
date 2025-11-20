@@ -21,6 +21,7 @@ if isempty(S)
     return 
 end
 
+
 % Get a matrix free implementation of the inverse hessian approximation
 H = @(g) apply_H(g, bMask, rho, S, Y, H0);
 if nargout == 1

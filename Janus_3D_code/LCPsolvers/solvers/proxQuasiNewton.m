@@ -3,10 +3,14 @@ function [x, info, opts] = proxQuasiNewton(fg, x0, opts)
 checkOpts(opts)
 n = numel(x0); k = 0;
 x_k = x0; Ax_k = zeros(n,1); s = []; y = [];
-if ~all(x0 == 0)
+if ~all(x0 == 0) && ~isfield(opts, 'Ax_k') % No iterate history
     Ax_k = opts.A(x_k);
     s = x_k;
     y = Ax_k;
+elseif isfield(opts, 'Ax_k') 
+    % Has iterate history, assuming solving a subproblem
+    % No secant condition to update as it is stored from the previous subproblem.
+    Ax_k = opts.Ax_k;
 end
 [f_k, grad_k] = fg(x_k, Ax_k);
 while true
@@ -14,6 +18,9 @@ while true
         grad_k, [], info, opts);
     if converged
         x = x_k; 
+        % Store the last iterate for the next subproblem and update the memory. 
+        opts.Ax_k = Ax_k;
+        [~, ~, ~, ~, opts] = updateQNMemory(s, y, opts);
         break
     end
     % Increase k 

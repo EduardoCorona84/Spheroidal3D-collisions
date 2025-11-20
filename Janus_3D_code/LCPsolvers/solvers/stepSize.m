@@ -25,6 +25,8 @@ switch lower(mode)
             return 
         end
         t = (s'*y)/(y'*y);
+    case 'lipschitz'
+        t = 1/opts.stepSize.L;
     case 'opt'
         % For QP, this is the optsimal step length (see page 56 of n&W)
         % Notice that is A is not perfectly symmetric, then we do not have

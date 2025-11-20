@@ -45,6 +45,9 @@ if ~isfield(opts, 'stepSize')
         case 'proxquasinewton'
             opts.stepSize.fwd = 'uniform';
             opts.stepSize.bwd = 'opt';
+        case 'fista'
+            opts.stepSize.fwd = 'bb1';
+            opts.stepSize.bwd = 'opt';
         case 'subspacemin'
             opts.stepSize.fwd = 'uniform';
             opts.stepSize.bwd = 'opt';
@@ -115,6 +118,10 @@ if ~isfield(opts, 'subspaceMin')
         'orthoMethod','qr', ...
         'm', n ...
     );
+end
+%% Acceleration Parameters
+if ~isfield(opts, 'acceleration')
+    opts.acceleration = struct('alpha_k', 1, 'method', 'adaptive', 'cond', 1e-1, 'restart', true, 'curvature', 'feasible', 'direction', 'feasible');
 end
 %% Initialize info struct
 info = struct('kkt', [], ...
