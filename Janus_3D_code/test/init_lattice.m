@@ -7,11 +7,11 @@ C = [xx(:) yy(:) zz(:)];
 try %#ok<TRYNC>
     rng('default'); 
 end
-meanSep = cDist - 2;
+meanSep = Cdst - 2;
 while true
     C = C + meanSep/4*rand(size(C));
-    [~,~,mindst,~] = LOCAL_check_collision_sph(C,Fparams);
-    if all(mindst > ep/10 )
+    minDist = computePairwiseDistance(C);
+    if all(minDist > meanSep/4 )
         break
     end
 end
@@ -20,4 +20,16 @@ end
 init_dir= -C;
 for i = 1:size(C,1)
     init_dir(i,:) = init_dir(i,:) / norm(init_dir(i,:));
+end
+
+function minDist = computePairwiseDistance(C)
+n = size(C,1);
+[Y_g1,  X_g1  ] = meshgrid(C(:,1), C(:,1));
+[Y_g2,  X_g2  ] = meshgrid(C(:,2), C(:,2));
+[Y_g3,  X_g3  ] = meshgrid(C(:,3), C(:,3));
+d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+pairwiseDistance = sqrt(d1.^2 + d2.^2 + d3.^2);
+minDist = zeros(n-1,1);
+for i =1:n-1
+    minDist(i) = min(pairwiseDistance(i,i+1:end));
 end
