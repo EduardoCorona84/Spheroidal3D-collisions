@@ -10,7 +10,7 @@ file_name = 'amphi.special.n_3.p_8.cDist_2.3.allMats.mat';
 load(file_name);
 
 %find reference high-fidelity solution
-high_fidelity_mat = A{32, length(ps), 4};
+high_fidelity_mat = A{32, length(ps), 1};
 b_vec = b{32};
 
 % compute condition number (use condest(high_fidelity_mat) for large/sparse)
@@ -40,11 +40,11 @@ for p = 1:length(ps)
     opts.high.storeIts = true;
     opts.high.A = @(x) high_fidelity_mat*x;
     opts.high.b = b_vec;
-    opts.high.max_iter = 8;
+    opts.high.max_iter = 10;
     opts.sub.solver = 'proxquasinewton';  
     opts.low.A = @(x) low_fidelity_mat*x;
     opts.low.b = b_vec;
-    opts.low.max_iter = 3;
+    opts.low.max_iter = 4;
     [x_low, info_low] = multifidelityProxQuasiNewton(fg_high, zeros(size(b_vec)), opts);
     errors{p} = info_low.errHist;
 end

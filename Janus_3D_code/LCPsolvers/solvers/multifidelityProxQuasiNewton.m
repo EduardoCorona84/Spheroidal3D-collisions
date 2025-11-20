@@ -1,7 +1,7 @@
 function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
 
     %Warm Start with Low Fidelity/Need to look into this more.
-    opts.sub.max_iter = 4;
+    opts.sub.max_iter = opts.low.max_iter;
     fgMid =  @(x, Ax) quadraticLoss(x, opts.low.A, opts.low.b, Ax);
     opts.sub.b = opts.low.b;
     opts.sub.A = opts.low.A;
@@ -66,7 +66,7 @@ function opts = updateBk(s, y, Ahats, opts)
             
         case 'bfgs'
             %curvature check 
-            if y'*s < 1e-7 * norm(s)*norm(y)
+            if y'*s < 1e-8 * norm(s)*norm(y)
                 return;
             end
             % Because there are so few iterations, we can store BFGS with the unrolled update and not use the compact representation. 

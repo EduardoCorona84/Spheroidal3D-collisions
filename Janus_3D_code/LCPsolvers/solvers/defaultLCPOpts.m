@@ -121,7 +121,7 @@ if ~isfield(opts, 'subspaceMin')
 end
 %% Acceleration Parameters
 if ~isfield(opts, 'acceleration')
-    opts.acceleration = struct('alpha_k', 1, 'method', 'adaptive', 'cond', 1e-1, 'restart', true, 'curvature', 'feasible');
+    opts.acceleration = struct('alpha_k', 1, 'method', 'adaptive', 'cond', 1e-1, 'restart', true, 'curvature', 'feasible', 'direction', 'feasible');
 end
 %% Initialize info struct
 info = struct('kkt', [], ...
