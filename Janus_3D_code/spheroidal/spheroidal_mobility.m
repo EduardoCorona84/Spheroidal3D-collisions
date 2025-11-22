@@ -209,8 +209,10 @@ function spheroidal_mobility(fname,Fparams,init)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % (0.4) Initialize collision info  
     %%%%%%%% NEED TO UPDATE THIS FOR SPHEROIDS
-    [colevent,collist,~,~] = LOCAL_check_collision_sph(C0,Fparams);
+    [colevent, collist ,mindst, distances, closest_points_1, closest_points_2] = LOCAL_check_collision(C0, Mt0, Fparams);
+
     
+    %{
     if ~strcmp(Fparams.parbd.Shape,'') % For non-spherical shapes...
         % Seems like the purpose of this is to create a point cloud on the surface of each body.
         Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); % rad (i.e. radius) is undefined...
@@ -223,6 +225,9 @@ function spheroidal_mobility(fname,Fparams,init)
     else  
        X2=[];
     end
+    %}
+    X2 = [];
+    np2 = 2*(2*Fparams.parbd.p)*(2*Fparams.parbd.p+1);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % (0.5) Timestepping (i.e. the main loop)
@@ -236,7 +241,7 @@ function spheroidal_mobility(fname,Fparams,init)
             fprintf('\n (1) Explicit euler step \n')
             [Xt{i+1},Mt(i+1,:),Ct{i+1},U{i},FT{i},sigma{i},mu{i},VW{i},Kernels,Nullsp,...
                 Fparams,colevent,collist,dt,psi_Lap{i},Energy(i)] = ...
-                LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist,t,dt,i);
+                LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t, dt,i);
 
         elseif strcmp(timedisc,'trapz')
             % (1) Predictor step: 
@@ -373,7 +378,7 @@ function spheroidal_mobility(fname,Fparams,init)
 end
     
 %% Mobility solver system code
-function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist,t,dt,it)
+function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)
     %{
     Performs a single forward-Euler step of the system of rigid-body particles.
     Uses the BIE operators and boundary information at time t to compute surface
@@ -443,7 +448,7 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,d
     %}
     
     global timings; 
-    Sc = Fparams.parbd.Sc; 
+    %Sc = Fparams.parbd.Sc; 
     np = Fparams.parbd.np; 
     n3 = Fparams.parbd.n3; 
     
@@ -452,7 +457,7 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,d
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
     % Get incoming force distribution: 
     tic; 
-    [FT,sigma,VW,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt,Sc); 
+    [FT,sigma,VW,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt); 
     Ct
     fprintf('\n Time to compute incoming force: %e ',toc)
     timings.incoming(it) = timings.incoming(it) + toc; 
@@ -464,34 +469,35 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,d
         + timings.velocities.vw(it) + timings.velocities.col(it); 
     fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(it)); 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance center Ct 
+    % Advance center Ct % I don't see why this can't be done in local advance step TODO
     tic; 
     Ctp = LOCAL_advance_center(Ct,dt,VW); 
     fprintf('\n Time to advance centers C(t): %e',toc); 
     timings.advance(it) = timings.advance(it) + toc; 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Advance Rotation Mt TODO TODO
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Check for collision after moving centers
-    tic; 
-    [colevent,collist,dt,Ctp, closest_points_1, closest_points_2] ...
-    = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt);
-    fprintf('\n Time for collision detection: %e',toc);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance rotation matrix Mt and X
+        % Advance rotation matrix Mt and X (may want to delete this step after we update the rotation matrices)
     tic; 
     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
     fprintf('\n Time to advance R(t) and X(t): %e',toc)
-    timings.advance(it) = timings.advance(it) + toc; 
+    timings.advance(it) = timings.advance(it) + toc;
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Check for collision after moving centers
+    tic; 
+    [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest_points_2] ...
+    = LOCAL_collision_info(VW, Ct, Ctp, Mt, Mtp, MRot, Xt, Xtp, X0, normW, Fparams);
+    fprintf('\n Time for collision detection: %e',toc);
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
     %Update Sc and operators
     fprintf('\n Surface and operator update')
     [Kernels,Nullsp,Fparams,timings] = RBS_Update_Operators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it);
     timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
     fprintf('\n Time to update surface and operators: %e',timings.operator.total(it));
+    % We also need to pass closest_points_1 and closest_points_2 to the next step
 end
     
-function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist,dt] = LOCAL_advance_step(VW,mu,sigma,Xt,X0,X2,Mt,Ct,Kernels,Fparams,dt,it)
+function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2,dt] = LOCAL_advance_step(VW,mu,sigma,Xt,X0,X2,Mt,Ct,Kernels,Fparams,dt,it)
     %{
 
     %}
@@ -508,15 +514,22 @@ function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist,dt] = LOCAL_advanc
     Ctp = LOCAL_advance_center(Ct,dt,VW); 
     fprintf('\n Time to advance centers C(t): %e',toc); 
     timings.advance(it) = timings.advance(it) + toc; 
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Advance rotation Mt TODO TODO Need to figure this wout with spheroids
+    tic; 
+    [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3);
+    fprintf('\n Time to advance centers C(t): %e',toc); 
+    timings.advance(it) = timings.advance(it) + toc;
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Check for collision after moving centers
     tic; 
     [colevent,collist,dt,Ctp, closest_points_1, closest_points_2] ...
-    = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt);
+    = LOCAL_collision_info(Fparams,Ct,Ctp,VW,MRot,Mt, Mtp, dt);
     fprintf('\n Time for collision detection: %e',toc);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance rotation matrix Mt and X
+    % Advance rotation matrix Mt and X, TODO 
     tic; 
     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
     fprintf('\n Time to advance R(t) and X(t): %e',toc)
@@ -530,7 +543,7 @@ function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist,dt] = LOCAL_advanc
     fprintf('\n Time to update operators: %e',timings.operator.total(it));
 end
     
-function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt,Sc)
+function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt)
     %{
         This functions mostly seems to be for debugging and not too relevant for the
         actual mobility solver.
@@ -570,8 +583,9 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         VW : rigid body velocities (translational/rotational velocities)
     %}
     global timings; 
-    parslv = Fparams.parslv; 
-    rd = Fparams.parbd.rd; tau = Fparams.parbd.tau; W = Fparams.parbd.W; 
+    parslv = Fparams.parslv;
+    % TO DO: Placeholder values 
+    rd = 1; tau = Fparams.parbd.tau; W = Fparams.parbd.W; 
     num_body = Fparams.parbd.n3; 
     rdt = repmat((rd.').^(-4),3,1); 
     rdw = repmat((rd.').^(-2),3,1);
@@ -657,8 +671,8 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         display(F_c(1:3,:));
         
         if ~isempty(mu_c)
-            %Update sigma, mu, U and VW
-            %probably need to add logic here for rotations
+            % Update sigma, mu, U and VW
+            % TODO: maybe check for rotations.
             mu = mu + mu_c; 
             sigma = sigma + rho_c; 
             U = Lapp(Kernels.SD,(mu+sigma)); 
@@ -966,7 +980,8 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fp
     end
 end
 
-function [colevent,collist, dt,Ctp, closest_points_1, closest_points_2] = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt)
+function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest_points_2] ...
+    = LOCAL_collision_info(VW, Ct, Ctp, Mt, Mtp, MRot, Xt, Xtp, X0, normW, Fparams)
     %{
     
     Inputs
@@ -986,23 +1001,20 @@ function [colevent,collist, dt,Ctp, closest_points_1, closest_points_2] = LOCAL_
     Ctp - possibly modified centers of bodies at next time
 
     %}
-    n3 = size(Ct,1); Shape=Fparams.parbd.Shape; 
+    n3 = Fparams.parbd.n3; 
+    np2 = Fparams.parbd.np2; 
     eps = Fparams.parbd.eps;  
     
-    % Check for collision between spheres (and rule out non-colliding pairs)
-    [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(Ctp,Fparams);
+    % Check for collision at the next time step 
+    [colevent,collist,mindst, distances, closest_points_1, closest_points_2] = LOCAL_check_collision(Ctp, Mtp, Fparams);
     
-    % Finer collision detection for non-spheres
-    if ~strcmp(Shape,'')
-        np2 = size(X2,1)/n3;
-        [colevent,collist,mindst,closest_points_1,closest_points_2]=LOCAL_check_collision(collist,eps,Ctp,X2,MRot,Mt,VW,dt,np2); 
-    end
     
     if colevent
         % If mindst<<eps, or <0, we need to adjust timestep
         bis=0;
         maxbis=3;
         
+        % IF the particles are too close, we will reduce the timestep
         cond = mindst < 0.1*eps;
 
         while cond && bis<=maxbis
@@ -1013,15 +1025,11 @@ function [colevent,collist, dt,Ctp, closest_points_1, closest_points_2] = LOCAL_
             Ctp = LOCAL_advance_center(Ct,dt,VW); 
 
             % We will also need to advance rotation here for spheroids TODO
-        
-            %Check for collision between spheres (or sphere envelopes)
-            [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(Ctp,Fparams);
+            % TODO
+            [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt,np2, n3);
     
-            % Finer collision detection for non-spheres
-            if ~strcmp(Shape,'')
-                %Xip and Xjp are not used here, but I think they should be used for the closest points. We should change LOCAL_collision_info to return these as these will be needed in the optimization problem formulation.
-                [colevent,collist,mindst,Xip,Xjp]=LOCAL_check_collision(collist,eps,Ctp,X2,MRot,Mt,VW,dt,np2); 
-            end
+            [colevent,collist,mindst, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(Ctp, Mtp, Fparams); 
+
             
             fprintf('\n bisection = %d: dt = %1.4e, mindst = %1.4e, mindstsh = %1.4e',bis,dt,mindst,mindstsh);
             
@@ -1036,7 +1044,7 @@ function [colevent,collist, dt,Ctp, closest_points_1, closest_points_2] = LOCAL_
     end
 end
     
-function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparams)
+function [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams)
     %{
     Calculates distance between spheres using their centers and radius.
 
@@ -1047,9 +1055,8 @@ function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparam
     %}
     n3 = size(C,1); 
     
-    rd = Fparams.parbd.rd; 
-    mxrd = Fparams.parbd.mxrd; 
-    diam = Fparams.parbd.diam; 
+    max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
+    diam = 2 * max_radii; 
     eps = Fparams.parbd.eps;  
     
     if n3 > 1
@@ -1060,7 +1067,7 @@ function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparam
         [ii,jj]=meshgrid(1:n3); 
         %this creates all combinations of indices (i, j) for i,j=1,...,n3 (all bodies)
         %finds all the indices whose distance is less than diam (r_i + r_j) + buffer which is relative as its in terms of 1.1*eps*max(r_i, r_j)
-        id = distC<=diam+1.1*eps*mxrd & ii<jj; 
+        id = distC<=diam+1.1*eps*max_radii & ii<jj; 
         %This selects the indices where the 
         ip = ii(id); 
         jp = jj(id); 
@@ -1073,11 +1080,11 @@ function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparam
     end
 
     colevent = mindst < 1.1*eps; 
-    mindstsh = Inf;
+    %mindstsh = Inf; Not really sure what this does, it did return it, will ignore for now
     collist = [ip jp]; 
 end
 
-function [colevent,collist,mindst,Xip,Xjp, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(collist,eps,C,X,MRot,Mt,VW,dt,np)
+function [colevent, collist, mindst, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(C, Mt, Fparams)
     %collist - list of potential colliding pairs assuming they are spheres (for this we would use the largest radii?, assuming spheroids)
     % eps - an epsilon buffer for collision detection
     % C - centers of bodies (This is an double array, n_b x 3)
@@ -1088,21 +1095,22 @@ function [colevent,collist,mindst,Xip,Xjp, distances, closest_points_1, closest_
     % dt - timestep size
     % np - number of surface points per body (don't think is relevant for spheroids)
 
-    %add a switch statment for different shapes (this will just be for spheroids for now)
-    %in the spheroid case, we will check if collevent occurs if we modify LOCAL_check_collision_sph and LOCAL_collision_info (for computing distances we can use the max radii for each spheroid)
+    
+    % If this is the first pass, we will do a quick check using the spheroid's bounding spheres
+    [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams);
+    if ~colevent
+        distances = [];
+        closest_points_1 = [];
+        closest_points_2 = [];
+        return;
+    end
     
     % we are going to implement a not vectorized version for now, just to try and get this to work (and we will assume this is only for spheroids)
 
-    switch(Fparams.parbd.Shape)
-        case {'oblate', 'prolate'}
-            [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(C, MRot, collist, Fparams);
-    end
+    [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(C, Mt, Fparams, collist);
 
-    %now we determine which distances are less than the epsilon buffer
-    indices = distances < eps*10;%some sort of criteria, probably need spheroid specific
-    collist = collist(indices, :);
-    colevent = ~isempty(collist);
-    mindst = min(distances);
+    %We could add a statement about subselecting some of these collision pairs if they are too far, but the LOCAL_check_collision_sph should have already done that (perhaps a bit conservatively, so this could be improved upon).
+
     
 end
 
@@ -1166,7 +1174,7 @@ function den = LOCAL_CenterDistances(C)
     end
 end
 
-function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(collist, C, Mt, Fparams)
+function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(C, Mt, Fparams, collist)
 
     %switch statement for different distance algorithms.
     %right now we will just implement two options, moving balls and GJK signed volumes accelerated

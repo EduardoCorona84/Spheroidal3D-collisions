@@ -39,6 +39,7 @@ end
 % Alias variables
 equ_radii = opts.equ_radii;
 polar_radii = opts.polar_radii;
+max_radii = max(equ_radii, polar_radii);
 p = opts.p;
 C = opts.C;
 eps = opts.eps;
