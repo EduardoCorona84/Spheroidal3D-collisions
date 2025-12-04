@@ -40,28 +40,26 @@ if isempty(s) || isempty(y)
     return 
 end
 
-denom = norm(y,2)^2;
-if denom < 100*eps()
-    h0 = opts.tau;
-else
-    %% Constants from Stephens ProxQN paper
-    gamma = 0.8;
-    tau_min = 1e-14;
-    tau_max = Inf;
-    tau_bb2 = dot(s,y) / denom;
-    tau_bb2 = clip(tau_bb2, tau_min, tau_max);
-    if tau_bb2 == tau_min
-        warning('Convexity of cost function is stagnating')
-    end
-    h0 = gamma * tau_bb2;
+
+%% Constants from Stephens ProxQN paper
+gamma = 0.8;
+tau_min = 1e-14;
+tau_max = Inf;
+tau_bb2 = exp(log(dot(s,y)) - log(norm(y,2)^2)); % do the devision in log space for safety
+tau_bb2 = clip(tau_bb2, tau_min, tau_max);
+if tau_bb2 == tau_min
+    warning('Convexity of cost function is stagnating')
 end
+h0 = gamma * tau_bb2;
+%% Create function hndl
 % H_k = h0 * I + sigma * u * u'
 delta = s - h0 .* y;
 denom = dot(delta, y);
 sigma = sign(denom);
 if (denom <= 1e-8 * norm(y,2)^2 * norm(s - h0 .* y,2)^2 || ...
         dot(y,s) <= 1e-8 )
-    % The first check is for sufficient decrease the second is curvature 
+    % The first check is for sufficient decrease/secant cond being satisfied
+    % The second check is curvature  
     u = [];
     H = @(g) h0*g;
 else

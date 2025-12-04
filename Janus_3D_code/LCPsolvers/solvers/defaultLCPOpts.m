@@ -17,11 +17,11 @@ if ~isfield(opts, 'max_iter')
 end
 
 if ~isfield(opts, 'kkt_rel')
-    opts.kkt_rel = 1e-4;
+    opts.kkt_rel = 1e-8;
 end
 
 if ~isfield(opts, 'kkt_abs')
-    opts.kkt_abs = 1e-6;
+    opts.kkt_abs = 1e-8;
 end
 
 if ~isfield(opts, 'arg_rel')
@@ -78,7 +78,7 @@ end
 %% Linesearch Parameters
 if ~isfield(opts, 'linesearch')
     % Hyper parameters from pg 62 of N&W
-    opts.linesearch = struct('budget', 10,...
+    opts.linesearch = struct('budget', 1,...
         'c1', 1e-4, ... 
         'c2', 0.9, ...
         'tol',  1e-8);
@@ -123,6 +123,26 @@ end
 if ~isfield(opts, 'acceleration')
     opts.acceleration = struct('alpha_k', 1, 'method', 'adaptive', 'cond', 1e-1, 'restart', true, 'curvature', 'feasible', 'direction', 'feasible');
 end
+%% bifi 
+if contains(lower(opts.solver), 'bifi')
+    if ~isfield(opts.qn, 'U') || ~isfield(opts.qn, 'V')
+        opts.qn.U = zeros(n,n);
+        opts.qn.V = zeros(n,n);
+    end
+    if ~isfield(opts,'sub')
+        opts.sub.solver = 'proxquasinewton';
+        opts.sub.kkt_rel = opts.kkt_rel;
+        opts.sub.kkt_abs = opts.kkt_abs;
+        opts.sub.max_iter = int64(floor(opts.max_iter/10));
+        opts.sub = defaultLCPOpts(opts.sub,x0);
+    end 
+    if ~isfield(opts,'low')
+        opts.low.initWithLofi = true;
+        opts.low.p = 6;
+        opts.low.gmresTol = 1e-6;
+    end
+end
+
 %% Initialize info struct
 info = struct('kkt', [], ...
     'iter',[],...

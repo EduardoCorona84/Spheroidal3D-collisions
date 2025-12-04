@@ -17,10 +17,10 @@ b_vec = b{32};
 cond_high = cond(high_fidelity_mat);
 
 clear opts;
-opts.solver = 'proxquasinewton';
-opts.storeIts = true;
 
-error_function = @(x) (1/2)*dot(min(x, high_fidelity_mat*x + b_vec), min(x, high_fidelity_mat*x + b_vec));
+error_function = @(x) dot(min(x, high_fidelity_mat*x + b_vec), min(x, high_fidelity_mat*x + b_vec));
+opts.solver = 'proxQuasiNewton';
+opts.storeIts = true; 
 opts.errFcn = error_function;
 opts.A = @(x) high_fidelity_mat*x;
 opts.b = b_vec;
@@ -35,16 +35,13 @@ errors = cell(1, length(ps));
 for p = 1:length(ps)
     low_fidelity_mat = A{32, p, 4};
     clear opts;
-    opts.high.solver = 'proxquasinewton';
-    opts.high.errFcn = error_function;
-    opts.high.storeIts = true;
-    opts.high.A = @(x) high_fidelity_mat*x;
-    opts.high.b = b_vec;
-    opts.high.max_iter = 10;
-    opts.sub.solver = 'proxquasinewton';  
-    opts.low.A = @(x) low_fidelity_mat*x;
+    opts.solver = 'bifi';
+    opts = defaultLCPOpts(opts, b_vec);
+    opts.errFcn = error_function;
+    opts.A = @(x) high_fidelity_mat*x;
+    opts.b = b_vec;
+    opts.low.A = @(x) low_fidelity_mat*x; 
     opts.low.b = b_vec;
-    opts.low.max_iter = 4;
     [x_low, info_low] = multifidelityProxQuasiNewton(fg_high, zeros(size(b_vec)), opts);
     errors{p} = info_low.errHist;
 end

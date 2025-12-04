@@ -77,7 +77,7 @@ while l <= linesearchBudget
     t = t*2;
     l = l+1;
 end
-if l > linesearchBudget
+if debug && l > linesearchBudget
     warning('Linesearch failed')
 end % zoom
 
@@ -115,7 +115,7 @@ function zoom(tHi)
     end
 end % zoom
 
-if false && l >1
+if debug && l >= linesearchBudget
     plotLineSearch(t, x_km1, Ax_km1, f_km1, grad_km1, step, opts)
 end
 end % lineSearch

@@ -25,6 +25,7 @@ while true
     end
     % Increase k 
     k = k + 1;
+    opts.k = k;
     x_km1 = x_k; Ax_km1 = Ax_k; f_km1= f_k; grad_km1 = grad_k;
     % Update (inverse) Hessian Approximation
     [H, opts] = updateHk(s, y, opts);
@@ -33,9 +34,8 @@ while true
     prox_k = @(xtilde) prox(xtilde, opts);
     step_k = @(t, opts) fwdBwdstep(t, x_km1, Ax_km1, q, prox_k, fg, opts);
     % Linesearch 
-    opts.k = k;
     [x_k, Ax_k, f_k, grad_k] = linesearch(x_km1, Ax_km1, f_km1, grad_km1, ...
-        step_k, opts, true);
+        step_k, opts);
     % Save secant conditions
     s = x_k - x_km1;
     y = grad_k - grad_km1;
