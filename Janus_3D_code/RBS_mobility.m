@@ -159,10 +159,16 @@ if Fparams.plotFlag
     ax.FontSize = 16;
     grid on
     view(0,90)
-    axis([-3 3 -3 3 -1 1])
+    C = Ct{1};
+    n = size(C,1);
+    R = max(arrayfun(@(i) norm(C(i,:)), 1:n));
+    lims = [-2*R 2*R];
+    ax = gca;
+    xlim(ax,lims);
+    ylim(ax, lims);
+    zlim(ax, lims);
     grp = hgtransform(Parent=ax);
     % Plot the initial config
-    C = Ct{1};
     r = Fparams.parbd.rd;
     hndls = cell(n3, 1);
     for k=1:n3
