@@ -840,7 +840,6 @@ end
 if isempty(contactPairs)
     contactPairs = cell(1, Fparams.Nt);
 end
-
 if ~isfield(Fparams, 'saveLCPs') 
     saveLCPs = false;
 else 
@@ -856,7 +855,7 @@ eps = Fparams.parbd.eps;
 Nb = Fparams.parbd.Nb; 
 ixTime = Fparams.ixTime;
 %% Set up saving to file
-if saveLCPs && (isempty(lcp_list) ||ixTime == Fparams.lid)
+if saveLCPs 
     if ~isfield(Fparams, 'LCP_file_path')
         mfilePath = mfilename('fullpath');
         if contains(mfilePath,'LiveEditorEvaluationHelper')
@@ -867,20 +866,23 @@ if saveLCPs && (isempty(lcp_list) ||ixTime == Fparams.lid)
     else
         LCP_file_path = Fparams.LCP_file_path;
     end
-    if Fparams.loadIntermediate && exist(LCP_file_path,'file')
-        load(LCP_file_path, 'lcp_list');
-        contactPairs = {lcp_list.contactPairs};
-    else
-        lcp_list = repmat( ...
-            struct( ...
-                'A', [], ...
-                'F', [], ...
-                'C', [], ...
-                'b', [], ...
-                'x', [], ...
-                'contactPairs',[] ...
-            ), [1, Fparams.Nt] ...
-        );
+    if isempty(lcp_list) || ixTime == Fparams.lid
+        % Initialize structure or load intermediate results
+        if Fparams.loadIntermediate && exist(LCP_file_path,'file')
+            load(LCP_file_path, 'lcp_list');
+            contactPairs = {lcp_list.contactPairs};
+        else
+            lcp_list = repmat( ...
+                struct( ...
+                    'A', [], ...
+                    'F', [], ...
+                    'C', [], ...
+                    'b', [], ...
+                    'x', [], ...
+                    'contactPairs',[] ...
+                ), [1, Fparams.Nt] ...
+            );
+        end
     end
 end
 %% Setup F matrix which marginalizes to the contact pairs for this time
@@ -929,7 +931,7 @@ if ~Fparams.denseMV && parslv.prLCP
             error(['Preconditioner ' parslv.prtype 'not implement'])
     end
 else 
-    A = getMatVec(Fparams, F, Ct, Kernels, Nullsp);
+    A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
     if Fparams.denseMV
         A = @(x) A*x;
     end
@@ -956,36 +958,40 @@ theseContactPairs = zeros(n3,1);
 for ii = 1:numF+numFS
     l0 = (find(F(:,ii), 1,'first')-1) / 6;
     l1 = (find(F(:,ii), 1,'last')-3) / 6;
-    % linear indexing from 0
+    % linear indexing from 0 to N = numF+numFS
     % pair 0,1 -> 1, N,0 -> N(N-1), and so on
-    theseContactPairs(ii) = (l0-1)*numF+num + l1; 
+    theseContactPairs(ii) = l0*(numF+numFS) + l1; 
 end
 contactPairs{ixTime} = theseContactPairs;
 %% Bifidelity 
 if contains('bifi', lower(Fparams.lcpOpts.solver))
-    lofi_p = Fparams.lcpOpts.low.p;
-    lofi_gmresTol = Fparams.lcpOpts.low.gmresTol;
-    lofi_A = getMatVec(Fparams, F, Ct, [], Nullsp, lofi_p, lofi_gmresTol);
+    pLo = Fparams.lcpOpts.low.p;
+    tolLo = Fparams.lcpOpts.low.gmresTol;
+    Ahat = getLCPMatVec(Fparams, F, [], Nullsp, pLo, tolLo);
     if Fparams.denseMV
-        lofi_A = @(x)lofi_A*x;
+        Ahat = @(x)Ahat*x;
     end
-    Fparams.lcpOpts.high.A = A;
-    Fparams.lcpOpts.high.b = bvec;
-    Fparams.lcpOpts.low.A = lofi_A;
+    Fparams.lcpOpts.low.A = Ahat;
     Fparams.lcpOpts.low.b = bvec;
     Fparams.lcpOpts.low.initWithLofi = ~Fparams.lcpOpts.warmStart;
 end
 %% LCP solve 
-x0 = zeros(size(bvec));
+n = numel(bvec);
+x0 = zeros(n,1);
 if Fparams.lcpOpts.warmStart &&ixTime > 1
     x_im1 = x{ixTime -1};
     ix_im1 = contactPairs{ixTime-1};
     ix_i = contactPairs{ixTime};
     for ii = 1:n
-        x0(ii) = x_im1(ix_i(ii) == ix_im1);
+        if sum(ix_i(ii) == ix_im1) == 1
+            x0(ii) = x_im1(ix_i(ii) == ix_im1);
+        elseif sum(ix_i(ii) == ix_im1) > 1
+            warning('Multiple matches in warm starting... problematic')
+        end
     end
 end
-lcpOpts = Fparams.lcpOpts;
+resetQN = true; % Reset the QN memory
+lcpOpts = defaultLCPOpts(Fparams.lcpOpts,x0,resetQN);
 % Give the solvers access to the mat vec alone
 lcpOpts.A = A; 
 lcpOpts.b = bvec; 
@@ -1014,27 +1020,10 @@ if saveLCPs
         lcp_list(ixTime).C = Ct; 
     else
         % in the dense case just save the mat
-        lcp_list(ixTime).A = Amat;
+        lcp_list(ixTime).A = A;
     end 
-    %% Check if the file is getting very large
-    varInfo = whos('lcp_list');
-    total_bytes = varInfo.bytes;
-    if total_bytes > 2e9 
-        save_iter = save_iter + 1;
-        lcp_list = repmat( ...
-            struct( ...
-                'A', [], ...
-                'F', [], ...
-                'C', [], ...
-                'b', [] ...
-            ), [1, Fparams.Nt] ...
-        );
-    end 
-    if save_iter > 0
-        saveFile = [LCP_file_path '.prt_' num2str(save_iter) '.mat'];
-    else 
-        saveFile = [LCP_file_path '.mat'];
-    end
+    
+    saveFile = [LCP_file_path '.mat'];
     disp(['Saving LCP data to ' saveFile])
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');

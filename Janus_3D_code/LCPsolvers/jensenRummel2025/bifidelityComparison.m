@@ -28,7 +28,7 @@ for i = 1:Nt
         l1 = (find(F(:,ii), 1,'last')-3) / 6;
         % linear indexing from 0
         % pair 0,1 -> 1, N,0 -> N(N-1), and so on
-        thesePairs(ii) = (l0-1)*N + l1; 
+        thesePairs(ii) = l0*N + l1; 
     end
     contactPairIX{i} = thesePairs;
 end

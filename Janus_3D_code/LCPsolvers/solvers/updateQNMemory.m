@@ -5,7 +5,12 @@ if isempty(looseMem)
 end
 h0 = 1; 
 n = opts.n;
-m = opts.qn.m;
+if isinf(opts.qn.m)
+    % Corresponds to full memory
+    m = n;
+else
+    m = opts.qn.m;
+end
 rho = opts.qn.rho;
 S = opts.qn.S;
 Y = opts.qn.Y;

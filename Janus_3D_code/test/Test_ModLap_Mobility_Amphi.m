@@ -21,10 +21,10 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma,plotFlag,polydisperseRatio)
 %% Default parameters
 if ~exist('p','var') || isempty(p)
-    p=2; 
+    p=6; 
 end
 if ~exist('lambda','var') || isempty(lambda)
     lambda=0.1;
@@ -36,16 +36,16 @@ if ~exist('n','var') || isempty(n)
     n=2;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
-    Cdst=2.3; 
+    Cdst=2.5; 
 end
 if ~exist('ep','var') || isempty(ep)
     ep=.3;
 end
 if ~exist('Nt','var') || isempty(Nt)
-    Nt=500;
+    Nt=200;
 end
 if ~exist('dt','var') || isempty(dt)
-    dt=.1;
+    dt=.5;
 end
 if ~exist('tdisc','var') || isempty(tdisc)
     tdisc='euler';
@@ -54,7 +54,7 @@ if ~exist('saveLCPs','var') || isempty(saveLCPs)
     saveLCPs=true; 
 end
 if ~exist('initMode','var') || isempty(initMode)
-    initMode='vesicle'; 
+    initMode='lattice'; 
 end
 if ~exist('tol','var') || isempty(tol)
     tol=1e-4;
@@ -63,13 +63,19 @@ if ~exist('mdist','var') || isempty(mdist)
     mdist=3; 
 end
 if ~exist('denseMV','var') || isempty(denseMV)
-    denseMV=false; 
+    denseMV=true; 
 end
 if ~exist('denseforce','var') || isempty(denseforce)
     denseforce=1;
 end
 if ~exist('gamma','var') || isempty(gamma)
     gamma=1; 
+end
+if ~exist('plotFlag','var') || isempty(plotFlag)
+    plotFlag=true; 
+end
+if ~exist('polydisperseRatio','var') || isempty(polydisperseRatio)
+    polydisperseRatio=0.2; 
 end
 %% boundary_label function
 boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
@@ -106,9 +112,9 @@ Fparams = struct('Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp',...
 %% initialize configuration
 switch initMode
     case 'lattice'
-        [C, init_dir] = init_lattice(n, Cdst);
-    case 'vesicle'
-        [C, init_dir] = init_vesicle(n, Cdst);
+        [C, rd, init_dir] = init_lattice(n, Cdst, rd, polydisperseRatio);
+    % case 'vesicle'
+    %     [C, init_dir] = init_vesicle(n, Cdst);
     otherwise
         error([initMod ' not a recognized initMode'])
 end
@@ -117,21 +123,17 @@ end
 %% Fill Parameter Structs
 % body parameters
 n3 = size(C,1); 
-rd=rd*ones(n3,1);
+Fparams.plotFlag = plotFlag;
 Fparams.parbd = struct('Shape','','n3',n3,'rd',rd,'diam',2*rd,'p',p,'mdist',mdist,'mxrd',rd(1),'eps',ep,'out',1);
 Fparams.parbd.Ct = C;
 Fparams.init_dir = init_dir;
 % LCP solver parameters
-Fparams.lcpOpts = struct(...
-    'solver','proxquasinewton',...
-    'max_iter',100,...
-    'tol_rel',1e-6,...
-    'tol_abs',1e-5, ...
-    'stepSize',struct(...
-        'init','uniform',...
-        'kappa','uniform',...
-        'eta','opt')...
-);
+Fparams.lcpOpts = defaultLCPOpts(struct(...
+    'solver','proxquasinewton', ...
+    'max_iter',1000, ...
+    'kkt_rel',1e-8, ...
+    'kkt_abs',1e-8, ...
+    'warmStart',true));
 
 % linear solver parameters
 Fparams.parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
@@ -142,5 +144,5 @@ Fparams.parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype',
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
-RBS_mobility(fname,Fparams,true);
+RBS_mobility(fname,Fparams);
 end
