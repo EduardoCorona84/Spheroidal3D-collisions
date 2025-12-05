@@ -73,5 +73,8 @@ if ~ isfield(Fparams, 'loadIntermediate')
     Fparams.loadIntermediate = false;
 end
 
+if ~ isfield(Fparams, 'plotFlag')
+    Fparams.plotFlag = false;
+end
 end
 

@@ -21,10 +21,10 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma,plotFlag,polydisperseRatio)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma,loadIntermediate, plotFlag,polydisperseRatio)
 %% Default parameters
 if ~exist('p','var') || isempty(p)
-    p=6; 
+    p=2; 
 end
 if ~exist('lambda','var') || isempty(lambda)
     lambda=0.1;
@@ -71,6 +71,9 @@ end
 if ~exist('gamma','var') || isempty(gamma)
     gamma=1; 
 end
+if ~exist('loadIntermediate','var') || isempty(loadIntermediate)
+    loadIntermediate=true; 
+end
 if ~exist('plotFlag','var') || isempty(plotFlag)
     plotFlag=true; 
 end
@@ -87,7 +90,7 @@ end
 [dirname,~,~] = fileparts(mfilePath);
 basedir = fullfile(dirname, '..');
 lcpDataDir = fullfile(basedir, 'data');
-postFix = ['.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
+postFix = ['.' initMode '.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
 lcpResDir = fullfile(basedir, 'LCPsolvers/data');
 fname = fullfile(lcpDataDir, ['amphi' postFix]); % Name of file for regular results file
 LCP_file_path = fullfile(lcpResDir, ['amphi' postFix]); % Name of the LCP results file
@@ -107,14 +110,29 @@ Fparams = struct('Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp',...
     'lambda',lambda,'gamma',gamma,'denseMV',denseMV,...
     'typeMV','Vsh','tdisc',tdisc, ...
     'boundary_label',boundary_label,'denseforce',denseforce,...
-    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);
+    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path, ...
+    'loadIntermediate',loadIntermediate);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% initialize configuration
 switch initMode
     case 'lattice'
         [C, rd, init_dir] = init_lattice(n, Cdst, rd, polydisperseRatio);
-    % case 'vesicle'
-    %     [C, init_dir] = init_vesicle(n, Cdst);
+    case 'vesicle'
+        [C, init_dir] = init_vesicle(n, Cdst);
+    case 'special'
+        r_ = 10;
+        [C_, rd, init_dir] = init_lattice(n, Cdst, rd, polydisperseRatio);
+        C = [C_ + repmat([r_ r_ r_], n^3,1);
+             C_ + repmat([-r_ r_ r_],n^3,1);
+             C_ + repmat([r_ -r_ r_],n^3,1);
+             C_ + repmat([r_ r_ -r_],n^3,1);
+             C_ + repmat([-r_ -r_ r_],n^3,1);
+             C_ + repmat([-r_ r_ -r_],n^3,1);
+             C_ + repmat([r_ -r_ -r_],n^3,1);
+             C_ + repmat([-r_ -r_ -r_],n^3,1);
+             ];
+        rd = repmat(rd, 8,1);
+        init_dir = repmat(init_dir, 8,1);
     otherwise
         error([initMod ' not a recognized initMode'])
 end
