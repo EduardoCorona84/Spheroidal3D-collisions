@@ -1000,7 +1000,7 @@ switch lower(lcpOpts.solver)
     case 'proxquasinewton'
         [lam, info] = proxQuasiNewton(fg, x0, lcpOpts);
     case 'bifi'
-        [lam, info] = multifidelityProxQuasiNewton(fg, x0, lcpOpts);
+        [lam, info] = bifidelityProxQuasiNewton(fg, x0, lcpOpts);
     otherwise
         [lam, info] = projectedGradientDescent(fg, x0, lcpOpts); 
 end

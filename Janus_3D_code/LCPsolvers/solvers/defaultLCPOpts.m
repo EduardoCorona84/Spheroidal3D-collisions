@@ -113,7 +113,7 @@ if ~isfield(opts, 'prox')|| isempty(opts.prox)
 end
 %% Parameters specific to subspaceMin
 if ~isfield(opts, 'subspaceMin') 
-    opts.subspaceMin = struct( ...
+    opts.lowspaceMin = struct( ...
         'innerSolver','cvx', ...
         'orthoMethod','qr', ...
         'm', n ...
@@ -129,17 +129,15 @@ if contains(lower(opts.solver), 'bifi')
         opts.qn.U = zeros(n,n);
         opts.qn.V = zeros(n,n);
     end
-    if ~isfield(opts,'sub')
-        opts.sub.solver = 'proxquasinewton';
-        opts.sub.kkt_rel = opts.kkt_rel;
-        opts.sub.kkt_abs = opts.kkt_abs;
-        opts.sub.max_iter = int64(floor(opts.max_iter/10));
-        opts.sub = defaultLCPOpts(opts.sub,x0);
-    end 
     if ~isfield(opts,'low')
         opts.low.initWithLofi = true;
         opts.low.p = 6;
         opts.low.gmresTol = 1e-6;
+        opts.low.solver = 'proxquasinewton';
+        opts.low.kkt_rel = opts.kkt_rel;
+        opts.low.kkt_abs = opts.kkt_abs;
+        opts.low.max_iter = int64(floor(opts.max_iter/10));
+        opts.low = defaultLCPOpts(opts.low,x0);
     end
 end
 

@@ -42,7 +42,7 @@ for p = 1:length(ps)
     opts.b = b_vec;
     opts.low.A = @(x) low_fidelity_mat*x; 
     opts.low.b = b_vec;
-    [x_low, info_low] = multifidelityProxQuasiNewton(fg_high, zeros(size(b_vec)), opts);
+    [x_low, info_low] = bifidelityProxQuasiNewton(fg_high, zeros(size(b_vec)), opts);
     errors{p} = info_low.errHist;
 end
 
@@ -59,5 +59,5 @@ xlabel('Outer Iteration');
 ylabel('KKT Error');
 title(sprintf('Convergence of Multi-Fidelity proximal Quasi-Newton (cond(A)=%.2e)', cond_high));
 legend('show', 'Location', 'best');
-saveas(gcf, 'multifidelityProxQN_varyingLowFidelity.svg');
+saveas(gcf, 'bifidelityProxQN_varyingLowFidelity.svg');
 hold off;

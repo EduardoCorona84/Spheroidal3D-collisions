@@ -1,15 +1,15 @@
-function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
+function [x, info, opts] = bifidelityProxQuasiNewton(fg, x0, opts)
     %Warm Start with Low Fidelity/Need to look into this more.
     fgMid =  @(x, Ax) quadraticLoss(x, opts.low.A, opts.low.b, Ax);
-    opts.sub.b = opts.low.b;
-    opts.sub.A = opts.low.A;
-    opts.sub = defaultLCPOpts(opts.sub, x0);
+    opts.low.b = opts.low.b;
+    opts.low.A = opts.low.A;
+    opts.low = defaultLCPOpts(opts.low, x0);
     if opts.low.initWithLofi
-        [x0, ~, opts.sub] = proxQuasiNewton(fgMid, x0, opts.sub);
-        Ahatx_k = opts.sub.Ax_k;
+        [x0, ~, opts.low] = proxQuasiNewton(fgMid, x0, opts.low);
+        Ahatx_k = opts.low.Ax_k;
     else
-        Ahatx_k = opts.sub.A(x0);
-        opts.sub.Ax_k = Ahatx_k;
+        Ahatx_k = opts.low.A(x0);
+        opts.low.Ax_k = Ahatx_k;
     end
     % For the outer part of the struct, we will use default opts
     % The memory will be the same size as max_iter (we will set this to be small).
@@ -49,7 +49,7 @@ function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
         [f_k, grad_k] = fg(x_k, Ax_k);
         % Update the low fidelity Ax_k with the optimal step size
         Ahatx_k = Ahatx_km1 + eta*(Ahatxhat_k - Ahatx_km1);
-        opts.sub.Ax_k = Ahatx_k;
+        opts.low.Ax_k = Ahatx_k;
         % Save secant conditions
         % High
         s = x_k - x_km1;
@@ -63,7 +63,7 @@ end
 function opts = updateBk(s, y, Ahats, opts)
     if isempty(s) || isempty(y) || isempty(Ahats) || all(s == 0)
         opts.qn.r = [];
-        opts.sub.qn.r2 = [];
+        opts.low.qn.r2 = [];
         return 
     end
     switch(opts.qn.update)
@@ -118,7 +118,7 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
         debug = false;
     end
     %{
-    We are storing the low fidelity secant conditions/memory in opts.sub. We are assuming these are of the form:
+    We are storing the low fidelity secant conditions/memory in opts.low. We are assuming these are of the form:
     Ahat_0S = Y
     That is, we are storing just the action of the low fidelity with no rank updates.
     %}
@@ -135,8 +135,8 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     % \argmin_{x>0} 1/2 x^\top B^{(k)}x + x^\top c
     % The memory stored is secant conditions for \hat{A} : Y = \hat{A} S 
     % We want secant conditions for B : Y = B S
-    S = opts.sub.qn.S;
-    AhatS = opts.sub.qn.Y;
+    S = opts.low.qn.S;
+    AhatS = opts.low.qn.Y;
     r2 = find(~all(S == 0, 1), 1, 'last');     
     S = S(:,1:r2);
     AhatS = AhatS(:,1:r2);
@@ -145,32 +145,32 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     
     % Fill the opts struct for the subproblem
     B = @(x) opts.low.A(x) + U*(U'*x) - V*(V'*x);
-    Ahatx_km1 = opts.sub.Ax_k;
+    Ahatx_km1 = opts.low.Ax_k;
     Bx_km1 = Ahatx_km1 + U*(U'*x_km1) - V*(V'*x_km1);
     c = grad_km1 - Bx_km1;
-    opts.sub.A = B;
-    opts.sub.b = c;
-    opts.sub.qn.Y(:,1:r2) = BS;
-    opts.sub.qn.rho(1:r2) = rho;
+    opts.low.A = B;
+    opts.low.b = c;
+    opts.low.qn.Y(:,1:r2) = BS;
+    opts.low.qn.rho(1:r2) = rho;
     fg_sub = @(x, Bx) quadraticLoss(x, B, c, Bx);
     % Solve the subproblem 
     n = numel(c);
-    opts.sub.qn.S = zeros(n,n);
-    opts.sub.qn.Y = zeros(n,n);
-    opts.sub.Ax_k = Bx_km1;
-    [xhat_k, info, opts.sub] = proxQuasiNewton(fg_sub, x_km1, opts.sub);
+    opts.low.qn.S = zeros(n,n);
+    opts.low.qn.Y = zeros(n,n);
+    opts.low.Ax_k = Bx_km1;
+    [xhat_k, info, opts.low] = proxQuasiNewton(fg_sub, x_km1, opts.low);
     
-    Bx_k = opts.sub.Ax_k;
+    Bx_k = opts.low.Ax_k;
     % After solving the subproblem, in order for bookkeeping to be simplified,
     % we need to store the secant conditions for \hat{A} (not B).
     % \hat{A}S = BS - U*U^\topS + V*V^\top*S
-    S = opts.sub.qn.S;
-    BS = opts.sub.qn.Y;
+    S = opts.low.qn.S;
+    BS = opts.low.qn.Y;
     r2 = find(~all(S == 0, 1), 1, 'last');
     S = S(:,1:r2);
     BS = BS(:,1:r2);
     AhatS = BS - U * (U' * S) + V * (V' * S);
-    opts.sub.qn.Y(:, 1:r2) = AhatS;
+    opts.low.qn.Y(:, 1:r2) = AhatS;
     Ahatxhat_k = Bx_k - U * (U' * xhat_k) + V * (V' * xhat_k);
 
     if debug 
