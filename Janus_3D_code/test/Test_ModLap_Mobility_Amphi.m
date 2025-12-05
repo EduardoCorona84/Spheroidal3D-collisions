@@ -21,10 +21,10 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma,loadIntermediate)
 %% Default parameters
 if ~exist('p','var') || isempty(p)
-    p=8; 
+    p=2; 
 end
 if ~exist('lambda','var') || isempty(lambda)
     lambda=0.1;
@@ -33,7 +33,7 @@ if ~exist('rd','var') || isempty(rd)
     rd=1;
 end
 if ~exist('n','var') || isempty(n)
-    n=5;
+    n=2;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
     Cdst=2.3; 
@@ -54,7 +54,7 @@ if ~exist('saveLCPs','var') || isempty(saveLCPs)
     saveLCPs=true; 
 end
 if ~exist('initMode','var') || isempty(initMode)
-    initMode='vesicle'; 
+    initMode='special'; 
 end
 if ~exist('tol','var') || isempty(tol)
     tol=1e-4;
@@ -71,6 +71,9 @@ end
 if ~exist('gamma','var') || isempty(gamma)
     gamma=1; 
 end
+if ~exist('loadIntermediate','var') || isempty(loadIntermediate)
+    loadIntermediate=true; 
+end
 %% boundary_label function
 boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
 %% Files to save results
@@ -81,7 +84,7 @@ end
 [dirname,~,~] = fileparts(mfilePath);
 basedir = fullfile(dirname, '..');
 lcpDataDir = fullfile(basedir, 'data');
-postFix = ['.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
+postFix = ['.' initMode '.n_' num2str(n) '.p_' num2str(p) '.cDist_' num2str(Cdst)];
 lcpResDir = fullfile(basedir, 'LCPsolvers/data');
 fname = fullfile(lcpDataDir, ['amphi' postFix]); % Name of file for regular results file
 LCP_file_path = fullfile(lcpResDir, ['amphi' postFix]); % Name of the LCP results file
@@ -101,7 +104,8 @@ Fparams = struct('Nt',Nt,'dt',dt,'comp',1,'type','JanusAmp',...
     'lambda',lambda,'gamma',gamma,'denseMV',denseMV,...
     'typeMV','Vsh','tdisc',tdisc, ...
     'boundary_label',boundary_label,'denseforce',denseforce,...
-    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path);
+    'saveLCPs',saveLCPs,'LCP_file_path',LCP_file_path, ...
+    'loadIntermediate',loadIntermediate);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% initialize configuration
 switch initMode
@@ -109,6 +113,19 @@ switch initMode
         [C, init_dir] = init_lattice(n, Cdst);
     case 'vesicle'
         [C, init_dir] = init_vesicle(n, Cdst);
+    case 'special'
+        r_ = 10;
+        [C_, init_dir] = init_lattice(n, Cdst);
+        C = [C_ + repmat([r_ r_ r_], n^3,1);
+             C_ + repmat([-r_ r_ r_],n^3,1);
+             C_ + repmat([r_ -r_ r_],n^3,1);
+             C_ + repmat([r_ r_ -r_],n^3,1);
+             C_ + repmat([-r_ -r_ r_],n^3,1);
+             C_ + repmat([-r_ r_ -r_],n^3,1);
+             C_ + repmat([r_ -r_ -r_],n^3,1);
+             C_ + repmat([-r_ -r_ -r_],n^3,1);
+             ];
+        init_dir = repmat(init_dir, 8,1);
     otherwise
         error([initMod ' not a recognized initMode'])
 end
@@ -142,5 +159,5 @@ Fparams.parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype',
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
-RBS_mobility(fname,Fparams,true);
+RBS_mobility(fname,Fparams);
 end

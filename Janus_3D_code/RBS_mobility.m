@@ -67,23 +67,40 @@ Fparams.parslv.prev=[];
 dt0 = Fparams.dt; timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc;
 %% Possibly load information from previous run 
 saveFile = [fname '.mat'];
-if ~Fparams.loadIntermediate || ~exist(saveFile, 'file')
-    lid = 1;
-    % Initial conditions
-    tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
-    Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; Mt = cell(Nt+1,n3); Energy=cell(1,Nt+1);
-    Ct{lid} = Fparams.parbd.C; Xt{lid} = Fparams.parbd.Xrp;
-    t=tt(1); nrmW = zeros(n3,1);
-    for k=1:n3
-        Mt{1,k}=eye(3);
-    end
-else
+lid = 1;
+% Initial conditions
+tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
+Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; Mt = cell(Nt+1,n3); Energy=cell(1,Nt+1);
+Ct{lid} = Fparams.parbd.C; Xt{lid} = Fparams.parbd.Xrp;
+t=tt(1); nrmW = zeros(n3,1);
+for k=1:n3
+    Mt{1,k}=eye(3);
+end
+% Timings data
+timingsFile = [fname '.profile.mat'];
+zN = zeros(Nt,1);
+timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
+    'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
+    'advance',zN,...
+    'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
+if Fparams.loadIntermediate && exist(saveFile, 'file')
     % Load previous file 
-    load(saveFile, 'tt', 'Ct', 'Xt', 'VW', 'Mt', 'U', 'mu', ...
-        'psi_Lap', 'sigma', 'Energy', 'FT');
+    res_ = load(saveFile);
     % Get the last entry that was saved
-    lid = sum(tt>0);
-    lid =50; % TODO REMOVE
+    lid = sum(res_.tt>0);
+    % 
+    tt(1:lid) = res_.tt(1:lid);
+    Ct(1:lid) = res_.Ct(1:lid);
+    Xt(1:lid) = res_.Xt(1:lid);
+    VW(1:lid) = res_.VW(1:lid);
+    Mt(1:lid,:) = res_.Mt(1:lid,:);
+    U(1:lid) = res_.U(1:lid);
+    mu(1:lid) = res_.mu(1:lid);
+    psi_Lap(1:lid) = res_.psi_Lap(1:lid);
+    sigma(1:lid) = res_.sigma(1:lid);
+    Energy(1:lid) = res_.Energy(1:lid);
+    FT(1:lid) = res_.FT(1:lid);
+    
     t = tt(lid);
     % NIC: I think this initialization is in error
     nrmW = arrayfun(@(k) norm(VW{lid}(4:6,k)), 1:n3);
@@ -96,16 +113,22 @@ else
     % end
     Fparams.parbd.Xrp = Xt{lid}; Fparams.parbd.C = Ct{lid}; 
 end
-% Similarly for the timings data
-timingsFile = [fname '.profile.mat'];
-if ~Fparams.loadIntermediate ||  ~exist(timingsFile,'file')
-    zN = zeros(Nt,1);
-    timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
-        'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
-        'advance',zN,...
-        'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
-else 
-    load(timingsFile,'timings');
+
+if Fparams.loadIntermediate && exist(timingsFile,'file') 
+    res_ = load(timingsFile,'timings');
+    timings.incoming(1:lid) = res_.timings.incoming(1:lid) ;
+    timings.velocities.solve(1:lid) = res_.timings.velocities.solve(1:lid);
+    timings.velocities.apply(1:lid) = res_.timings.velocities.apply(1:lid);
+    timings.velocities.vw(1:lid) = res_.timings.velocities.vw(1:lid);
+    timings.velocities.col(1:lid) = res_.timings.velocities.col(1:lid);
+    timings.velocities.shell(1:lid) = res_.timings.velocities.shell(1:lid);
+    timings.velocities.total(1:lid) = res_.timings.velocities.total(1:lid);
+    timings.advance(1:lid) = res_.timings.advance(1:lid);
+    timings.operator.surf(1:lid) = res_.timings.operator.surf(1:lid);
+    timings.operator.diag(1:lid) = res_.timings.operator.diag(1:lid);
+    timings.operator.offd(1:lid) = res_.timings.operator.offd(1:lid);
+    timings.operator.total(1:lid) = res_.timings.operator.total(1:lid);
+    timings.total(1:lid) = res_.timings.total(1:lid);
 end
 Fparams.lid = lid;
 timings.setup_surf = toc;
@@ -852,17 +875,18 @@ else
 end
 
 if saveLCPs && (isempty(lcp_list) || Fparams.ixTime == Fparams.lid)
+    
+    lcp_list = repmat( ...
+        struct( ...
+            'A', [], ...
+            'F', [], ...
+            'C', [], ...
+            'b', [] ...
+        ), [1, Fparams.Nt] ...
+    );
     if Fparams.loadIntermediate && exist(LCP_file_path,'file')
-        load(LCP_file_path, 'lcp_list');
-    else
-        lcp_list = repmat( ...
-            struct( ...
-                'A', [], ...
-                'F', [], ...
-                'C', [], ...
-                'b', [] ...
-            ), [1, Fparams.Nt] ...
-        );
+        res_ = load(LCP_file_path);
+        lcp_list(1:Fparams.lid) = res_.lcp_list(1:Fparams.lid);
     end
     save_iter = 0;
 end
@@ -1269,18 +1293,6 @@ if strcmp(Fparams.type,'Purcellxy')
 else
     Ctp = Ct + dt*VW(1:3,:)';
 end
-
-end
-
-function M = RotationMat(wh,t)
-
-nwh = norm(wh); 
-t = nwh*t; 
-wh = wh./nwh; 
-
-M = [1-(wh(2)^2+wh(3)^2)*(1-cos(t)),wh(2)*wh(1)*(1-cos(t))-wh(3)*sin(t),wh(1)*wh(3)*(1-cos(t))+wh(2)*sin(t);...
-wh(1)*wh(2)*(1-cos(t))+wh(3)*sin(t),1-(wh(1)^2+wh(3)^2)*(1-cos(t)),wh(2)*wh(3)*(1-cos(t))-wh(1)*sin(t);...
-wh(1)*wh(3)*(1-cos(t))-wh(2)*sin(t),wh(2)*wh(3)*(1-cos(t))+wh(1)*sin(t),1-(wh(2)^2+wh(1)^2)*(1-cos(t))];
 
 end
 
