@@ -42,6 +42,6 @@ subtitle([...
     'reltol_{kkt} = ' num2str(tol) ', abstol_{kkt} = ' num2str(tol)] )
 xticks(1:length(edges))
 xticklabels([string(edges(1:14)), (string(edges(15:end-1)) + "-" +string(edges(16:end)))])
-legend({results(mcGood(1),:).name})
+legend(algoNames, 'Interpreter','latex')
 fname = ['barChart_' prefix];
 saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig/' fname '.pdf'])

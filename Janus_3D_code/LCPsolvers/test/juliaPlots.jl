@@ -1,4 +1,5 @@
 ## Dependencies
+using Printf
 using PlotlyKaleido: restart as restart_kaleido
 restart_kaleido(plotly_version = "2.35.2", mathjax = true) 
 using Latexify, LaTeXStrings, PlotlyJS, LaTeXTabulars, Statistics, Colors
@@ -13,9 +14,9 @@ name2Display = Dict(
     "L-BFGS-B"=>L"\mathrm{L-BFGS-B}",
     "PQN"=>L"\mathrm{PQN}",
     "Min-Map Newton"=>L"\mathrm{Min-Map}\;\mathrm{Newton}",
-    "PQN "*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)",
-    "PQN "*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
-    "PQN "*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
 ) 
 
 name2Color = Dict(
@@ -25,9 +26,9 @@ name2Color = Dict(
     "L-BFGS-B"=>colorant"#d62728",  # brick red
     "PQN"=>colorant"#9467bd",  # muted purple
     "Min-Map Newton"=>colorant"#8c564b",  # chestnut brown
-    "PQN "*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>colorant"#e377c2",  # raspberry yogurt pink
-    "PQN "*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#7f7f7f",  # middle gray
-    "PQN "*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#bcbd22",  # curry yellow-green
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>colorant"#e377c2",  # raspberry yogurt pink
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#7f7f7f",  # middle gray
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#bcbd22",  # curry yellow-green
 )
 # colorant"#17becf"   # blue-teal
 ##
@@ -98,13 +99,13 @@ function createBoxPlotAndTable(
     # problem_size_string = "\$"#"\$n \\in [$(nMin),$(nMax)), "
     # num_problems = length(mcGood)
     (title_text, xaxis_title_text,xaxis_range,xaxis_tickvals,xaxis_type) = if metricName == "matVecs" 
-        "Number of MVPs", "MVPs", [-1,155],0:20:140,"normal"
+        "Number of MVPs", "MVPs", log10.([.9,155]),nothing,"log"
     elseif metricName == "eMatVecs"
-        "Number of Effective MVPs", "Effective MVPs", [-1,20],0:5:20,"normal"
+        "Number of Effective MVPs", "Effective MVPs", log10.([.9,20]),nothing,"log"
     elseif metricName == "iters" 
         "Number of Iterations", "Iterations"
     elseif metricName == "estimTime"
-        "Estimated Wall Time", "Seconds",[1,5],nothing,"log"
+        "Estimated Wall Time", "Seconds",log10.([1e2,1e5]),nothing,"log"
     end
     font_size =30
     p = plot(
@@ -177,7 +178,7 @@ function createBoxPlotAndTable(
         push!(rows, [LaTeXString(name),  
             @sprintf("%.4g",minimum(metric)), 
             @sprintf("%.4g",quantile(metric,0.25)), 
-            @sprintf("%.4g",quantile(metric,0.5)), 
+            @sprintf("%.4g",median(metric)), 
             @sprintf("%.4g",quantile(metric, 0.75)),  
             @sprintf("%.4g",maximum(metric))])
     end

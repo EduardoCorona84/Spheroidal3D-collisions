@@ -29,7 +29,6 @@ function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
         [converged, info] = checkConvergence(k, f_k, x_k, ...
             grad_k, [], info, opts, x_km1, grad_km1);
         if converged
-            k
             x = x_k; 
             break
         end
@@ -40,7 +39,7 @@ function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
         % The implementation for prox quasi-Newton will not work. Need something here.
         opts = updateBk(s, y, Ahats, opts);
         % This solves the subproblem and saves the new low fidelity memory. 
-        [xhat_k, Ahatx_k, opts, ~] = solveSubProblem(x_km1, grad_km1, opts);
+        [xhat_k, Ahatxhat_k, opts, ~] = solveSubProblem(x_km1, grad_km1, opts);
         
         % Use the optimal step size 
         p = xhat_k - x_km1;
@@ -49,7 +48,7 @@ function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
         Ax_k = Ax_km1 + eta*Ap;
         [f_k, grad_k] = fg(x_k, Ax_k);
         % Update the low fidelity Ax_k with the optimal step size
-        Ahatx_k = Ahatx_km1 + eta*(Ahatx_k - Ahatx_km1);
+        Ahatx_k = Ahatx_km1 + eta*(Ahatxhat_k - Ahatx_km1);
         opts.sub.Ax_k = Ahatx_k;
         % Save secant conditions
         % High
@@ -77,6 +76,8 @@ function opts = updateBk(s, y, Ahats, opts)
             end
             % Because there are so few iterations, we can store BFGS with the unrolled update and not use the compact representation. 
             % (Memory does not fall out of the window).
+            S = opts.qn.S;
+            Y = opts.qn.Y;
             U = opts.qn.U;
             V = opts.qn.V;
             % Find the first empty (zeros) column.
@@ -91,13 +92,18 @@ function opts = updateBk(s, y, Ahats, opts)
             % Form and store the BFGS update 
             rho = 1/dot(y,s);
             if rho <= 1e8
-                U(:, r) = y*rho;
-                V(:, r) = Bs/sqrt(s'*Bs);
+                S(:,r) = s;
+                Y(:,r) = y;
+                U(:, r) = y*sqrt(rho);
+                V(:, r) = Bs/sqrt(dot(s,Bs));
             elseif r == 1
                 r = [];
             else
                 r = r-1;
             end
+            B = @(x) opts.low.A(x) + U(:,1:r)*(U(:,1:r)'*x) - V(:,1:r)*(V(:,1:r)'*x);
+            opts.qn.S = S;
+            opts.qn.Y = Y; 
             opts.qn.U = U;
             opts.qn.V = V; 
             opts.qn.r = r;
@@ -107,7 +113,10 @@ function opts = updateBk(s, y, Ahats, opts)
 
 end
 
-function [x_k, Ahatx_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts)
+function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts, debug)
+    if ~exist('debug','var') || isempty(debug)
+        debug = false;
+    end
     %{
     We are storing the low fidelity secant conditions/memory in opts.sub. We are assuming these are of the form:
     Ahat_0S = Y
@@ -136,42 +145,21 @@ function [x_k, Ahatx_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts)
     
     % Fill the opts struct for the subproblem
     B = @(x) opts.low.A(x) + U*(U'*x) - V*(V'*x);
-    Bx_km1 = B(x_km1);
+    Ahatx_km1 = opts.sub.Ax_k;
+    Bx_km1 = Ahatx_km1 + U*(U'*x_km1) - V*(V'*x_km1);
     c = grad_km1 - Bx_km1;
     opts.sub.A = B;
     opts.sub.b = c;
     opts.sub.qn.Y(:,1:r2) = BS;
     opts.sub.qn.rho(1:r2) = rho;
-    opts.sub.Ax_k = Bx_km1;
     fg_sub = @(x, Bx) quadraticLoss(x, B, c, Bx);
-
-
-    % n = numel(c);
-    % BB = B(eye(n));
-    % BB = (BB + BB')/2;
-    % Bx_km1 = BB*x_km1;
-    % c = grad_km1 - Bx_km1;
-    % cvx_begin quiet
-    %     variable z(n)
-    %     minimize 1/2*dot(z, BB*z) + dot(z,c)
-    %     subject to
-    %     0 <= z %#ok<NODEF,NOPRT>
-    % cvx_end
-    % cvx_begin quiet
-    %     variable y(n)
-    %     minimize 1/2*dot(y - x_km1, BB*(y-x_km1)) + dot(y-x_km1, grad_km1)
-    %     subject to
-    %     0 <= y %#ok<NODEF,NOPRT>
-    % cvx_end
-    % norm(y - z) / norm(z)
-
-    % fprintf('relErr BS = %.6g\n', norm(BS - B(S)) / norm(B(S)))
     % Solve the subproblem 
-    % n = numel(c);
-    % opts.sub.qn.S = zeros(n,n);
-    % opts.sub.qn.Y = zeros(n,n);
-    [x_k, info, opts.sub] = proxQuasiNewton(fg_sub, x_km1, opts.sub);
-    % norm(x_k - z) / norm(z)
+    n = numel(c);
+    opts.sub.qn.S = zeros(n,n);
+    opts.sub.qn.Y = zeros(n,n);
+    opts.sub.Ax_k = Bx_km1;
+    [xhat_k, info, opts.sub] = proxQuasiNewton(fg_sub, x_km1, opts.sub);
+    
     Bx_k = opts.sub.Ax_k;
     % After solving the subproblem, in order for bookkeeping to be simplified,
     % we need to store the secant conditions for \hat{A} (not B).
@@ -183,9 +171,31 @@ function [x_k, Ahatx_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts)
     BS = BS(:,1:r2);
     AhatS = BS - U * (U' * S) + V * (V' * S);
     opts.sub.qn.Y(:, 1:r2) = AhatS;
-    Ahatx_k = Bx_k - U * (U' * x_k) + V * (V' * x_k);
+    Ahatxhat_k = Bx_k - U * (U' * xhat_k) + V * (V' * xhat_k);
+
+    if debug 
     %% idiot checks
     % fprintf('relErr BS = %.6g\n', norm(BS - B(S)) / norm(B(S)))
     % fprintf('relErr AhatS = %.6g\n', norm(AhatS - opts.low.A(S)) / norm(opts.low.A(S)))
     % fprintf('relErr Ahatx_k = %.6g\n', norm(Ahatx_k - opts.low.A(x_k)) / norm(opts.low.A(x_k)))
+    n = numel(c);
+    BB = B(eye(n));
+    BB = (BB + BB')/2;
+    Bx_km1 = BB*x_km1;
+    c = grad_km1 - Bx_km1;
+    cvx_begin quiet
+        variable z(n)
+        minimize 1/2*dot(z, BB*z) + dot(z,c)
+        subject to
+        0 <= z %#ok<NODEF,NOPRT>
+    cvx_end
+    cvx_begin quiet
+        variable y(n)
+        minimize 1/2*dot(y - x_km1, BB*(y-x_km1)) + dot(y-x_km1, grad_km1)
+        subject to
+        0 <= y %#ok<NODEF,NOPRT>
+    cvx_end
+    fprintf('relErr of reformulated problem %.6g\n', norm(y - z) / norm(z))
+    fprintf('relErr of proxQuasiNewton solve %.6g\n', norm(xhat_k - z) / norm(z))
+    end
 end
