@@ -1,29 +1,32 @@
-function Ax = Acounter(x, A, transpose)
+function Ax = Acounter(x, A, id)
 persistent matVecCnt
-
 if isempty(matVecCnt)
-    matVecCnt = 0;
+    matVecCnt = containers.Map('KeyType','int32','ValueType','double');
 end
-if ~exist('transpose','var') || isempty(transpose)
-    transpose = false;
+if ~exist('id','var') || isempty(id)
+    id = 0;
+end
+if ~matVecCnt.isKey(id)
+    matVecCnt(id) = 0;
 end
 
 if ischar(x)
     if strcmpi(x, 'cnt')
-        Ax = matVecCnt;
+        Ax = matVecCnt(id);
         return
     elseif strcmpi(x, 'reset')
-        Ax = matVecCnt;
-        matVecCnt = 0;
+        Ax = matVecCnt(id);
+        keys = matVecCnt.keys;
+        K = numel(keys);
+        for k = 1:K 
+            key = keys{k};
+            matVecCnt(key) = 0;
+        end
         return
     else
         assert(false, ['Option: ' x ' not recognized'])
     end
 end
-if transpose
-    Ax = A'*x;
-else
-    Ax = A*x;
-end
-matVecCnt = matVecCnt + 1;
+Ax = A*x;
+matVecCnt(id) = matVecCnt(id) + 1;
 end

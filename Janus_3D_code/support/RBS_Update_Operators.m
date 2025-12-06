@@ -53,13 +53,8 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Build Kernels / MatVec info
 
-[Ck,Bk,Dk,Lk] = Build_AuxMats(Fparams.parbd.Wg,Xt,[],np,n3); 
-Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.L = Lk;
-if isfield(Fparams, 'lofi')
-    lofi_Xt = Fparams.lofi.Xrp;
-    [lofi_Ck,lofi_Bk,lofi_Dk,lofi_Lk] = Build_AuxMats(Fparams.lofi.Wg,lofi_Xt,[],Fparams.lofi.np,n3); 
-    Nullsp.lofi_C = lofi_Ck; Nullsp.lofi_B = lofi_Bk; Nullsp.lofi_D = lofi_Dk; Nullsp.lofi_L = lofi_Lk;
-end
+[Ck,Bk,Dk,Ak,Lk] = Build_AuxMats2(Fparams.parbd.Wg,Xt,[],np,n3); 
+Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.A = Ak; Nullsp.L = Lk;
 
 % Initial block diag build
 if i==0
@@ -151,13 +146,6 @@ tic;
 % Stokes kernels 
 Kernels.TD = RBS_MatVec([],Lk,typeMV,Fparams.parbd,sdim,0.5,'TSL_Stk_3D',Kernels.TSSDd);
 Kernels.SD = RBS_MatVec([],[],typeMV,Fparams.parbd,sdim,0,'SL_Stk_3D',Kernels.SSDd); 
-if isfield(Fparams, 'lofi')
-    if ~strcmpi(typeMV, 'vsh')
-        warning('Lofi implementation expects no use of the DMV possible failure');
-    end
-    Kernels.lofi_TD = RBS_MatVec([],lofi_Lk,typeMV,Fparams.lofi,sdim,0.5,'TSL_Stk_3D',[]);
-    Kernels.lofi_SD = RBS_MatVec([],[],typeMV,Fparams.lofi,sdim,0,'SL_Stk_3D',[]); 
-end
 Fparams.parmod.dense = 1;
 if strcmp(Fparams.type,'MHD')
     % Laplace kernels

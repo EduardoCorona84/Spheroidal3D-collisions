@@ -67,23 +67,40 @@ Fparams.parslv.prev=[];
 dt0 = Fparams.dt; timedisc = Fparams.tdisc; Sc = Fparams.parbd.Sc;
 %% Possibly load information from previous run 
 saveFile = [fname '.mat'];
-if ~Fparams.loadIntermediate || ~exist(saveFile, 'file')
-    lid = 1;
-    % Initial conditions
-    tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
-    Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; Mt = cell(Nt+1,n3); Energy=cell(1,Nt+1);
-    Ct{lid} = Fparams.parbd.C; Xt{lid} = Fparams.parbd.Xrp;
-    t=tt(1); nrmW = zeros(n3,1);
-    for k=1:n3
-        Mt{1,k}=eye(3);
-    end
-else
+lid = 1;
+% Initial conditions
+tt = zeros(Nt+1,1); sigma = cell(Nt+1,1); mu=sigma; U=sigma; VW=U; 
+Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; Mt = cell(Nt+1,n3); Energy=cell(1,Nt+1);
+Ct{lid} = Fparams.parbd.C; Xt{lid} = Fparams.parbd.Xrp;
+t=tt(1); nrmW = zeros(n3,1);
+for k=1:n3
+    Mt{1,k}=eye(3);
+end
+% Timings data
+timingsFile = [fname '.profile.mat'];
+zN = zeros(Nt,1);
+timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
+    'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
+    'advance',zN,...
+    'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
+if Fparams.loadIntermediate && exist(saveFile, 'file')
     % Load previous file 
-    load(saveFile, 'tt', 'Ct', 'Xt', 'VW', 'Mt', 'U', 'mu', ...
-        'psi_Lap', 'sigma', 'Energy', 'FT');
+    res_ = load(saveFile);
     % Get the last entry that was saved
-    lid = sum(tt>0);
-    lid =50; % TODO REMOVE
+    lid = sum(res_.tt>0);
+    % 
+    tt(1:lid) = res_.tt(1:lid);
+    Ct(1:lid) = res_.Ct(1:lid);
+    Xt(1:lid) = res_.Xt(1:lid);
+    VW(1:lid) = res_.VW(1:lid);
+    Mt(1:lid,:) = res_.Mt(1:lid,:);
+    U(1:lid) = res_.U(1:lid);
+    mu(1:lid) = res_.mu(1:lid);
+    psi_Lap(1:lid) = res_.psi_Lap(1:lid);
+    sigma(1:lid) = res_.sigma(1:lid);
+    Energy(1:lid) = res_.Energy(1:lid);
+    FT(1:lid) = res_.FT(1:lid);
+    
     t = tt(lid);
     % NIC: I think this initialization is in error
     nrmW = arrayfun(@(k) norm(VW{lid}(4:6,k)), 1:n3);
@@ -96,16 +113,22 @@ else
     % end
     Fparams.parbd.Xrp = Xt{lid}; Fparams.parbd.C = Ct{lid}; 
 end
-% Similarly for the timings data
-timingsFile = [fname '.profile.mat'];
-if ~Fparams.loadIntermediate ||  ~exist(timingsFile,'file')
-    zN = zeros(Nt,1);
-    timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
-        'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
-        'advance',zN,...
-        'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
-else 
-    load(timingsFile,'timings');
+
+if Fparams.loadIntermediate && exist(timingsFile,'file') 
+    res_ = load(timingsFile,'timings');
+    timings.incoming(1:lid) = res_.timings.incoming(1:lid) ;
+    timings.velocities.solve(1:lid) = res_.timings.velocities.solve(1:lid);
+    timings.velocities.apply(1:lid) = res_.timings.velocities.apply(1:lid);
+    timings.velocities.vw(1:lid) = res_.timings.velocities.vw(1:lid);
+    timings.velocities.col(1:lid) = res_.timings.velocities.col(1:lid);
+    timings.velocities.shell(1:lid) = res_.timings.velocities.shell(1:lid);
+    timings.velocities.total(1:lid) = res_.timings.velocities.total(1:lid);
+    timings.advance(1:lid) = res_.timings.advance(1:lid);
+    timings.operator.surf(1:lid) = res_.timings.operator.surf(1:lid);
+    timings.operator.diag(1:lid) = res_.timings.operator.diag(1:lid);
+    timings.operator.offd(1:lid) = res_.timings.operator.offd(1:lid);
+    timings.operator.total(1:lid) = res_.timings.operator.total(1:lid);
+    timings.total(1:lid) = res_.timings.total(1:lid);
 end
 Fparams.lid = lid;
 timings.setup_surf = toc;
@@ -136,10 +159,16 @@ if Fparams.plotFlag
     ax.FontSize = 16;
     grid on
     view(0,90)
-    axis([-3 3 -3 3 -1 1])
+    C = Ct{1};
+    n = size(C,1);
+    R = max(arrayfun(@(i) norm(C(i,:)), 1:n));
+    lims = [-2*R 2*R];
+    ax = gca;
+    xlim(ax,lims);
+    ylim(ax, lims);
+    zlim(ax, lims);
     grp = hgtransform(Parent=ax);
     % Plot the initial config
-    C = Ct{1};
     r = Fparams.parbd.rd;
     hndls = cell(n3, 1);
     for k=1:n3
@@ -831,41 +860,21 @@ end
 
 function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt)
 
-persistent lcp_list save_iter
-
+persistent x contactPairs lcp_list
+% Keep local copies of contact forces computed up to this point in time
+if isempty(x)
+    x = cell(1, Fparams.Nt);
+end
+% Keep local copies of contact pairs for each LCP up to this point in time
+if isempty(contactPairs)
+    contactPairs = cell(1, Fparams.Nt);
+end
 if ~isfield(Fparams, 'saveLCPs') 
     saveLCPs = false;
 else 
     saveLCPs = Fparams.saveLCPs;
 end
-
-if ~isfield(Fparams, 'LCP_file_path') 
-    mfilePath = mfilename('fullpath');
-    if contains(mfilePath,'LiveEditorEvaluationHelper')
-        mfilePath = matlab.desktop.editor.getActiveFilename;
-    end
-    [mfilePath,~,~] = fileparts(mfilePath);
-    LCP_file_path = fullfile(mfilePath, 'LCPsolvers/data/lcpProblems');
-else 
-    LCP_file_path = Fparams.LCP_file_path;
-end
-
-if saveLCPs && (isempty(lcp_list) || Fparams.ixTime == Fparams.lid)
-    if Fparams.loadIntermediate && exist(LCP_file_path,'file')
-        load(LCP_file_path, 'lcp_list');
-    else
-        lcp_list = repmat( ...
-            struct( ...
-                'A', [], ...
-                'F', [], ...
-                'C', [], ...
-                'b', [] ...
-            ), [1, Fparams.Nt] ...
-        );
-    end
-    save_iter = 0;
-end
-
+%% Extract params from struct 
 parslv = Fparams.parslv; 
 rd = Fparams.parbd.rd; 
 n3 = length(rd); 
@@ -873,8 +882,39 @@ diam = Fparams.parbd.diam; %diam(i,j) = r_i + r_j
 mxrd = Fparams.parbd.mxrd; %max(r_i,r_j)
 eps = Fparams.parbd.eps;
 Nb = Fparams.parbd.Nb; 
-
-%% Setup (build A and b)
+ixTime = Fparams.ixTime;
+%% Set up saving to file
+if saveLCPs 
+    if ~isfield(Fparams, 'LCP_file_path')
+        mfilePath = mfilename('fullpath');
+        if contains(mfilePath,'LiveEditorEvaluationHelper')
+            mfilePath = matlab.desktop.editor.getActiveFilename;
+        end
+        [mfilePath,~,~] = fileparts(mfilePath);
+        LCP_file_path = fullfile(mfilePath, 'LCPsolvers/data/lcpProblems');
+    else
+        LCP_file_path = Fparams.LCP_file_path;
+    end
+    if isempty(lcp_list) || ixTime == Fparams.lid
+        % Initialize structure or load intermediate results
+        if Fparams.loadIntermediate && exist(LCP_file_path,'file')
+            load(LCP_file_path, 'lcp_list');
+            contactPairs = {lcp_list.contactPairs};
+        else
+            lcp_list = repmat( ...
+                struct( ...
+                    'A', [], ...
+                    'F', [], ...
+                    'C', [], ...
+                    'b', [], ...
+                    'x', [], ...
+                    'contactPairs',[] ...
+                ), [1, Fparams.Nt] ...
+            );
+        end
+    end
+end
+%% Setup F matrix which marginalizes to the contact pairs for this time
 shflg = isfield(Fparams,'parsh');
 ip = collist(:,1); jp = collist(:,2); 
 if shflg
@@ -895,10 +935,7 @@ numF = length(ip);
 R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3 (NIC: vector between particle pair centers)
 NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 (NIC: distance between particle pairs centers)
 Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj| (NIC: unit vectors between particle pairs)
-
-%% Build A 
 F = zeros(6*n3,numF+numFS); % NIC: F maps contact to direction of force applied to a particular particle
-
 for k=1:numF
     indi = (1:3)+6*(ip(k)-1);
     indj = (1:3)+6*(jp(k)-1);
@@ -911,64 +948,11 @@ for k=numF+1:numF+numFS
    F(indi,k) = -Ct(ipsh(k-numF),:)./norm(Ct(ipsh(k-numF),:));
 end
 
-% A is built using the dense or matfree mobility matrix. Can be accelerated
-% by employing only self interaction (block-diagonal) for TD and SD. 
+%% Build A 
+A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
 if Fparams.denseMV
-    Bf = (Bk.')*F; 
-    %(3) (-0.5I-K)*rho_c
-    MNS = -Lapp(TD,Bf)+Lk*Bf;
-    %(4) 3x3 MNS=VNS*S(mu_c+rho_c)  
-    MuNS = Lslv(TD,MNS,parslv); 
-    % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
-    Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
-    A = @(x) Amat*x;
-
-    %save out block diagonal version
-    if saveLCPs
-        Nb = Fparams.parbd.Nb;
-        TD_diag = zeros(size(TD));
-        total_blocks = size(TD, 1)/Nb;
-        for i = 1:total_blocks
-            TD_diag((i-1)*Nb+1:i*Nb,(i-1)*Nb+1:i*Nb) = TD((i-1)*Nb+1:i*Nb,(i-1)*Nb+1:i*Nb);
-        end
-        SD_diag = zeros(size(SD));
-        for i = 1:total_blocks
-            SD_diag((i - 1)*Nb+1:i*Nb,(i - 1)*Nb+1:i*Nb) = SD((i - 1)*Nb+1:i*Nb,(i - 1)*Nb+1:i*Nb);
-        end
-        MNS_diag = -Lapp(TD_diag, Bf) + Lk*Bf;
-        MuNS_diag = Lslv(TD_diag, MNS_diag, parslv);
-        Amat_diag = real(F.'*(Ck*Lapp(SD_diag, MuNS_diag+Bf)));
-
-    end
-else % matfree
-    Bf = @(x) (Bk.')*(F*x);
-    if parslv.prLCP
-        switch lower(parslv.prtype)
-            case 'bkdiag' % this is just preconditioner on the solve 
-                S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
-                IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-                A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
-            otherwise 
-                error(['Preconditioner ' parslv.prtype 'not implement'])
-        end
-    else 
-        A = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
-    end
+    A = @(x) A*x;
 end
-
-if isfield(Fparams, 'lofi')
-    lofi_Ck = Nullsp.lofi_C;
-    lofi_Bk = Nullsp.lofi_B;
-    lofi_Lk = Nullsp.lofi_L;
-    lofi_SD = Kernels.lofi_SD;
-    lofi_TD = Kernels.lofi_TD;
-    lofi_Bf = @(x) (lofi_Bk') * F*x;
-    lofi_parslv = parslv; 
-    lofi_parslv.prec = [];
-    lofi_A = @(x) real(F.'*(lofi_Ck*Lapp(lofi_SD,Lslv(lofi_TD,...
-        -Lapp(lofi_TD, lofi_Bf(x))+lofi_Lk*lofi_Bf(x),lofi_parslv)+lofi_Bf(x))));
-end
-
 %% Build constant vector b: 
 % Compute (1/dt)*phi
 phib = zeros(numF+numFS,1); 
@@ -986,10 +970,45 @@ end
 %b_k = (1/dt)*phi_k + F.'V_k
 bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
-%% LCP solve
-% TODO: warm start intelligently
-x0 = zeros(size(bvec));
-lcpOpts = Fparams.lcpOpts;
+%% Save these contact pairs to Persistent Variable
+theseContactPairs = zeros(n3,1);
+for ii = 1:numF+numFS
+    l0 = (find(F(:,ii), 1,'first')-1) / 6;
+    l1 = (find(F(:,ii), 1,'last')-3) / 6;
+    % linear indexing from 0 to N = numF+numFS
+    % pair 0,1 -> 1, N,0 -> N(N-1), and so on
+    theseContactPairs(ii) = l0*(numF+numFS) + l1; 
+end
+contactPairs{ixTime} = theseContactPairs;
+%% Bifidelity 
+if contains('bifi', lower(Fparams.lcpOpts.solver))
+    pLo = Fparams.lcpOpts.low.p;
+    tolLo = Fparams.lcpOpts.low.gmresTol;
+    Ahat = getLCPMatVec(Fparams, F, [], Nullsp, pLo, tolLo);
+    if Fparams.denseMV
+        Ahat = @(x)Ahat*x;
+    end
+    Fparams.lcpOpts.low.A = Ahat;
+    Fparams.lcpOpts.low.b = bvec;
+    Fparams.lcpOpts.low.initWithLofi = ~Fparams.lcpOpts.warmStart;
+end
+%% LCP solve 
+n = numel(bvec);
+x0 = zeros(n,1);
+if Fparams.lcpOpts.warmStart &&ixTime > 1
+    x_im1 = x{ixTime -1};
+    ix_im1 = contactPairs{ixTime-1};
+    ix_i = contactPairs{ixTime};
+    for ii = 1:n
+        if sum(ix_i(ii) == ix_im1) == 1
+            x0(ii) = x_im1(ix_i(ii) == ix_im1);
+        elseif sum(ix_i(ii) == ix_im1) > 1
+            warning('Multiple matches in warm starting... problematic')
+        end
+    end
+end
+resetQN = true; % Reset the QN memory
+lcpOpts = defaultLCPOpts(Fparams.lcpOpts,x0,resetQN);
 % Give the solvers access to the mat vec alone
 lcpOpts.A = A; 
 lcpOpts.b = bvec; 
@@ -1003,40 +1022,25 @@ switch lower(lcpOpts.solver)
         [lam, info] = projectedQuasiNewton(fg, x0, lcpOpts);    
     case 'proxquasinewton'
         [lam, info] = proxQuasiNewton(fg, x0, lcpOpts);
+    case 'bifi'
+        [lam, info] = bifidelityProxQuasiNewton(fg, x0, lcpOpts);
     otherwise
         [lam, info] = projectedGradientDescent(fg, x0, lcpOpts); 
 end
-
+x{ixTime} = lam;
 if saveLCPs
-    ixTime = Fparams.ixTime;
     %% Save out components for mat-vec
     lcp_list(ixTime).b = bvec; 
+    lcp_list(ixTime).x = lam; 
     if ~Fparams.denseMV
         lcp_list(ixTime).F = F; 
         lcp_list(ixTime).C = Ct; 
     else
         % in the dense case just save the mat
-        lcp_list(ixTime).A = Amat;
+        lcp_list(ixTime).A = A;
     end 
-    %% Check if the file is getting very large
-    varInfo = whos('lcp_list');
-    total_bytes = varInfo.bytes;
-    if total_bytes > 2e9 
-        save_iter = save_iter + 1;
-        lcp_list = repmat( ...
-            struct( ...
-                'A', [], ...
-                'F', [], ...
-                'C', [], ...
-                'b', [] ...
-            ), [1, Fparams.Nt] ...
-        );
-    end 
-    if save_iter > 0
-        saveFile = [LCP_file_path '.prt_' num2str(save_iter) '.mat'];
-    else 
-        saveFile = [LCP_file_path '.mat'];
-    end
+    
+    saveFile = [LCP_file_path '.mat'];
     disp(['Saving LCP data to ' saveFile])
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');
@@ -1286,18 +1290,6 @@ if strcmp(Fparams.type,'Purcellxy')
 else
     Ctp = Ct + dt*VW(1:3,:)';
 end
-
-end
-
-function M = RotationMat(wh,t)
-
-nwh = norm(wh); 
-t = nwh*t; 
-wh = wh./nwh; 
-
-M = [1-(wh(2)^2+wh(3)^2)*(1-cos(t)),wh(2)*wh(1)*(1-cos(t))-wh(3)*sin(t),wh(1)*wh(3)*(1-cos(t))+wh(2)*sin(t);...
-wh(1)*wh(2)*(1-cos(t))+wh(3)*sin(t),1-(wh(1)^2+wh(3)^2)*(1-cos(t)),wh(2)*wh(3)*(1-cos(t))-wh(1)*sin(t);...
-wh(1)*wh(3)*(1-cos(t))-wh(2)*sin(t),wh(2)*wh(3)*(1-cos(t))+wh(1)*sin(t),1-(wh(2)^2+wh(1)^2)*(1-cos(t))];
 
 end
 

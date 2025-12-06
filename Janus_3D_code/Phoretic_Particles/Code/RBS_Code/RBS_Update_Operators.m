@@ -44,8 +44,8 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Build Kernels / MatVec info
 
-[Ck,Bk,Dk,Lk] = Build_AuxMats(Fparams.parbd.Wg,Xt,[],np,n3); 
-Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.L = Lk;
+[Ck,Bk,Dk,Ak,Lk] = Build_AuxMats2(Fparams.parbd.Wg,Xt,[],np,n3); 
+Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.A = Ak;Nullsp.L = Lk;
 
 % Initial block diag build
 if i==0

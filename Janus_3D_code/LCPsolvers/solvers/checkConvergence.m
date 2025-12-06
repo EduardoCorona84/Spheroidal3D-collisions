@@ -4,13 +4,14 @@ persistent old_kkt x_km1;
 if k == 0
     old_kkt = [];
     x_km1 = [];
-end
-if exist('x_km1_','var') && ~isempty(x_km1_) 
-    x_km1 = x_km1_;
-end
-if exist('grad_km1_','var') && ~isempty(grad_km1_)
-    phi = min(grad_km1_,x_km1);
-    old_kkt = dot(phi, phi);
+else
+    if exist('x_km1_','var') && ~isempty(x_km1_) 
+        x_km1 = x_km1_;
+    end
+    if exist('grad_km1_','var') && ~isempty(grad_km1_)
+        phi = min(grad_km1_,x_km1);
+        old_kkt = dot(phi, phi);
+    end
 end
 % Check for convergence
 converged = false;

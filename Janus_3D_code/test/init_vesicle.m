@@ -6,7 +6,7 @@ if ~exist('Cdst','var') || isempty(Cdst)
     Cdst=2.5;
 end
 if ~exist('plotFlag','var') || isempty(plotFlag)
-    plotFlag = true;
+    plotFlag = false;
 end
 ratioOut = 2/3;
 nOut = round(n * ratioOut);

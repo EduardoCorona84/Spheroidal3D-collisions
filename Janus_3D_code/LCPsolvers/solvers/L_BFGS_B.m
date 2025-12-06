@@ -6,7 +6,7 @@ opts = defaultLCPOpts(opts, x0);
 % The error bounds are slightly different for this code than that of the other
 % solvers in particular
 %  - 'fctr' parameter specifies to break when
-%    |f_{k+1} - f_{k} / max(f_{k+1}, f_{k}, 1) < factr*eps()
+%    |f_{k+1} - f_{k}| / max(f_{k+1}, f_{k}, 1) < factr*eps()
 %    so we choose to make this as loose as possible via tol_rel & tol_abs
 %  - 'pgtol' parameter specifies to break when
 %    max{|proj g_i | i = 1, ..., n} <= pgtol
@@ -20,7 +20,7 @@ lbfgsOpts = struct(...
     'pgtol', opts.kkt_abs, ...
     'factr', fctr, ...
     'maxIts', opts.max_iter, ...
-    'maxTotalIts', 10*opts.max_iter);
+    'maxTotalIts', opts.linesearch.budget*opts.max_iter);
 lbfgsOpts.errFcn = opts.errFcn;
 if ishandle(opts.errFcn)
         info.errHist = opts.errFcn(x0);

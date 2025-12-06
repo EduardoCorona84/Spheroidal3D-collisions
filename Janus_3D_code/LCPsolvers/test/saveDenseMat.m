@@ -1,24 +1,26 @@
-function saveDenseMat(srcFile, dstDir, ix)
+function saveDenseMat(srcFile, dstDir, ix, p, gmresTol)
 global DATA_DIR
-%% Params (perhaps these should be inputs?)
-ps = 8:-1:2; 
-gmresTols = 10 .^(-(8:-1:4));
-% ps = [2]; % 2:8;
-% gmresTols = [10 .^(-4)];
 %% set path
 [dirname, ~] = setPaths();
 %% set defaults
 if ~exist('srcFile', 'var') || isempty(srcFile)
-    srcFile = fullfile(dirname, '../data/amphiLCPs.n_2.p_8.cDist_2.3.mat');
+    srcFile = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5.mat');
 end
 if ~exist('dstDir', 'var') || isempty(dstDir)
-    dstDir = fullfile(dirname, '../data/amphiLCPs.n_2.p_8.cDist_2.3');
+    dstDir = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5');
 end
 if ~exist('ix', 'var') || isempty(ix)
-    ix = 1;
+    ix = 598;
+end
+if ~exist('p', 'var') || isempty(p)
+    p = 8;
+end
+if ~exist('gmresTol', 'var') || isempty(gmresTol)
+    gmresTol = 1e-8;
 end
 %% Set DATA_DIR 
-DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), num2str(ix));
+DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), ...
+    ['ix_' num2str(ix) '.p_' num2str(p) '.tol_' num2str(gmresTol)]);
 if ~exist(DATA_DIR, 'dir')
     mkdir(DATA_DIR)
 end
@@ -26,61 +28,74 @@ end
 disp(['Loading ' srcFile])
 load(srcFile, 'Fparams', 'lcp_list');
 %%
-disp(['Creating dense matrices for ix = ' num2str(ix)])
-dstFile = fullfile(dstDir, [num2str(ix) '.mat']);
+disp(['Creating dense matrices for ix = ' num2str(ix) ...
+    ', p = ' num2str(p) ', tol = ' num2str(gmresTol)])
+dstFile = fullfile(dstDir, ['ix_' num2str(ix) '.p_' num2str(p) '.tol_' num2str(gmresTol) '.mat']);
 if ~exist(dstDir, 'dir')
     mkdir(dstDir)
 end
 F = lcp_list(ix).F;
 nc = size(F,2);
 C = lcp_list(ix).C;
-numPs = numel(ps);
-numTols = numel(gmresTols);
-
 disp(['nc = ' num2str(nc)])
-try 
-    load(dstFile, 'out');
+
+if nc ==0
+    disp('Empty LCP problem')
+    A = [];
+    save(dstFile, 'A', 'p', 'gmresTol')
+    return
+end
+A = zeros(nc,nc);
+dt = zeros(nc,1);
+i = 1;
+if exist(dstFile, 'file')
+    res_ = load(dstFile);
     disp(['Loaded precomputed result from ' dstFile])
-    ll = 1;
-    kk = 1;
-    for l = 1:numPs
-        for k = 1:numTols
-            if isempty(out{l,k})
-                ll = l; kk=k;
+    if isempty(res_.A)
+        i =1;
+    else
+        i = nc+1;
+        for ii = 1:nc
+            if all(res_.A(:,ii) == 0)
+                disp(['---- intermediate results found up to column'  num2str(ii) '/' num2str(nc)]);
+                i = ii;
+                break
+            end
+            A(:,ii) = res_.A(:,ii);
+            try
+                dt(ii) = res_.dt(ii);
+            catch
+                i = 1;
                 break;
             end
-        end 
-        if isempty(out{ll,kk})
-            break;
         end
     end
-    disp([' Found results up to ' num2str([ll,kk])])
-catch 
-    disp('No intermediate result found. Initializing with empty')
-    out = cell(numPs,numTols);
-    ll = 1;
-    kk = 1;
+    % Grep... is so slow
+    % if flag 
+        % dt = getRunTimesFromLog(dstDir, ix, p, gmresTol);
+    % end
+    disp([' Found results up to ' num2str(i-1) '/' num2str(nc)]);
 end
-for l = ll:numPs
-    p = ps(l);
-    disp(['l = ' num2str(l) ' <= ' num2str(numPs) ', p = ' num2str(p)])
-    for k = kk:numTols
-        gmresTol = gmresTols(k);
-        disp(['  k = ' num2str(l) ' <= ' num2str(numTols) ', gmresTol = ' num2str(gmresTol)])
-        Amatvec = getMatVec(Fparams, F, C, p, gmresTol);
-        A = zeros(nc,nc);
-        for i = 1:nc
-            disp(['    i = ' num2str(i)])
-            ei = zeros(nc,1);
-            ei(i) = 1;
-            tic
-            A(:,i) = Amatvec(ei);
-            dt = toc;
-            disp(['dt = ' num2str(dt)])
-        end
-        out{l,k} = A;
-        disp(['Saving to ' dstFile])
-        save(dstFile, 'out', 'ps', 'gmresTols')
+
+Amatvec = getMatVec(Fparams, F, C, p, gmresTol);
+for ii = i:nc
+    disp(['    ii = ' num2str(ii)])
+    ei = zeros(nc,1);
+    ei(ii) = 1;
+    tic
+    A(:,ii) = Amatvec(ei);
+    dt(ii) = toc;
+    if norm(A(:,ii)) > 1e4 
+        disp('Numerical Error in GMRES, so perturbing input slightly.')
+        ei = ei + rand(nc,1)*eps;
+        A(:,ii) = Amatvec(ei);
     end
+    disp(['dt = ' num2str(dt(ii))])
+    disp(['Saving to ' dstFile])
+    save(dstFile, 'A', 'p', 'gmresTol','dt')
 end
+disp('final save')
+save(dstFile, 'A', 'p', 'gmresTol','dt')
+
+
 

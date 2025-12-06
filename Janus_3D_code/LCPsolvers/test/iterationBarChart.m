@@ -1,7 +1,5 @@
 f = figure();
-abs_kkt = 1e-8; 
-rel_kkt = 1e-8; 
-metric = 'iters';
+metric = 'matVec';
 hold on
 edges = [1:1:14 15:5:50, opts.max_iter];
 Ns = [];
@@ -15,8 +13,8 @@ for ixAlgo = 1:numAlgo
         errHist = results(mc,ixAlgo).errHist;
         errHist(1,2) = NaN;
         try
-            iters(mc) = find(errHist(:,1) < abs_kkt | ...
-                errHist(:,2) < rel_kkt, 1, 'first');
+            iters(mc) = find(errHist(:,1) < tol | ...
+                errHist(:,2) < tol, 1, 'first');
             matVecs(mc) = errHist(iters(mc),3);
         catch 
              iters(mc) = opts.max_iter;
@@ -39,9 +37,11 @@ bar(Ns');
 xlabel(xaxis_name)
 ylabel('Occurance');
 title('Comparing LCP Solvers')
-subtitle(['n \in [' num2str(minSz) ',' num2str(maxSz) '], reltol_{kkt} = ' num2str(rel_kkt) ', abstol_{kkt} = ' num2str(abs_kkt)] )
+subtitle([...
+    %'n \in [' num2str(minSz) ',' num2str(maxSz) '], 
+    'reltol_{kkt} = ' num2str(tol) ', abstol_{kkt} = ' num2str(tol)] )
 xticks(1:length(edges))
 xticklabels([string(edges(1:14)), (string(edges(15:end-1)) + "-" +string(edges(16:end)))])
-legend({results(mcGood(1),:).name})
-fname = ['barChart_' xaxis_name '_n_' num2str(minSz) '_' num2str(maxSz)];
+legend(algoNames, 'Interpreter','latex')
+fname = ['barChart_' prefix];
 saveas(f, ['/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig/' fname '.pdf'])

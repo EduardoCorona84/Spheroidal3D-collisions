@@ -1,27 +1,31 @@
-function [opts, info] = defaultLCPOpts(opts,x0)
-n = numel(x0);
+function [opts, info] = defaultLCPOpts(opts,x0,resetQN)
+%% Set Defaults
 if ~exist('opts','var') || isempty(opts)
     opts = struct();
 end
-
+if ~exist('x0', 'var') || isempty(x0)
+    x0 = [];
+end
+if ~exist('resetQN', 'var') || isempty(resetQN)
+    resetQN = false;
+end
+%% High level params
+n = numel(x0);
 if ~isfield(opts, 'solver')
     opts.solver = 'proxquasinewton';
 end
-
-if ~isfield(opts, 'n')
-    opts.n = n;
-end
+opts.n = n;
 %% Convergence Parameters
 if ~isfield(opts, 'max_iter')
     opts.max_iter = 100;
 end
 
 if ~isfield(opts, 'kkt_rel')
-    opts.kkt_rel = 1e-4;
+    opts.kkt_rel = 1e-8;
 end
 
 if ~isfield(opts, 'kkt_abs')
-    opts.kkt_abs = 1e-6;
+    opts.kkt_abs = 1e-8;
 end
 
 if ~isfield(opts, 'arg_rel')
@@ -34,6 +38,10 @@ end
 
 if ~isfield(opts, 'step_abs')
     opts.step_abs = [];
+end
+%% WarmStart (default is off)
+if ~isfield(opts, 'warmStart')
+    opts.warmStart = false;
 end
 %% Step Size Parameters
 if ~isfield(opts, 'stepSize')
@@ -78,24 +86,28 @@ end
 %% Linesearch Parameters
 if ~isfield(opts, 'linesearch')
     % Hyper parameters from pg 62 of N&W
-    opts.linesearch = struct('budget', 10,...
+    opts.linesearch = struct('budget', 1,...
         'c1', 1e-4, ... 
         'c2', 0.9, ...
         'tol',  1e-8);
 end
 %% QN Parameters
 if ~isfield(opts, 'qn')
-    opts.qn= struct('m',[],'update',[],'resetMem',[],'rho',[],'S',[],'Y',[]);
+    opts.qn= struct('resetMem',false);
 end
-if ~isfield(opts.qn, 'm') || isempty(opts.qn.m)
-    opts.qn.m = n;
+if ~isfield(opts.qn, 'm') || isempty(opts.qn.m) 
+    opts.qn.m = Inf;
 end
 if ~isfield(opts.qn, 'update') || isempty(opts.qn.update)
-
     opts.qn.update = 'bfgs';
 end
-if ~isfield(opts.qn, 'S') || isempty(opts.qn.S)
-    m = opts.qn.m;
+if ~isfield(opts.qn, 'S') || isempty(opts.qn.S) || resetQN
+    if isinf(opts.qn.m)
+        % Corresponds to using full memory
+        m = n;
+    else
+        m = opts.qn.m;
+    end
     opts.qn.rho = zeros(m,1);
     opts.qn.S = zeros(n, m);
     opts.qn.Y = zeros(n, m);
@@ -122,6 +134,27 @@ end
 %% Acceleration Parameters
 if ~isfield(opts, 'acceleration')
     opts.acceleration = struct('alpha_k', 1, 'method', 'adaptive', 'cond', 1e-1, 'restart', true, 'curvature', 'feasible', 'direction', 'feasible');
+end
+%% bifi 
+if contains(lower(opts.solver), 'bifi')
+    if ~isfield(opts.qn, 'U') || ~isfield(opts.qn, 'V')
+        opts.qn.U = zeros(n,n);
+        opts.qn.V = zeros(n,n);
+    end
+    if ~isfield(opts,'low')
+        opts.low.initWithLofi = true;
+        opts.low.p = 6;
+        opts.low.gmresTol = 1e-6;
+        opts.low.solver = 'proxquasinewton';
+        opts.low.kkt_rel = opts.kkt_rel;
+        opts.low.kkt_abs = opts.kkt_abs;
+        opts.low.max_iter = int64(floor(opts.max_iter/10));
+        opts.low = defaultLCPOpts(opts.low,x0,true);
+    end
+end
+
+if nargout == 1
+    return 
 end
 %% Initialize info struct
 info = struct('kkt', [], ...
