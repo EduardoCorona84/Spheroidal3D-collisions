@@ -971,7 +971,7 @@ end
 bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
 %% Save these contact pairs to Persistent Variable
-theseContactPairs = zeros(n3,1);
+theseContactPairs = zeros(numF+numFS,1);
 for ii = 1:numF+numFS
     l0 = (find(F(:,ii), 1,'first')-1) / 6;
     l1 = (find(F(:,ii), 1,'last')-3) / 6;
@@ -984,7 +984,7 @@ contactPairs{ixTime} = theseContactPairs;
 if contains('bifi', lower(Fparams.lcpOpts.solver))
     pLo = Fparams.lcpOpts.low.p;
     tolLo = Fparams.lcpOpts.low.gmresTol;
-    Ahat = getLCPMatVec(Fparams, F, [], Nullsp, pLo, tolLo);
+    Ahat = getLCPMatVec(Fparams, F, [], [], pLo, tolLo);
     if Fparams.denseMV
         Ahat = @(x)Ahat*x;
     end
@@ -1045,7 +1045,7 @@ if saveLCPs
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');
 end
-fprintf(['\n minmap ' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
+fprintf(['\n' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
 

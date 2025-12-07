@@ -137,7 +137,7 @@ if ~isfield(opts, 'acceleration')
 end
 %% bifi 
 if contains(lower(opts.solver), 'bifi')
-    if ~isfield(opts.qn, 'U') || ~isfield(opts.qn, 'V')
+    if ~isfield(opts.qn, 'U') || ~isfield(opts.qn, 'V') || resetQN
         opts.qn.U = zeros(n,n);
         opts.qn.V = zeros(n,n);
     end
