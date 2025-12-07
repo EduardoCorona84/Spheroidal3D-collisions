@@ -76,7 +76,7 @@ tau_bb2 = dot(s,y) / dot(y,y); % dot(s,y) / norm(y,2)^2
 gamma = 0.8;
 tau_min = 1e-14;
 tau_max = Inf;
-tau_bb2 = clip(tau_bb2, tau_min, tau_max);
+tau_bb2 = min(max(tau_bb2, tau_min), tau_max);
 if tau_bb2 == tau_min
     warning('Convexity of cost function is stagnating'); 
 end

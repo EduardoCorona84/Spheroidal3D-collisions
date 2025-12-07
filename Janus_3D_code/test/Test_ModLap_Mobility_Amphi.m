@@ -21,10 +21,12 @@ tdisc - (string) timestepping scheme (euler,trapz,rk4)
 
 lambda - (double) mod lap parameter 
 %}
-function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma,loadIntermediate, plotFlag,polydisperseRatio)
+function [Fparams]=Test_ModLap_Mobility_Amphi(n,rd,Cdst,p,ep,Nt,dt,tdisc,...
+    lambda,saveLCPs,initMode, tol,mdist,denseMV,denseforce,gamma,...
+    loadIntermediate, plotFlag,polydisperseRatio,seed)
 %% Default parameters
 if ~exist('p','var') || isempty(p)
-    p=2; 
+    p=5; 
 end
 if ~exist('lambda','var') || isempty(lambda)
     lambda=0.1;
@@ -36,7 +38,7 @@ if ~exist('n','var') || isempty(n)
     n=2;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
-    Cdst=2.5; 
+    Cdst=2.3; 
 end
 if ~exist('ep','var') || isempty(ep)
     ep=.3;
@@ -45,7 +47,7 @@ if ~exist('Nt','var') || isempty(Nt)
     Nt=200;
 end
 if ~exist('dt','var') || isempty(dt)
-    dt=.5;
+    dt=.1;
 end
 if ~exist('tdisc','var') || isempty(tdisc)
     tdisc='euler';
@@ -57,13 +59,13 @@ if ~exist('initMode','var') || isempty(initMode)
     initMode='lattice'; 
 end
 if ~exist('tol','var') || isempty(tol)
-    tol=1e-4;
+    tol=1e-8;
 end
 if ~exist('mdist','var') || isempty(mdist)
     mdist=3; 
 end
 if ~exist('denseMV','var') || isempty(denseMV)
-    denseMV=true; 
+    denseMV=false; 
 end
 if ~exist('denseforce','var') || isempty(denseforce)
     denseforce=1;
@@ -78,8 +80,13 @@ if ~exist('plotFlag','var') || isempty(plotFlag)
     plotFlag=true; 
 end
 if ~exist('polydisperseRatio','var') || isempty(polydisperseRatio)
-    polydisperseRatio=0.2; 
+    polydisperseRatio=0.0; 
 end
+if ~exist('seed','var') || isempty(seed)
+    seed=1; 
+end
+%% For repeatable behavior
+rng(seed)
 %% boundary_label function
 boundary_label =  @(X,y) 0.5*X*y'./sqrt(sum(X.^2,2)).^2 + 1/2;
 %% Files to save results
@@ -147,11 +154,13 @@ Fparams.parbd.Ct = C;
 Fparams.init_dir = init_dir;
 % LCP solver parameters
 Fparams.lcpOpts = defaultLCPOpts(struct(...
-    'solver','proxquasinewton', ...
+    'solver','bifi', ...
     'max_iter',1000, ...
     'kkt_rel',1e-8, ...
     'kkt_abs',1e-8, ...
     'warmStart',true));
+Fparams.lcpOpts.low.p=4;
+Fparams.lcpOpts.low.gmresTol = 1e-6;
 
 % linear solver parameters
 Fparams.parslv = struct('solver','gmres','tol',tol,'maxit',200,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
