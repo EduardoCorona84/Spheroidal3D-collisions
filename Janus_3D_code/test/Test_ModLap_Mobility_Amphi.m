@@ -33,10 +33,10 @@ if ~exist('rd','var') || isempty(rd)
     rd=1;
 end
 if ~exist('n','var') || isempty(n)
-    n=2;
+    n=5;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
-    Cdst=2.5; 
+    Cdst=2.3; 
 end
 if ~exist('ep','var') || isempty(ep)
     ep=.3;
@@ -72,7 +72,7 @@ if ~exist('gamma','var') || isempty(gamma)
     gamma=1; 
 end
 if ~exist('loadIntermediate','var') || isempty(loadIntermediate)
-    loadIntermediate=true; 
+    loadIntermediate=false; 
 end
 if ~exist('plotFlag','var') || isempty(plotFlag)
     plotFlag=true; 

@@ -1,21 +1,18 @@
-function [C, rd, init_dir] = init_lattice(n, Cdst, rd, polydisperseRatio) 
-lx=0:Cdst:Cdst*(n-1);
-lx = lx - mean(lx); 
-[xx,yy,zz] = meshgrid(lx);
-C = [xx(:) yy(:) zz(:)]; 
-n3 = size(C,1);
-rd=rd*ones(n3,1)+polydisperseRatio*randn(n3,1);
-% randomize centers and/or radii
-try %#ok<TRYNC>
-    rng('default'); 
-end
-eps = .1;
+function [C, rd, init_dir] = init_lattice(n, Cdst, meanRadius, polydisperseRatio) 
 while true
-    C = C + eps*randn(size(C));
+    lx=0:Cdst:Cdst*(n-1);
+    lx = lx - mean(lx); 
+    [xx,yy,zz] = meshgrid(lx);
+    C = [xx(:) yy(:) zz(:)]; 
+    n3 = size(C,1);
+    rd=meanRadius*(1+polydisperseRatio*rand(n3,1));
+    delta = meanRadius*2*eps*(.5 - rand(n3,1));
+    C = C + delta;
     minDist = computePairwiseDistance(C,rd);
-    if all(minDist > .1 )
+    if all(minDist > 0.1 )
         break
     end
+    Cdst = Cdst*1.01;
 end
 % initial particle orientations
 %% NIC: set the initial direction to be towards the center 
