@@ -22,6 +22,8 @@ if ~exist("Nullsp","var") ||isempty(Nullsp)
 else
     Bk = Nullsp.B; Ck = Nullsp.C; Ak = Nullsp.A; Lk = Nullsp.L; 
 end
+
+parslv = Fparams.parslv;
 % If the kernels are already provide then use them
 if ~exist('Kernels','var') || isempty('Kernels') || (exist('p','var') && ~isempty(p))
     if ~strcmpi(Fparams.typeMV, 'vsh')
@@ -37,11 +39,11 @@ end
 
 if Fparams.denseMV
     A = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
-    if nargout >1
+    if nargout >1top 
         Abad = real((F'*Ck)*SD*(TD\((Bk'*(Ck*(Bk'*F))))));
     end
 else
-    if strcmpi(parslv.prLCP, 'bkdiag')
+    if strcmpi(Fparams.parslv.prLCP, 'bkdiag')
         warning('Not tested')
         S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
         IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));

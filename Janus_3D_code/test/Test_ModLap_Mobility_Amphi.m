@@ -63,7 +63,7 @@ if ~exist('mdist','var') || isempty(mdist)
     mdist=3; 
 end
 if ~exist('denseMV','var') || isempty(denseMV)
-    denseMV=true; 
+    denseMV=false; 
 end
 if ~exist('denseforce','var') || isempty(denseforce)
     denseforce=1;
@@ -144,6 +144,7 @@ n3 = size(C,1);
 Fparams.plotFlag = plotFlag;
 Fparams.parbd = struct('Shape','','n3',n3,'rd',rd,'diam',2*rd,'p',p,'mdist',mdist,'mxrd',rd(1),'eps',ep,'out',1);
 Fparams.parbd.Ct = C;
+Fparams.parbd.dense = 0; % Do not use dense mat
 Fparams.init_dir = init_dir;
 % LCP solver parameters
 Fparams.lcpOpts = defaultLCPOpts(struct(...

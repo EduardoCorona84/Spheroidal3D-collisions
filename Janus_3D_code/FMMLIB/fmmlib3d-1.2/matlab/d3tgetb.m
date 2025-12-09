@@ -47,7 +47,7 @@ center = zeros(3,1);
 corners = zeros(3,8);
 box = zeros(1,20);
 
-mex_id_ = 'd3tgetb(io int[x], i int[x], io int[], io double[], io double[], i double[])';
+mex_id_ = 'd3tgetb(c io int[x], c i int[x], c io int[], c io double[], c io double[], c i double[])';
 [ier, box, center, corners] = fmm3d_r2012a(mex_id_, ier, ibox, box, center, corners, lists, 1, 1);
 
 

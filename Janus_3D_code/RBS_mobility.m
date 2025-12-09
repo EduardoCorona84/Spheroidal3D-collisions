@@ -355,6 +355,7 @@ MRot = @(wh,t) RotationMat(wh,t);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
 % Get incoming force distribution: 
 tic; 
+% A lot of memory used here
 [FT,sigma,VW,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt,Sc); 
 fprintf('\n Time to compute incoming force: %e ',toc)
 timings.incoming(it) = timings.incoming(it) + toc; 
@@ -604,6 +605,7 @@ switch Fparams.type
         
         else
         K=SLMODD+DLMODD;
+        % Could we make this matrix free? 
         P=make_projection(Fparams.parmod.p,n3);
         K_full_rank=P*K*P+(eye(np*n3)-P);
         [psi,~,~,I]=gmres(K_full_rank, P*(flabel),100,1e-6);
@@ -951,6 +953,7 @@ end
 %% Build A 
 A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
 if Fparams.denseMV
+
     A = @(x) A*x;
 end
 %% Build constant vector b: 
