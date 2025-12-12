@@ -1,4 +1,4 @@
-%%
+function plotDenseMats()
 [dirname, basedir] = setPaths();
 srcFile ='amphi.lattice.n_5.p_8.cDist_2.5.allMats.mat';
 res_ = load(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData/' srcFile]);
@@ -14,10 +14,10 @@ dt = res_.dt;
 numP = numel(ps);
 numTol = numel(tols);
 % find the time steps where we have all dense A mats
-mask = true(Nt,1); 
-for j = 1:numP 
+mask = true(Nt,1);
+for j = 1:numP
     for k = 1:numTol
-        mask = mask & cellfun(@(A) ~isempty(A), res_.A(:,j,k)) ; 
+        mask = mask & cellfun(@(A) ~isempty(A), res_.A(:,j,k)) ;
     end
 end
 IX = find(mask);
@@ -40,74 +40,49 @@ for i = 1:Nt
         l1 = (find(F(:,ii), 1,'last')-3) / 6;
         % linear indexing from 0
         % pair 0,1 -> 1, N,0 -> N(N-1), and so on
-        thesePairs(ii) = (l0-1)*N + l1; 
+        thesePairs(ii) = (l0-1)*N + l1;
     end
     contactPairIX{i} = thesePairs;
 end
-%% Timings pLot
-% figure()
-% f1 = figure;
-% for j = 1:numP
-%     for k = 1:numTol
-%         subpLot(numP, numTol, numTol*(j-1) + k);
-%         edges = 10.^(-6:.5:3);
-%         [counts,edges] = Histcounts(dt{i,j,k},edges);
-%         g = Histogram('BinEdges',edges,'BinCounts',counts);
-%         set(gca, "Xscale", "Log")
-%         xticks(edges)
-%         title({ ...
-%             sprintf('p = %d, tol = %.0e', ps(j), tols(k)), ...
-%             sprintf('mean = %.3f',mean(dt{i,j,k})),...
-%             sprintf('std = %.3f', std(dt{i,j,k}))}...
-%         );
-%     end
-% end
-% name = split(srcFile,'_');
-% name = join(name,'\_');
-% name = name{1};
-% sgtitle({sprintf('Run Time for mc=%d', i),name})
-% set(f1, 'Position',  [0, 0, 1000, 1200])
-% timingFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_runTime.png']);
-% disp(['Saving to ' timingFile])
-% saveas(f1, timingFile);
-% Relative Error
+
 absErr = zeros(I,numP, numTol);
 preCond = zeros(I,numP, numTol);
 timePerHi = zeros(I,numP, numTol);
 boundHolds = zeros(I,numP, numTol);
 warmStartBoundHolds = zeros(I,1);
+lcpOpts.solver = 'proxquasinewton';
+lcpOpts = defaultLCPOpts(lcpOpts);
 for ii = 1:I
     fprintf('- i %d\n', i)
     i = IX(ii);
     AHi = A{i,jHi, kHi};
     bHi = b{i};
     n = size(AHi,1);
-    % cvx_begin quiet
-    %     variable z(n) 
-    %     minimize max( (zplus - zminus) .* (AHi*(zplus - zminus)) )
-    %     subject to
-    %         zplus+zminus == 1
-    %         zplus >= 0
-    %         zminus >= 0
-    % cvx_end
-    % cA = cvx_optval;
+    tic
+    cA = getC_A(AHi);
+    fprintf('- cA computation time: %.4g sec\n', toc);
     if norm(AHi) > 10
-         warmStartBoundHolds(ii) = NaN;
-         boundHolds(ii,:,:) = NaN;
-         absErr(ii,:,:) = NaN;
-         preCond(ii,:,:) = NaN;
-         timePerHi(ii,:,:) = NaN;
-         continue
+        warmStartBoundHolds(ii) = NaN;
+        boundHolds(ii,:,:) = NaN;
+        absErr(ii,:,:) = NaN;
+        preCond(ii,:,:) = NaN;
+        timePerHi(ii,:,:) = NaN;
+        continue
     end
-    cA = min(eig(AHi));
-    fprintf('- c(A) %.4g\n', cA)
-    xHi = callCVX(zeros(n,1), AHi, bHi);
-    if ii > 1 
-        im1 = i-1; 
+    %% We know we have this eigen value bound
+    fprintf('-- lambda_min/n <= cA <= lambda_min\n');
+    fprintf('-- %.4g <= %.4g <= %.4g\n',  min(eig(AHi)) /n , cA ,min(eig(AHi)));
+    tic
+    lcpOpts.b = bHi; lcpOpts.A = @(x) AHi*x;
+    fg = @(x, Ax) quadraticLoss(x, AHi, bHi, Ax);
+    xHi = proxQuasiNewton(fg, zeros(n,1),lcpOpts);
+    fprintf('- xHi computation time: %.4g sec\n', toc);
+    if ii > 1
+        im1 = i-1;
         A_im1 = A{im1,jHi, kHi};
         b_im1 = b{im1};
         n_im1 = numel(b_im1);
-        if isempty(A_im1) || norm(A_im1) > 10 
+        if isempty(A_im1) || norm(A_im1) > 10
             warmStartBoundHolds(ii) = NaN;
         else
             % Map the solution and LCP to the indicies of the smaller
@@ -134,11 +109,17 @@ for ii = 1:I
                     A_im1c(iii,iv) = A_im1(jj,jv);
                 end
             end
-            x_ic = callCVX(zeros(n_c,1), A_ic, b_ic);
-            x_im1c = callCVX(zeros(n_c,1), A_im1c, b_im1c);
+            % x_ic = callCVX(zeros(n_c,1), A_ic, b_ic);
+            % x_im1c = callCVX(zeros(n_c,1), A_im1c, b_im1c);
+            lcpOpts.b = b_ic; lcpOpts.A = @(x) A_ic*x;
+            fg_ic = @(x, Ax) quadraticLoss(x, A_ic, b_ic, Ax);
+            x_ic = proxQuasiNewton(fg_ic, zeros(n_c,1), lcpOpts);
+            lcpOpts.b = b_im1c; lcpOpts.A = @(x) A_im1c*x;
+            fg_im1c = @(x, Ax) quadraticLoss(x, A_im1c, b_im1c, Ax);
+            x_im1c = proxQuasiNewton(fg_im1c, zeros(n_c,1), lcpOpts);
             delta = norm(A_ic-A_im1c, Inf);
             cprime = max(1, (min(eig(A_ic)) + delta)*norm(max(b_ic,0), Inf)) / (min(eig(A_ic)) - delta);
-            if delta > 1e6 
+            if delta > 1e6
                 warmStartBoundHolds(ii) = NaN;
             elseif delta < min(eig(A_ic)) && ...
                     norm(x_ic - x_im1c, Inf) <= cprime * (norm(A_ic-A_im1c, Inf) + norm(b_ic-b_im1c,Inf))
@@ -161,8 +142,11 @@ for ii = 1:I
                 fprintf('-- p %d\n', pLo)
                 fprintf('-- tol %.0e\n', tolLo)
                 fprintf('-- delta %.4g\n', delta)
-                xLo = callCVX(zeros(n,1), (ALo + ALo') /2, bHi);
-                cprime = max(1, (cA + delta)*norm(max(bHi,0), Inf)) / (cA - delta); 
+                
+                lcpOpts.b = bHi; lcpOpts.A = @(x) ALo*x;
+                fgLo = @(x, Ax) quadraticLoss(x, ALo, bHi, Ax);
+                xLo = proxQuasiNewton(fgLo, zeros(n,1),lcpOpts);
+                cprime = max(1, (cA + delta)*norm(max(bHi,0), Inf)) / (cA - delta);
                 if delta < cA && norm(xLo - xHi, Inf) <= cprime * (norm(AHi-ALo, Inf))
                     boundHolds(ii,jLo, kLo) = 1;
                 end
@@ -188,7 +172,7 @@ timePerHi = reshape(timePerHi, numP, numTol);
 name = split(srcFile,'_');
 name = join(name,'\_');
 name = name{1};
-%% 
+%%
 f1 = figure;
 subplot(1,1,1)
 h = heatmap(ps, tols, 100*boundHolds');
@@ -205,7 +189,7 @@ fontsize(f1, 30, 'points')
 absErrFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_boundsHold.png']);
 disp(['Saving to ' absErrFile])
 saveas(f1, absErrFile);
-%% 
+%%
 f2 = figure;
 subplot(1,1,1)
 h = heatmap(ps, tols, 100*absErr');
@@ -256,3 +240,131 @@ fontsize(f4, 30, 'points')
 timePerHiFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_timePerHi.png']);
 disp(['Saving to ' timePerHiFile])
 saveas(f4, timePerHiFile);
+end % plotDenseMats
+function [hstar, zstar] = getC_A(A, debug)
+if ~exist('debug','var') || isempty(debug)
+    debug = false;
+end
+n = size(A,1);
+[V,D] = eig(A);
+[~,ixmin] = min(diag(D));
+L = max(diag(D));
+z0 = V(:,ixmin);
+maxPGDIter = 1000;
+lineSearchBudget = 100;
+c1 =1e-4;
+SGNS = [-1,1];
+Hhat = zeros(n,2);
+Zhat = cell(n,2);
+for i = 1:n
+    for ii = 1:2
+        sigma = SGNS(ii);
+        zkm1 = sigma*sign(z0(i))*z0 / abs(z0(i));
+        zkm1 = max(-1,min(1, zkm1));
+        h = zkm1.*(A*zkm1);
+        [hkm1,j] = max(h);
+        t = 1/L;
+        for k = 1:maxPGDIter
+            if debug; fprintf('- k=%d, j=%d, h=%.4g\n', k,j, hkm1); end;
+            e = zeros(n,1);
+            e(j) = 1;
+            grad_h = (e*(e'*A))*zkm1 + ((A'*e)*e')*zkm1; % (sub)gradient of h
+            % backtracing
+            t = min(1/L,max(1,4*t));
+            for l = 1:lineSearchBudget 
+                zk = zkm1 - t * grad_h; % gradient descent step
+                zk = sigma*sign(zk(i))*zk / abs(zk(i)); % project onto equality constraint
+                zk = max(-1,min(1, zk)); % project onto inequality constraints
+                h = max(zk.*(A*zk));
+                p = zk - zkm1;
+                if h < hkm1 + c1*t*dot(grad_h, p) % sufficient decrease
+                    break
+                end
+                t = t / 2;
+            end
+            if l == lineSearchBudget
+                if debug; fprintf('--- WARNING: Linesearch did not converge, l =%d\n', lineSearchBudget); end;
+            end
+            absErr = norm(zk - zkm1);
+            relErr = absErr / norm(zkm1);
+            if debug; fprintf('-- absErr=%.4g, relErr=%.4g\n', absErr, relErr); end;
+            if absErr < 1e-8 
+                if debug; fprintf('-- absErr < tol satisfied\n'); end;
+                break
+            elseif relErr < 1e-8
+                if debug; fprintf('-- relErr < tol satisfied\n'); end;
+                break
+            end
+            zkm1 = zk;
+            h = zkm1.*(A*zkm1);
+            [hkm1,j] = max(h);
+        end
+        if k == maxPGDIter
+            if debug; fprintf('--- WARNING: PGD did not converge, k =%d\n', maxPGDIter); end;
+        end
+        Hhat(i,ii) = max(zk.*(A*zk));
+        if debug; fprintf('hstar_%d^(%d) = %.4g\n', i, sigma,Hhat(i,ii)); end;
+        Zhat{i,ii} = zk;
+    end
+end
+Hhat = Hhat(:);
+Zhat = Zhat(:);
+[hstar, i] = min(Hhat);
+if nargout > 1
+    zstar = Zhat{i};
+end
+end % getC_A
+%% getC_A_cvx
+% AHi = (AHi + AHi') / 2;
+% sqrtA = chol(AHi);
+% cA = zeros(n,2);
+% for m = 1:n
+%     for mm = 1:2
+%         if mm == 1
+%             sigma = -1;
+%         else
+%             sigma = 1;
+%         end
+%         cvx_begin quiet
+%             variable z(n)
+%             y = sqrtA*z;
+%             minimize max(y .* y)
+%             subject to
+%                 z <= 1
+%                 -1 <= z
+%                 z(m) == sigma
+%         cvx_end
+%         cA(m,mm) = cvx_optval;
+%     end
+% end
+% cA = min(cA(:));
+
+
+
+%% Timings pLot
+% figure()
+% f1 = figure;
+% for j = 1:numP
+%     for k = 1:numTol
+%         subpLot(numP, numTol, numTol*(j-1) + k);
+%         edges = 10.^(-6:.5:3);
+%         [counts,edges] = Histcounts(dt{i,j,k},edges);
+%         g = Histogram('BinEdges',edges,'BinCounts',counts);
+%         set(gca, "Xscale", "Log")
+%         xticks(edges)
+%         title({ ...
+%             sprintf('p = %d, tol = %.0e', ps(j), tols(k)), ...
+%             sprintf('mean = %.3f',mean(dt{i,j,k})),...
+%             sprintf('std = %.3f', std(dt{i,j,k}))}...
+%         );
+%     end
+% end
+% name = split(srcFile,'_');
+% name = join(name,'\_');
+% name = name{1};
+% sgtitle({sprintf('Run Time for mc=%d', i),name})
+% set(f1, 'Position',  [0, 0, 1000, 1200])
+% timingFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_runTime.png']);
+% disp(['Saving to ' timingFile])
+% saveas(f1, timingFile);
+% Relative Error
