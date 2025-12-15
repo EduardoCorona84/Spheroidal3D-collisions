@@ -21,6 +21,15 @@ if isempty(ShTg_mem)
     ShY_mem = containers.Map('KeyType', 'double', 'ValueType', 'any');
     Sc_mem = containers.Map('KeyType', 'double', 'ValueType', 'any');
 end
+if nargin ==1 
+    % in this case F is p and we are just initializng memory
+    p = F;
+    if ~ShTg_mem.isKey(p)
+        [ShTg_mem(p),ShTr_mem(p),ShY_mem(p)] = get_Surfgrad_coeffs(ceil(1.5*p),p);
+        Sc_mem(p) = SurfaceSph(shape_gallery(p,''));
+    end
+    return 
+end
 %% F is 3*(np/sp) x nvecs
 [d1,d2] = size(F);
 %% Accept F or Fh as inputs

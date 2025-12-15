@@ -72,7 +72,8 @@ else
         parslv = Fparams.parslv;
         parslv.prec = []; 
         BkF = @(x) (Bk.')*(F*x);
-        A = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
+        verboseTD = @(x) Lapp(TD, x, true);
+        A = @(x) real(F.'*(Ak*Lapp(SD,Lslv(verboseTD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
     end
     if debug 
         typeMV = 'Vsh'; flag_pot ='SL_Stk_3D'; a=0; kerd = Fparams.parbd.kerd; DMV =[];

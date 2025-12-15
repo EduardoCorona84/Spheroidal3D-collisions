@@ -947,7 +947,6 @@ for k=numF+1:numF+numFS
    indi = (1:3)+6*(ipsh(k-numF)-1);
    F(indi,k) = -Ct(ipsh(k-numF),:)./norm(Ct(ipsh(k-numF),:));
 end
-
 %% Build A 
 A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
 if Fparams.denseMV
@@ -1048,7 +1047,6 @@ end
 fprintf(['\n' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
-
 if norm(lam)>0
     % Contact forces / torques
     F_c = F*lam; 
@@ -1115,6 +1113,7 @@ if isempty(VW) || Fparams.comp
 % RHS -(aI+K)*sigma
 tic; 
 B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma);
+fprintf('\n Time for to apply B = (L - TD)[sigma]: %e',toc);
 timings.velocities.apply(i) = 0.5*toc;
 
 if ~isempty(Fparams.Tshell)
@@ -1123,8 +1122,9 @@ end
 
 % Solve Fredholm eq TD*mu = B
 tic; 
-mu = Lslv(Kernels.TD,B,parslv);
-fprintf('\n Time for solve: %e',toc); 
+verboseMVP = @(x) Lapp(Kernels.TD, x, true);
+mu = Lslv(verboseMVP,B,parslv);
+fprintf('\n Time for solve TD[mu] = B: %e',toc); 
 timings.velocities.solve(i) = toc;  
 % U = U_inc + U_sc
 tic; 

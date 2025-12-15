@@ -102,7 +102,9 @@ switch pot(1:3)
         pMat='TDMat';
         nortrg=false;
 end
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% initialize the storage in the kernal eval
+Vsh_Kernel_Eval_off(p);
 np = 2*p*(p+1);
 Nb = kerd*np;
 N = Nb*n3;
@@ -144,7 +146,8 @@ if ~isempty(V) && isnumeric(V)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     parfor nbox=1:n3
         [Ynear{nbox}, Yfar{nbox}, IXnear{nbox}, IXfar{nbox}] = computeNearAndFar(...
-            nbox, Xv, C, V, Vh, params, MRot, neigh, pMat, rd, rda, rdif1, dense, rot, nortrg, out, N, Nb, np, kerd);
+            nbox, Xv, C, V, Vh, params, MRot, neigh, pMat, rd, rda, rdif1, ...
+            dense, rot, nortrg, out, N, Nb, np, kerd);
     end
 
     for nbox = 1:n3 
