@@ -159,7 +159,7 @@ addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
 %% initialize configuration
 switch initMode
     case 'lattice'
-        [C, rd, init_dir] = init_lattice(n, Cdst, rd, polydisperseRatio, ep);
+        [C, rd, init_dir] = init_lattice(n, Cdst, meanRadius, polydisperseRatio, ep);
     case 'vesicle'
         [C, init_dir] = init_vesicle(n, Cdst);
     case 'special'

@@ -84,6 +84,7 @@ timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
     'advance',zN,...
     'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
 if Fparams.loadIntermediate && exist(saveFile, 'file')
+    disp('Loading intermediate results from file')
     % Load previous file 
     res_ = load(saveFile);
     % Get the last entry that was saved
@@ -141,6 +142,11 @@ timings.setup_kernel=toc;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % (0.4) Initialize collision info  
 [colevent,collist,~,~] = LOCAL_check_collision_sph(Ct{lid},Fparams);
+fprintf('\n-------------------------------------------------');
+fprintf('\n Initial (potential) Collisions: \n')
+display(collist(:,1:2)')
+fprintf('-------------------------------------------------\n');
+assert(false)
 % Model of the surface of the sphere or other geometry. 
 if ~strcmp(Fparams.parbd.Shape,'') % unit sphere
    Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); 

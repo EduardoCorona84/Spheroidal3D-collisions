@@ -20,6 +20,7 @@ n3 = size(C0,1);
 rd=meanRadius*(1+polydisperseRatio*rand(n3,1));
 delta = (meanRadius/10)*(.5 - rand(n3,1));
 C0 = C0 + delta;
+
 %% Obtain the desired number (potential) of initial collisions
 % this is done by performing an binary search over the multiplicative
 % scaling on the initial configuration. Because the config is centered at 
@@ -29,24 +30,31 @@ lb = 0;
 cur = 1;
 ub = cur;
 C = C0;
-numCol = computePairwiseDistance(C,rd, colThresh);
-while numCol > 0
+Fparams.parbd = RBS_set_params(8,C,rd,[],[],[],3,false,false,[],colThresh,[]);
+colevent = LOCAL_check_collision_sph(C,Fparams)
+while colevent
     ub = ub*2;
-    numCol = computePairwiseDistance(C,rd, colThresh);
     C = C0*ub;
+    colevent = LOCAL_check_collision_sph(C,Fparams);
 end
 
-if debug 
+if true 
     figure;
     hold on 
     Gamma = lb:.01:ub;
-    plot(Gamma, arrayfun(@(gamma) computePairwiseDistance(C0*gamma, rd, colThresh), Gamma), "Color",'blue','LineWidth',5)
+    numCol = zeros(numel(Gamma),1);
+    for i = 1:numel(Gamma)
+        [~,collist] = LOCAL_check_collision_sph(C,Fparams);
+        numCol(i) = size(collist,2);
+    end
+    plot(Gamma, numCol, "Color",'blue','LineWidth',5)
     ylabel('Number of Collisions')
     xlabel('\gamma')
 end
-
+assert( false)
 while true
-    numCol = computePairwiseDistance(C,rd, colThresh);
+    [~,collist] = LOCAL_check_collision_sph(C,Fparams);
+    numCol = size(collist,2);
     if desiredNumCol - desiredTol <= numCol && numCol <= desiredNumCol + desiredTol
         break
     elseif desiredNumCol - desiredTol < numCol
@@ -94,21 +102,10 @@ if debug
     end
     drawnow
 
-    [~, pairwiseDistance] = computePairwiseDistance(C,rd, colThresh);
-    figure;
-    hold on
-    imagesc(pairwiseDistance)
-    colormap(hsv(512))
-    colorbar
+    % [~, pairwiseDistance] = computePairwiseDistance(C,rd, colThresh);
+    % figure;
+    % hold on
+    % imagesc(pairwiseDistance)
+    % colormap(hsv(512))
+    % colorbar
 end
-
-function [numCol, pairwiseDistance] = computePairwiseDistance(C,rd, colThresh)
-n = size(C,1);
-pairwiseDistance = Inf*ones(n,n);
-for i = 2:n
-    for j = i+1:n
-        pairwiseDistance(i,j) = norm(C(i,:) - C(j,:)) - rd(i) - rd(j);
-    end
-end
-% matches logic in LOCAL_check_collision_sph
-numCol = sum(pairwiseDistance(:) < 1.1*colThresh); 

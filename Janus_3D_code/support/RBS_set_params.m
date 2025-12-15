@@ -41,7 +41,7 @@ if size(Sc,2)>1
         Wg(indx,:) = W{j};
         Nrg(indx,:) = Nr{j};
     end
-else
+elseif ~isempty(Sc)
     X{1} = reshape(Sc{p}.cart.to_array,[],3);
     W{1} = Sc{p}.geoProp.W; W{1} = W{1}.*wt;
     Nr{1} = reshape(Sc{p}.geoProp.nor.to_array,[],3);
@@ -58,6 +58,8 @@ else
     Wg = (rg(:,1).^2).*repmat(W{1},n3,1);
     Nrg = repmat(Nr{1},n3,1);
     W = W{1};
+else 
+    tau = [];
 end
 
 Xv = reshape(repmat(Xg,1,kerd)',3,[])';
