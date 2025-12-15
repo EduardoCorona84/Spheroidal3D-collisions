@@ -58,7 +58,7 @@ if ~exist('n','var') || isempty(n)
     n=5;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
-    Cdst=2.3; 
+    Cdst=3; 
 end
 if ~exist('ep','var') || isempty(ep)
     ep=.3;
@@ -159,7 +159,7 @@ addpath(fullfile(basedir,'FMMLIB/stfmmlib3d-1.2/matlab'));
 %% initialize configuration
 switch initMode
     case 'lattice'
-        [C, rd, init_dir] = init_lattice(n, Cdst, meanRadius, polydisperseRatio);
+        [C, rd, init_dir] = init_lattice(n, Cdst, rd, polydisperseRatio, ep);
     case 'vesicle'
         [C, init_dir] = init_vesicle(n, Cdst);
     case 'special'
