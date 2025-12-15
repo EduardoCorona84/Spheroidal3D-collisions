@@ -15,14 +15,13 @@ def _script(prefix, _min, _max, Nt, ps, tols, alpine=False):
 #SBATCH --array={_min}-{_max}
 """
     if alpine:
-        header += """#SBATCH --nodes=1
-#SBATCH --ntasks=24
-#SBATCH --mem=400G
+        header += """#SBATCH --mem=400G
 #SBATCH --account=ucb289_asc3
 #SBATCH --partition=amem
 #SBATCH --qos=mem"""
     else: # Maybe set the memory here?
-        header += """#SBATCH --account=blanca-becker
+        header += """#SBATCH --mem=200G
+#SBATCH --account=blanca-becker
 #SBATCH --qos=preemptable"""
     return header + f"""
 #SBATCH --output=/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/{prefix}/slurm.%N.%j.out

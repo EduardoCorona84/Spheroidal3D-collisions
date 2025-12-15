@@ -10,7 +10,7 @@ if ~exist('dstDir', 'var') || isempty(dstDir)
     dstDir = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5');
 end
 if ~exist('ix', 'var') || isempty(ix)
-    ix = 598;
+    ix = 236;
 end
 if ~exist('p', 'var') || isempty(p)
     p = 8;
@@ -47,26 +47,19 @@ if nc ==0
 end
 A = zeros(nc,nc);
 dt = zeros(nc,1);
-i = 1;
 if exist(dstFile, 'file')
     res_ = load(dstFile);
     disp(['Loaded precomputed result from ' dstFile])
     if isempty(res_.A)
-        i =1;
+        IX = 1:nc;
     else
-        i = nc+1;
-        for ii = 1:nc
-            if all(res_.A(:,ii) == 0)
-                disp(['---- intermediate results found up to column'  num2str(ii) '/' num2str(nc)]);
-                i = ii;
-                break
-            end
-            A(:,ii) = res_.A(:,ii);
-            try
-                dt(ii) = res_.dt(ii);
-            catch
-                i = 1;
-                break;
+        IX = [];
+        for i = 1:nc
+            if all(res_.A(:,i) == 0) || norm(res_.A(:,i)) > 4
+                IX(end+1) = i; %#ok<AGROW> 
+            else
+                A(:,i) = res_.A(:,i);
+                dt(i) = res_.dt(i);
             end
         end
     end
@@ -74,23 +67,25 @@ if exist(dstFile, 'file')
     % if flag 
         % dt = getRunTimesFromLog(dstDir, ix, p, gmresTol);
     % end
-    disp([' Found results up to ' num2str(i-1) '/' num2str(nc)]);
+    disp([' Need to compute ' num2str(numel(IX)) '/' num2str(nc)]);
+    fprintf('  IX=%d\n' ,IX')
 end
 
-Amatvec = getMatVec(Fparams, F, C, p, gmresTol);
-for ii = i:nc
-    disp(['    ii = ' num2str(ii)])
+Amatvec = getLCPMatVec(Fparams, F, [], [], p, gmresTol, C, false, false);
+for ii = 1:numel(IX)
+    i = IX(ii);
+    disp(['    i = ' num2str(i)])
     ei = zeros(nc,1);
-    ei(ii) = 1;
+    ei(i) = 1;
     tic
-    A(:,ii) = Amatvec(ei);
-    dt(ii) = toc;
-    if norm(A(:,ii)) > 1e4 
+    A(:,i) = Amatvec(ei);
+    dt(i) = toc;
+    if norm(A(:,ii)) > 4 
         disp('Numerical Error in GMRES, so perturbing input slightly.')
         ei = ei + rand(nc,1)*eps;
-        A(:,ii) = Amatvec(ei);
+        A(:,i) = Amatvec(ei);
     end
-    disp(['dt = ' num2str(dt(ii))])
+    disp(['dt = ' num2str(dt(i))])
     disp(['Saving to ' dstFile])
     save(dstFile, 'A', 'p', 'gmresTol','dt')
 end

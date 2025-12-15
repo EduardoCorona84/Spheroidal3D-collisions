@@ -84,6 +84,7 @@ timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
     'advance',zN,...
     'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
 if Fparams.loadIntermediate && exist(saveFile, 'file')
+    disp('Loading intermediate results from file')
     % Load previous file 
     res_ = load(saveFile);
     % Get the last entry that was saved
@@ -141,6 +142,11 @@ timings.setup_kernel=toc;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % (0.4) Initialize collision info  
 [colevent,collist,~,~] = LOCAL_check_collision_sph(Ct{lid},Fparams);
+fprintf('\n-------------------------------------------------');
+fprintf('\n Initial (potential) Collisions: \n')
+display(collist(:,1:2)')
+fprintf('-------------------------------------------------\n');
+assert(false)
 % Model of the surface of the sphere or other geometry. 
 if ~strcmp(Fparams.parbd.Shape,'') % unit sphere
    Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); 
@@ -949,7 +955,6 @@ for k=numF+1:numF+numFS
    indi = (1:3)+6*(ipsh(k-numF)-1);
    F(indi,k) = -Ct(ipsh(k-numF),:)./norm(Ct(ipsh(k-numF),:));
 end
-
 %% Build A 
 A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
 if Fparams.denseMV
@@ -974,7 +979,7 @@ end
 bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
 %% Save these contact pairs to Persistent Variable
-theseContactPairs = zeros(n3,1);
+theseContactPairs = zeros(numF+numFS,1);
 for ii = 1:numF+numFS
     l0 = (find(F(:,ii), 1,'first')-1) / 6;
     l1 = (find(F(:,ii), 1,'last')-3) / 6;
@@ -987,7 +992,7 @@ contactPairs{ixTime} = theseContactPairs;
 if contains('bifi', lower(Fparams.lcpOpts.solver))
     pLo = Fparams.lcpOpts.low.p;
     tolLo = Fparams.lcpOpts.low.gmresTol;
-    Ahat = getLCPMatVec(Fparams, F, [], Nullsp, pLo, tolLo);
+    Ahat = getLCPMatVec(Fparams, F, [], [], pLo, tolLo);
     if Fparams.denseMV
         Ahat = @(x)Ahat*x;
     end
@@ -1048,10 +1053,9 @@ if saveLCPs
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');
 end
-fprintf(['\n minmap ' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
+fprintf(['\n' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
-
 if norm(lam)>0
     % Contact forces / torques
     F_c = F*lam; 
@@ -1118,6 +1122,7 @@ if isempty(VW) || Fparams.comp
 % RHS -(aI+K)*sigma
 tic; 
 B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma);
+fprintf('\n Time for to apply B = (L - TD)[sigma]: %e',toc);
 timings.velocities.apply(i) = 0.5*toc;
 
 if ~isempty(Fparams.Tshell)
@@ -1126,8 +1131,9 @@ end
 
 % Solve Fredholm eq TD*mu = B
 tic; 
-mu = Lslv(Kernels.TD,B,parslv);
-fprintf('\n Time for solve: %e',toc); 
+verboseMVP = @(x) Lapp(Kernels.TD, x, true);
+mu = Lslv(verboseMVP,B,parslv);
+fprintf('\n Time for solve TD[mu] = B: %e',toc); 
 timings.velocities.solve(i) = toc;  
 % U = U_inc + U_sc
 tic; 
