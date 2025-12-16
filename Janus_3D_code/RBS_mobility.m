@@ -146,7 +146,7 @@ fprintf('\n-------------------------------------------------');
 fprintf('\n Initial (potential) Collisions: \n')
 display(collist(:,1:2)')
 fprintf('-------------------------------------------------\n');
-assert(false)
+
 % Model of the surface of the sphere or other geometry. 
 if ~strcmp(Fparams.parbd.Shape,'') % unit sphere
    Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); 

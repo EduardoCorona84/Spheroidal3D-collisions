@@ -10,7 +10,7 @@ if ~exist('desiredTol','var') || isempty(desiredTol)
     desiredTol = floor(n^3 / 10);
 end
 if ~exist('debug','var') || isempty(debug)
-    debug = false;
+    debug = true;
 end
 lx=0:Cdst:Cdst*(n-1);
 lx = lx - mean(lx); 
@@ -31,30 +31,30 @@ cur = 1;
 ub = cur;
 C = C0;
 Fparams.parbd = RBS_set_params(8,C,rd,[],[],[],3,false,false,[],colThresh,[]);
-colevent = LOCAL_check_collision_sph(C,Fparams)
+colevent = LOCAL_check_collision_sph(C,Fparams);
 while colevent
     ub = ub*2;
     C = C0*ub;
     colevent = LOCAL_check_collision_sph(C,Fparams);
 end
 
-if true 
+if debug  
     figure;
     hold on 
     Gamma = lb:.01:ub;
     numCol = zeros(numel(Gamma),1);
     for i = 1:numel(Gamma)
-        [~,collist] = LOCAL_check_collision_sph(C,Fparams);
-        numCol(i) = size(collist,2);
+        [~,collist] = LOCAL_check_collision_sph(C0*Gamma(i),Fparams);
+        numCol(i) = size(collist,1);
     end
     plot(Gamma, numCol, "Color",'blue','LineWidth',5)
     ylabel('Number of Collisions')
     xlabel('\gamma')
 end
-assert( false)
+
 while true
     [~,collist] = LOCAL_check_collision_sph(C,Fparams);
-    numCol = size(collist,2);
+    numCol = size(collist,1);
     if desiredNumCol - desiredTol <= numCol && numCol <= desiredNumCol + desiredTol
         break
     elseif desiredNumCol - desiredTol < numCol
