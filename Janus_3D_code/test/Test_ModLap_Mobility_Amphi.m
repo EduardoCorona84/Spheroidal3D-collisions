@@ -116,7 +116,7 @@ if ~exist('gmresTol','var') || isempty(gmresTol)
 end
 %% Nuisance default params
 if ~exist('saveLCPs','var') || isempty(saveLCPs)
-    saveLCPs=true; 
+    saveLCPs=false; 
 end
 if ~exist('initMode','var') || isempty(initMode)
     initMode='lattice'; 

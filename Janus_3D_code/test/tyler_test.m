@@ -1,11 +1,11 @@
-n=3; % size of the lattice
+n=6; % size of the lattice
 meanRadius=1; % mean radius of each of the particles
 ep=.3; % distance where we consider collisions in the LCP
 p=8; % number of spherical harmonics
 Cdst=2.5; % initial distance of the particle centers
 polydisperseRatio=0;
 % LCP params
-lcpSlvr="proxquasinewton";
+lcpSlvr='proxquasinewton';
 lcpTol=0.00000001; % 1e-8
 lcpMaxIter=100;
 lcpWarmStart=0;

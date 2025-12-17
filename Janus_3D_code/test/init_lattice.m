@@ -4,7 +4,7 @@ if ~exist('colThresh','var') || isempty(colThresh)
     colThresh = 0.3;
 end
 if ~exist('desiredNumCol','var') || isempty(desiredNumCol)
-    desiredNumCol = floor(n^3 / 2);
+    desiredNumCol = floor(n^3);
 end
 if ~exist('desiredTol','var') || isempty(desiredTol)
     desiredTol = floor(n^3 / 10);
