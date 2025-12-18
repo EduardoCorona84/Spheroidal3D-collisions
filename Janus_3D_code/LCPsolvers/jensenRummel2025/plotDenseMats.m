@@ -1,7 +1,7 @@
-function plotDenseMats()
+function plotDenseMats(root, prefix)
 [dirname, basedir] = setPaths();
-srcFile ='amphi.lattice.n_5.p_8.cDist_2.5.allMats.mat';
-res_ = load(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData/' srcFile]);
+srcFile = fullfile(root, [prefix '.denseMats.allMats.mat']);
+res_ = load(srcFile);
 [~,jHi] = max(res_.ps);
 [~,kHi]= min(res_.tols);
 Nt = size(res_.A,1);
@@ -23,7 +23,7 @@ end
 IX = find(mask);
 I = numel(IX);
 %% get warm start info
-res_ = load('/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/data.11.03.2025/lcp.amphi.lattice.n_5.p_8.cDist_2.5.mat');
+res_ = load(fullfile(root, [prefix '.mat']));
 contactPairIX = cell(Nt,1);
 for i = 1:Nt
     F = res_.lcp_list(i).F;
@@ -61,7 +61,7 @@ for ii = 1:I
     tic
     cA = getC_A(AHi);
     fprintf('- cA computation time: %.4g sec\n', toc);
-    if norm(AHi) > 10
+    if norm(AHi) > 10 || isempty(AHi)
         warmStartBoundHolds(ii) = NaN;
         boundHolds(ii,:,:) = NaN;
         absErr(ii,:,:) = NaN;
@@ -82,7 +82,7 @@ for ii = 1:I
         A_im1 = A{im1,jHi, kHi};
         b_im1 = b{im1};
         n_im1 = numel(b_im1);
-        if isempty(A_im1) || norm(A_im1) > 10
+        if isempty(A_im1) || norm(A_im1) > 10 
             warmStartBoundHolds(ii) = NaN;
         else
             % Map the solution and LCP to the indicies of the smaller
@@ -98,14 +98,14 @@ for ii = 1:I
             for iii = 1:n_c
                 jj = ix_c(iii) == ix_i;
                 b_ic(iii) = bHi(jj);
-                for iv = 1:n_im1
-                    jv = ix_im1(iv) == ix_i;
+                for iv = 1:n_c
+                    jv = ix_c(iv) == ix_i;
                     A_ic(iii,iv) = AHi(jj,jv);
                 end
                 jj = ix_c(iii) == ix_im1;
                 b_im1c(iii) = b_im1(jj);
-                for iv = 1:n_im1
-                    jv = ix_im1(iv) == ix_im1;
+                for iv = 1:n_c
+                    jv = ix_c(iv) == ix_im1;
                     A_im1c(iii,iv) = A_im1(jj,jv);
                 end
             end
@@ -186,7 +186,7 @@ xlabel('p')
 ylabel('\epsilon')
 % set(gca,'Interpreter','latex')
 fontsize(f1, 30, 'points')
-absErrFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_boundsHold.png']);
+absErrFile = fullfile(basedir,'..','docs','fig', [prefix '_boundsHold.png']);
 disp(['Saving to ' absErrFile])
 saveas(f1, absErrFile);
 %%
@@ -203,7 +203,7 @@ xlabel('p')
 ylabel('\epsilon')
 % set(gca,'Interpreter','latex')
 fontsize(f2, 30, 'points')
-absErrFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_absErr.png']);
+absErrFile = fullfile(basedir,'..','docs','fig', [prefix '_absErr.png']);
 disp(['Saving to ' absErrFile])
 saveas(f2, absErrFile);
 %%
@@ -220,7 +220,7 @@ xlabel('p')
 ylabel('\epsilon')
 % set(gca,'Interpreter','latex')
 fontsize(f3, 30, 'points')
-timePerHiFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_preCond.png']);
+timePerHiFile = fullfile(basedir,'..','docs','fig', [prefix '_preCond.png']);
 disp(['Saving to ' timePerHiFile])
 saveas(f3, timePerHiFile);
 %%
@@ -237,7 +237,7 @@ xlabel('p')
 ylabel('\epsilon')
 % set(gca,'Interpreter','latex')
 fontsize(f4, 30, 'points')
-timePerHiFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_timePerHi.png']);
+timePerHiFile = fullfile(basedir,'..','docs','fig', [prefix '_timePerHi.png']);
 disp(['Saving to ' timePerHiFile])
 saveas(f4, timePerHiFile);
 end % plotDenseMats
@@ -364,7 +364,7 @@ end % getC_A
 % name = name{1};
 % sgtitle({sprintf('Run Time for mc=%d', i),name})
 % set(f1, 'Position',  [0, 0, 1000, 1200])
-% timingFile = fullfile(basedir,'..','docs','fig', [srcFile(1:end-4) '_runTime.png']);
+% timingFile = fullfile(basedir,'..','docs','fig', [prefix '_runTime.png']);
 % disp(['Saving to ' timingFile])
 % saveas(f1, timingFile);
 % Relative Error

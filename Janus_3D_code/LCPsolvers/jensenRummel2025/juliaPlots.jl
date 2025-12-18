@@ -14,9 +14,20 @@ name2Display = Dict(
     "L-BFGS-B"=>L"\mathrm{L-BFGS-B}",
     "PQN"=>L"\mathrm{PQN}",
     "Min-Map Newton"=>L"\mathrm{Min-Map}\;\mathrm{Newton}",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>L"\mathrm{B-PQN}\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"B-PQN: p=3, ϵ=1e-5",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=4, ϵ=1e-6",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=6, ϵ=1e-6",
+) 
+name2LatexDisplay = Dict(
+    "PGD"=>L"\mathrm{PGD}",
+    "Accelerated PGD"=>L"\mathrm{A-PGD}",
+    "zeroSR1"=>L"\mathrm{zeroSR1}",
+    "L-BFGS-B"=>L"\mathrm{L-BFGS-B}",
+    "PQN"=>L"\mathrm{PQN}",
+    "Min-Map Newton"=>L"\mathrm{Min-Map}\;\mathrm{Newton}",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"B-PQN: p=3, "*L"\epsilon_\mathrm{gmres}=1e-5",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=4, "*L"\epsilon_\mathrm{gmres}=1e-6",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=6, "*L"\epsilon_\mathrm{gmres}=1e-6",
 ) 
 
 name2Color = Dict(
@@ -33,20 +44,20 @@ name2Color = Dict(
 # colorant"#17becf"   # blue-teal
 ##
 function createBoxPlotAndTable(
+    algoNames,
     metricName,
-    prefix;
-    save_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig",
-    data_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data",
+    prefix,
+    root;
+    fig_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig",
     rel_tol_kkt = 1e-8,
     abs_tol_kkt = 1e-8,
     nMin = 100 ,
     nMax = 150,
 )
-    matdic = matread(joinpath(data_dir, "$prefix.mat"))
+    matdic = matread(joinpath(root, "$prefix.mat"))
     _results = matdic["results"]
     mcGood = findall(isa.(_results["matVecs"][:,1], Real) .&& (0 .< _results["matVecs"][:,1]))
     # Int.(matdic["mcGood"])[:]
-    algoNames = _results["name"][mcGood[1], :]
     results = Dict()
     for (ixAlgo, name) in enumerate(algoNames)
         if name == "CVX"
@@ -146,14 +157,14 @@ function createBoxPlotAndTable(
             # uniformtext_minsize=font_size,
         )
     )
-    display(p)
-    # open(joinpath(save_dir, "$(prefix)_caption.tex"), "w") do f
+    # display(p)
+    # open(joinpath(fig_dir, "$(prefix)_caption.tex"), "w") do f
     #     s = """
     #     All the LCP's with a problem of size of $problem_size_string were ran by all algorithms. There were a total of $num_problems problems. The tolerance of 1E-6 was used for both the absolute and relative kkt condition.
     # """
     #     write(f, s)
     # end
-    boxPlotFile =  joinpath(save_dir, "$(prefix)_$(metricName)_boxPlot.pdf")
+    boxPlotFile =  joinpath(fig_dir, "$(prefix)_$(metricName)_boxPlot.pdf")
     @info "Saveing box plot to $boxPlotFile"
     PlotlyJS.savefig(
         p,
@@ -163,9 +174,24 @@ function createBoxPlotAndTable(
     )
     ##
     rows = Any[]
-    push!(rows, ["", "Minimum", "Lower Quartile", "Median", "Upper Quartile", "Maximum"])
+    push!(rows, ["", "Minimum", "Lower Quartile", "Median", "Mean", "Upper Quartile", "Maximum"])
         push!(rows, Rule(:top))
-    for name in algoNames
+    list_minimum = zeros(length(results))
+    list_low_quantile = zeros(length(results))
+    list_median = zeros(length(results))
+    list_mean = zeros(length(results))
+    list_up_quantile = zeros(length(results))
+    list_maximum = zeros(length(results))
+    for (i,name) in enumerate(algoNames)
+        metric = results[name][metricName]
+        list_minimum[i] = minimum(metric) 
+        list_low_quantile[i] = quantile(metric, 0.25) 
+        list_median[i] = median(metric) 
+        list_mean[i] = mean(metric) 
+        list_up_quantile[i] = quantile(metric, 0.75) 
+        list_maximum[i] = maximum(metric) 
+    end
+    for (i,name) in enumerate(algoNames)
         metric = results[name][metricName]
         if contains(name, "\\kappa")
             prts = split(name, "\\kappa")
@@ -175,30 +201,66 @@ function createBoxPlotAndTable(
                 "\\kappa"=>raw"\kappa", "\\eta"=>raw"\eta", "\\tau"=>raw"\tau", "\\_"=>raw"\_")
             name = LaTeXString("\$"*name*"\$")
         end
-        push!(rows, [LaTeXString(name),  
-            @sprintf("%.4g",minimum(metric)), 
-            @sprintf("%.4g",quantile(metric,0.25)), 
-            @sprintf("%.4g",median(metric)), 
-            @sprintf("%.4g",quantile(metric, 0.75)),  
-            @sprintf("%.4g",maximum(metric))])
+        row = [LaTeXString(name2LatexDisplay[name])]
+        push!(row, list_minimum[i] == minimum(list_minimum) ? 
+            LaTeXString(@sprintf("\\textbf{%.4g}",minimum(metric))) : 
+            @sprintf("%.4g",list_minimum[i]))
+        push!(row, list_low_quantile[i] == minimum(list_low_quantile) ? 
+            LaTeXString(@sprintf("\\textbf{%.4g}",list_low_quantile[i])) :
+            @sprintf("%.4g",list_low_quantile[i]))
+        push!(row, list_median[i] == minimum(list_median) ? 
+            LaTeXString(@sprintf("\\textbf{%.4g}",list_median[i])) :
+            @sprintf("%.4g",list_median[i]))
+        push!(row, list_mean[i] == minimum(list_mean) ? 
+            LaTeXString(@sprintf("\\textbf{%.4g}",list_mean[i])) :
+            @sprintf("%.4g",list_mean[i]))
+        push!(row, list_up_quantile[i] == minimum(list_up_quantile) ? 
+            LaTeXString(@sprintf("\\textbf{%.4g}",list_up_quantile[i])) :
+            @sprintf("%.4g",list_up_quantile[i]))
+        push!(row, list_maximum[i] == minimum(list_maximum) ? 
+            LaTeXString(@sprintf("\\textbf{%.4g}",list_maximum[i])) :
+            @sprintf("%.4g",list_maximum[i]))
+        push!(rows, row)
     end
     push!(rows, Rule(:bottom))
 
-    table_file = joinpath(save_dir, "$(prefix)_$(metricName)_table.tex")
+    table_file = joinpath(fig_dir, "$(prefix)_$(metricName)_table.tex")
     @info "Saving table to $table_file"
     latex_tabular(
         table_file, 
-        Tabular("lccccc"), 
+        Tabular("lcccccc"), 
         rows; formatter=myFormatter
     )
 end
 ## Estimated Time
-createBoxPlotAndTable("estimTime", "amphi.lattice.n_5.monoFidelity" #=prefix=#)
-createBoxPlotAndTable("estimTime", "amphi.lattice.n_5.warmStart" #=prefix=#)
-createBoxPlotAndTable("estimTime", "amphi.lattice.n_5.bifi" #=prefix=#)
-createBoxPlotAndTable("estimTime", "amphi.lattice.n_5.warmStart.bifi" #=prefix=#)
+# monodisperse (old)
+root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData";
+prefix = "amphi.lcp.lattice.n_5.p_8.cDist_2.5";
+# polydisperse
+# root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/resultsForRecord"
+# prefix = "amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2"
+#
+monoNames = [
+    "PGD",
+    "Accelerated PGD",
+    "zeroSR1",
+    "L-BFGS-B",
+    "PQN",
+    "Min-Map Newton",
+]
+bifiNames = [
+    "PGD",
+    "PQN",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"
+]
+createBoxPlotAndTable(monoNames,"estimTime", "$prefix.mono", root)
+createBoxPlotAndTable(monoNames,"estimTime", "$prefix.warmStart", root)
+createBoxPlotAndTable(bifiNames, "estimTime", "$prefix.bifi", root)
+createBoxPlotAndTable(bifiNames, "estimTime", "$prefix.warmStart.bifi", root)
 ## MatVecs
-createBoxPlotAndTable("matVecs", "amphi.lattice.n_5.monoFidelity" #=prefix=#)
-createBoxPlotAndTable("matVecs", "amphi.lattice.n_5.warmStart" #=prefix=#)
-createBoxPlotAndTable("eMatVecs", "amphi.lattice.n_5.bifi" #=prefix=#)
-createBoxPlotAndTable("eMatVecs", "amphi.lattice.n_5.warmStart.bifi" #=prefix=#)
+createBoxPlotAndTable(monoNames,"matVecs", "$prefix.mono", root)
+createBoxPlotAndTable(monoNames,"matVecs", "$prefix.warmStart", root)
+createBoxPlotAndTable(bifiNames, "eMatVecs", "$prefix.bifi", root)
+createBoxPlotAndTable(bifiNames, "eMatVecs", "$prefix.warmStart.bifi", root)

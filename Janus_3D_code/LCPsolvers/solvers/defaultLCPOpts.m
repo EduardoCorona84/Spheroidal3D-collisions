@@ -96,7 +96,11 @@ if ~isfield(opts, 'qn')
     opts.qn= struct('resetMem',false);
 end
 if ~isfield(opts.qn, 'm') || isempty(opts.qn.m) 
-    opts.qn.m = Inf;
+    if n == 0 
+        opts.qn.m = Inf;
+    else
+        opts.qn.m = n;
+    end
 end
 if ~isfield(opts.qn, 'update') || isempty(opts.qn.update)
     opts.qn.update = 'bfgs';

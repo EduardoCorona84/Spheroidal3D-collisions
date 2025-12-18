@@ -1,4 +1,4 @@
-function mcGood = getMCGood(resFile)
+function mcGood = getMCGood(resFile, ps, tols)
 persistent cache 
 if isempty(cache)
     cache = containers.Map('KeyType','char', 'ValueType', 'any');
@@ -8,13 +8,19 @@ if cache.isKey(resFile)
     disp('- Loading from precomputed cache')
     mcGood = cache(resFile);
     return 
+elseif isfile([resFile '.mcGood.mat'])
+    load([resFile '.mcGood.mat'], 'mcGood')
+    cache(resFile) = mcGood;
+    return 
 end
 disp('- Computing from scratch')
 res = load(resFile);
 Nt = size(res.A,1);
 mcGood = true(Nt, 1);
-ps = [8,6,4,3];
-tols = [1e-8,1e-6,1e-6,1e-5];
+if ~exist('ps', 'var') || isempty(ps)
+    ps = res.ps;
+    tols = repmat(min(res.tols), [numel(ps), 1]);
+end
 for i = 1:Nt
     disp(['-- i = ' num2str(i) '/' num2str(Nt)])
     for l = 1:numel(ps)
@@ -37,4 +43,5 @@ for i = 1:Nt
     end
 end
 mcGood = find(mcGood);
+save([resFile '.mcGood.mat'], 'mcGood')
 cache(resFile) = mcGood;

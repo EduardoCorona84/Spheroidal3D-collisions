@@ -1,3 +1,4 @@
+function warmStartComparison(root, prefix, ps, tols)
 %% Set paths
 [dirname, basedir] = setPaths();
 %% Try to initialize cvx if on the cluster
@@ -5,13 +6,15 @@ try %#ok<TRYNC>
     run(fullfile('/projects', getenv('USER'), 'cvx', 'cvx_startup.m'))
 end
 %% Load Data from file
-resFile = '/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData/amphi.lattice.n_5.p_8.cDist_2.5.allMats.mat';
+resFile = fullfile(root, [prefix '.denseMats.allMats.mat']);
 res = load(resFile);
-[~,jHi] = max(res.ps);
-[~,kHi]= min(res.tols);
+pHi = ps(1);
+tolHi = tols(1);
+jHi = find(abs(res.ps - pHi) < 1e-8);
+kHi = find(abs(res.tols - tolHi) < 1e-8);
 Nt = size(res.A,1);
 %% Get the indecies of the contact pairs
-res_ = load('/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/data.11.03.2025/lcp.amphi.lattice.n_5.p_8.cDist_2.5.mat');
+res_ = load(fullfile(root, [prefix '.mat']));
 contactPairIX = cell(Nt,1);
 for i = 1:Nt
     F = res_.lcp_list(i).F;
@@ -33,10 +36,7 @@ for i = 1:Nt
     contactPairIX{i} = thesePairs;
 end
 %% Hyper parameters
-prefix = 'amphi.lattice.n_5.warmStart';
 plotDebug = false;
-condNum = 1e2;
-percentLarge = 0.25;
 max_iter = 1000;
 tol = 1e-8;
 % initialize opts structure
@@ -88,11 +88,11 @@ results = repmat(...
     ), [Nt,numAlgo] ...
     );
 %% Run all solvers on all problems 
-mcGood = getMCGood(resFile);
+mcGood = getMCGood(resFile, ps, tols);
 badII = [];
 for ii = 1:numel(mcGood)
     i = mcGood(ii);
-    disp(['i = ' num2str(i) '/' num2str(i)])
+    disp(['- i = ' num2str(i) '/' num2str(i)])
     A = res.A{i,jHi,kHi};
     dt = res.dt{i,jHi,kHi};
     b = res.b{i};
@@ -193,8 +193,9 @@ end
 %% Plot Overall Statistics
 iterationBarChart
 %% Save results to File
-disp(['Saving to ' prefix]);
-save(['/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/LCPsolvers/data/' prefix '.mat'], ...
+saveFile = fullfile(root, [prefix '.warmStart.mat']);
+disp(['Saving to ' saveFile]);
+save(saveFile, ...
     'results', 'mcGood',  'opts');
 
 
