@@ -126,7 +126,7 @@ for ii = 1:numel(mcGood)
         results(i,ixAlgo).estimTime = results(i,ixAlgo).time + results(i,ixAlgo).matVecs*mean(dt);
         results(i,ixAlgo).iters = info.iter;
         results(i,ixAlgo).kkt = info.kkt; 
-        results(i,ixAlgo).errHist = info.errHist;
+        results(i,ixAlgo).errHist = [info.errHist results(i,ixAlgo).time + info.errHist(:,3)*mean(dt)] ;
         try %#ok<TRYNC>
             results(i,ixAlgo).iterHist{i} = info.iterHist;
         end

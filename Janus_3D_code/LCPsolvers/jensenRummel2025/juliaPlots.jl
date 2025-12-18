@@ -8,26 +8,26 @@ using MAT: matread
 include("tableFormatter.jl")
 ##
 name2Display = Dict(
-    "PGD"=>L"\mathrm{PGD}",
-    "Accelerated PGD"=>L"\mathrm{A-PGD}",
-    "zeroSR1"=>L"\mathrm{zeroSR1}",
-    "L-BFGS-B"=>L"\mathrm{L-BFGS-B}",
-    "PQN"=>L"\mathrm{PQN}",
-    "Min-Map Newton"=>L"\mathrm{Min-Map}\;\mathrm{Newton}",
+    "PGD"=>"PGD",
+    "Accelerated PGD"=>"A-PGD",
+    "zeroSR1"=>"zeroSR1",
+    "L-BFGS-B"=>"L-BFGS-B",
+    "PQN"=>"PQN",
+    "Min-Map Newton"=>"Min-Map Newton",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"B-PQN: p=3, ϵ=1e-5",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=4, ϵ=1e-6",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=6, ϵ=1e-6",
 ) 
 name2LatexDisplay = Dict(
-    "PGD"=>L"\mathrm{PGD}",
-    "Accelerated PGD"=>L"\mathrm{A-PGD}",
-    "zeroSR1"=>L"\mathrm{zeroSR1}",
-    "L-BFGS-B"=>L"\mathrm{L-BFGS-B}",
-    "PQN"=>L"\mathrm{PQN}",
-    "Min-Map Newton"=>L"\mathrm{Min-Map}\;\mathrm{Newton}",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"B-PQN: p=3, "*L"\epsilon_\mathrm{gmres}=1e-5",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=4, "*L"\epsilon_\mathrm{gmres}=1e-6",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=6, "*L"\epsilon_\mathrm{gmres}=1e-6",
+    "PGD"=>"PGD",
+    "Accelerated PGD"=>"A-PGD",
+    "zeroSR1"=>"zeroSR1",
+    "L-BFGS-B"=>"L-BFGS-B",
+    "PQN"=>"PQN",
+    "Min-Map Newton"=>"Min-Map Newton",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"  p=3,"*L"\epsilon_\mathrm{gmres}"*"=1e-5",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"  p=4,"*L"\epsilon_\mathrm{gmres}"*"=1e-6",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"  p=6,"*L"\epsilon_\mathrm{gmres}"*"=1e-6",
 ) 
 
 name2Color = Dict(
@@ -41,138 +41,97 @@ name2Color = Dict(
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#7f7f7f",  # middle gray
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#bcbd22",  # curry yellow-green
 )
+font_size =35
 # colorant"#17becf"   # blue-teal
 ##
-function createBoxPlotAndTable(
-    algoNames,
-    metricName,
-    prefix,
-    root;
-    fig_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig",
-    rel_tol_kkt = 1e-8,
-    abs_tol_kkt = 1e-8,
-    nMin = 100 ,
-    nMax = 150,
-)
+function _createBoxPlot(p,r,c,algoNames,metricName, results)
+    
+    for name in reverse(algoNames)
+        add_trace!(p,
+            box(
+                name=name2Display[name],
+                x=results[name][metricName],
+                marker_color=name2Color[name],
+                showlegend=false
+            ), row=r, col=c
+        )
+    end
+  
+   return results
+end
+
+function createBoxPlotAndTable(algoNames,metrics,prefix,root,fig_dir, title_text; rel_tol_kkt = 1e-8, abs_tol_kkt = 1e-8)
+    ## Get results from mat file
     matdic = matread(joinpath(root, "$prefix.mat"))
     _results = matdic["results"]
-    mcGood = findall(isa.(_results["matVecs"][:,1], Real) .&& (0 .< _results["matVecs"][:,1]))
-    # Int.(matdic["mcGood"])[:]
+    mcGood = Int.(matdic["mcGood"])[:]
     results = Dict()
-    for (ixAlgo, name) in enumerate(algoNames)
+    for name in algoNames
         if name == "CVX"
             continue
         end
         results[name] = Dict()
+        ixAlgo = findfirst(name .== _results["name"][mcGood[1],:])
         for (k, v) in _results 
             if k == "name" || k == "algo"
                 continue 
             end
             results[name][k] = v[mcGood,ixAlgo]
         end
+        ## Fix the matVec so that we have tota
+        for (i,errHist) in enumerate(_results["errHist"][mcGood,ixAlgo])
+            errHist[1,2] = Inf
+            ix = findfirst((errHist[:,1] .< rel_tol_kkt) .|| (errHist[:,2] .< abs_tol_kkt))
+            results[name]["matVecs"][i] = errHist[ix,3]
+            results[name]["estimTime"][i] = errHist[ix,end]
+        end
     end
-    trs = AbstractTrace[]
-    for (kk,name) in enumerate(algoNames)
-        println(name)
-        # metric = []
-        # for errHist in results[name]["errHist"]
-        #     errHist[1,2] = Inf
-        #     ix = findfirst((errHist[:,1] .< rel_tol_kkt) .|| (errHist[:,2] .< abs_tol_kkt))
-        #     if !isnothing(ix)
-        #         # number of iterations is the index found
-        #         # number of matVecs is the third column of the errHist
-        #         push!(
-        #             metric, 
-        #             metricName == "matVec" ? errHist[ix,3] : ix
-        #         )
-        #     else
-        #          push!(
-        #             metric, 
-        #             length(errHist[:,1]), 
-        #         )
-        #     end
-        # end
-        # results[name][metricName] = metric
-        # if contains(name, "\\kappa")
-        #     prts = split(name, "\\kappa")
-        #     name = "\$\\text{"*prts[1]*"}\\kappa"*prts[end]*"\$"
-        # end
-        println(name)
-        push!(
-            trs, 
-            box(
-                name=name2Display[name],
-                x=results[name][metricName],
-                marker_color=name2Color[name]
-            )
-        )
-    end
-    # problem_size_string = "\$"#"\$n \\in [$(nMin),$(nMax)), "
-    # num_problems = length(mcGood)
-    (title_text, xaxis_title_text,xaxis_range,xaxis_tickvals,xaxis_type) = if metricName == "matVecs" 
-        "Number of MVPs", "MVPs", log10.([.9,155]),nothing,"log"
-    elseif metricName == "eMatVecs"
-        "Number of Effective MVPs", "Effective MVPs", log10.([.9,20]),nothing,"log"
-    elseif metricName == "iters" 
-        "Number of Iterations", "Iterations"
-    elseif metricName == "estimTime"
-        "Estimated Wall Time", "Seconds",log10.([1e2,1e5]),nothing,"log"
-    end
-    font_size =30
-    p = plot(
-        trs,
-        Layout(
+    ## Make Plots
+    p = make_subplots(rows=1, cols=2, shared_yaxes=true,)# subplot_titles=[metrics[1] == "eMatVecs" ? "Number of Effective MVPs" : "Number of MVPs" "Estimated Time"])
+    results = _createBoxPlot(p,1,1,algoNames,metrics[1],results)
+    _createBoxPlot(p,1,2,algoNames,metrics[2],results)
+    relayout!(p, 
+        title=attr(
+            text=title_text,
+            font_size=40,
+            x=0.6,
+            xanchor="center",
+        ),
+        yaxis_tickfont_size = font_size,
+        xaxis=attr(
             title=attr(
-                text=title_text,
-                font_size=40,
-                x=0.5,
-                xanchor="center",
+                text="MVPs",
+                font_size=font_size
             ),
-            yaxis_tickfont_size = font_size,
-            xaxis_tickfont_size = font_size,
-            xaxis=attr(
-                title=attr(
-                    text=xaxis_title_text,
-                    font_size=font_size
-                ),
-                dtick=1,
-                range=xaxis_range,
-                tickvals=xaxis_tickvals,
-                type=xaxis_type
+            tickfont_size = font_size,
+            dtick=1,
+            range=log10.([2,50]),
+            type="log"
+        ),  
+        xaxis2=attr(
+            title=attr(
+                text= "Seconds",
+                font_size=font_size
             ),
-            showlegend=false,
-            # annotations=[attr(
-            #     text="$(problem_size_string)\\varepsilon_{\\text{kkt}_\\text{rel}} = $(rel_tol_kkt), \\varepsilon_{\\text{kkt}_\\text{abs}} = $(abs_tol_kkt)\$",
-            #     font=attr(
-            #         size=font_size, # Adjust font size as needed
-            #         color= "rgb(116, 101, 130)" # Set subtitle color
-            #     ),
-            #     showarrow= false, # Hide the arrow associated with annotations
-            #     align= "center", # Align the subtitle horizontally
-            #     x= 0.35, # Center horizontally (0.5 for paper reference)
-            #     y= 1.05, # Position at the top (1 for paper reference)
-            #     xref= "paper", # Reference coordinates to the plot paper
-            #     yref= "paper" # Reference coordinates to the plot paper
-            # )],
-            # uniformtext_minsize=font_size,
-        )
+            tickfont_size = font_size,
+            dtick=1,
+            range=log10.([1e2,1e4]),
+            type="log"
+        ),
+        uniformtext_minsize=font_size,
+        uniformtext_mode="show"
     )
-    # display(p)
-    # open(joinpath(fig_dir, "$(prefix)_caption.tex"), "w") do f
-    #     s = """
-    #     All the LCP's with a problem of size of $problem_size_string were ran by all algorithms. There were a total of $num_problems problems. The tolerance of 1E-6 was used for both the absolute and relative kkt condition.
-    # """
-    #     write(f, s)
-    # end
-    boxPlotFile =  joinpath(fig_dir, "$(prefix)_$(metricName)_boxPlot.pdf")
+    ## Save Plot 
+    boxPlotFile = joinpath(fig_dir, "$(prefix)_boxPlot.pdf")
     @info "Saveing box plot to $boxPlotFile"
     PlotlyJS.savefig(
         p,
         boxPlotFile,
-        height=650,
-        width=800
+        height=800,
+        width=1400
     )
-    ##
+
+    ## LaTex Table
     rows = Any[]
     push!(rows, ["", "Minimum", "Lower Quartile", "Median", "Mean", "Upper Quartile", "Maximum"])
         push!(rows, Rule(:top))
@@ -183,7 +142,7 @@ function createBoxPlotAndTable(
     list_up_quantile = zeros(length(results))
     list_maximum = zeros(length(results))
     for (i,name) in enumerate(algoNames)
-        metric = results[name][metricName]
+        metric = results[name][metrics[1]]
         list_minimum[i] = minimum(metric) 
         list_low_quantile[i] = quantile(metric, 0.25) 
         list_median[i] = median(metric) 
@@ -191,15 +150,12 @@ function createBoxPlotAndTable(
         list_up_quantile[i] = quantile(metric, 0.75) 
         list_maximum[i] = maximum(metric) 
     end
+    seenBPQN = false
     for (i,name) in enumerate(algoNames)
-        metric = results[name][metricName]
-        if contains(name, "\\kappa")
-            prts = split(name, "\\kappa")
-            name = string("\\text{"*prts[1]*"}\\kappa"*prts[end])
-            println(name )
-            name = replace(name, 
-                "\\kappa"=>raw"\kappa", "\\eta"=>raw"\eta", "\\tau"=>raw"\tau", "\\_"=>raw"\_")
-            name = LaTeXString("\$"*name*"\$")
+        metric = results[name][metrics[1]]
+        if !seenBPQN && contains(name,"B-PQN")
+            seenBPQN = true
+            push!(rows, ["B-PQN", "", "", "", "", "", ""])
         end
         row = [LaTeXString(name2LatexDisplay[name])]
         push!(row, list_minimum[i] == minimum(list_minimum) ? 
@@ -224,15 +180,19 @@ function createBoxPlotAndTable(
     end
     push!(rows, Rule(:bottom))
 
-    table_file = joinpath(fig_dir, "$(prefix)_$(metricName)_table.tex")
+    table_file = joinpath(fig_dir, "$(prefix)_$(metrics[1])_table.tex")
     @info "Saving table to $table_file"
     latex_tabular(
         table_file, 
         Tabular("lcccccc"), 
         rows; formatter=myFormatter
     )
+    return p
 end
-## Estimated Time
+
+
+## 
+fig_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig"
 # monodisperse (old)
 root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData";
 prefix = "amphi.lcp.lattice.n_5.p_8.cDist_2.5";
@@ -240,27 +200,16 @@ prefix = "amphi.lcp.lattice.n_5.p_8.cDist_2.5";
 # root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/resultsForRecord"
 # prefix = "amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2"
 #
-monoNames = [
-    "PGD",
-    "Accelerated PGD",
-    "zeroSR1",
-    "L-BFGS-B",
-    "PQN",
-    "Min-Map Newton",
+monoNames = ["PGD", "Accelerated PGD", "zeroSR1", "L-BFGS-B", "PQN", "Min-Map Newton",
 ]
-bifiNames = [
-    "PGD",
-    "PQN",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"
+bifiNames = ["PGD", "PQN", "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)", "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)", "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"
 ]
-createBoxPlotAndTable(monoNames,"estimTime", "$prefix.mono", root)
-createBoxPlotAndTable(monoNames,"estimTime", "$prefix.warmStart", root)
-createBoxPlotAndTable(bifiNames, "estimTime", "$prefix.bifi", root)
-createBoxPlotAndTable(bifiNames, "estimTime", "$prefix.warmStart.bifi", root)
-## MatVecs
-createBoxPlotAndTable(monoNames,"matVecs", "$prefix.mono", root)
-createBoxPlotAndTable(monoNames,"matVecs", "$prefix.warmStart", root)
-createBoxPlotAndTable(bifiNames, "eMatVecs", "$prefix.bifi", root)
-createBoxPlotAndTable(bifiNames, "eMatVecs", "$prefix.warmStart.bifi", root)
+## Monofidelity
+p1 = createBoxPlotAndTable(monoNames,["matVecs", "estimTime"], "$prefix.mono", root, fig_dir,"Monofidelity Comparison")
+## warmStart
+p2 = createBoxPlotAndTable(monoNames,["matVecs", "estimTime"], "$prefix.warmStart", root, fig_dir,"Warm Starting Comparison")
+## bifi 
+p3 = createBoxPlotAndTable(bifiNames,["eMatVecs", "estimTime"], "$prefix.bifi", root, fig_dir,"Bifidelity Comparison")
+## warmStart.bifi
+p4 = createBoxPlotAndTable(bifiNames,["eMatVecs", "estimTime"], "$prefix.warmStart.bifi", root, fig_dir,"Warm Starting and Bifidelity Comparison")
+nothing

@@ -190,7 +190,7 @@ for ii = 1:numel(mcGood)
         results(i,ixAlgo).matVecs = Acnt('cnt');
         results(i,ixAlgo).matVecsLo = 0;
         results(i,ixAlgo).eMatVecs = Acnt('cnt');
-        results(i,ixAlgo).estimTime = results(i,ixAlgo).time + results(i,ixAlgo).matVecs*mean(dt);
+        results(i,ixAlgo).estimTime = results(i,ixAlgo).time + results(i,ixAlgo).eMatVecs*mean(dt);
         if isfield(biFi{ixAlgo},'p')
             matVecsLo = this_opts.low.A('cnt');
             lofiTime = matVecsLo * mean(dtLo);
@@ -200,7 +200,7 @@ for ii = 1:numel(mcGood)
         end
         results(i,ixAlgo).iters = info.iter;
         results(i,ixAlgo).kkt = info.kkt; 
-        results(i,ixAlgo).errHist = info.errHist;
+        results(i,ixAlgo).errHist = [info.errHist results(i,ixAlgo).time + info.errHist(:,3)*mean(dt)] ;
         try %#ok<TRYNC>
             results(i,ixAlgo).iterHist{i} = info.iterHist;
         end
