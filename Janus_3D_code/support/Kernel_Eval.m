@@ -32,7 +32,7 @@ end
 %display('size of weight is:');
 %display(size(wh));
 
-
+%old code
 % X grid
 %[Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
 
@@ -46,7 +46,7 @@ if params.dim == 1
        case 'SL_L_2D'
           wh = (1/2/pi)*wh; 
           A = (den==0) + 0.5*wh.*log((den + (den==0))); 
-  
+   
    end
 
 % 2D (plane or curves on plane)
@@ -113,23 +113,35 @@ elseif params.dim == 2
     end
  % 3D (surfaces and volume)   
 else
-    %{
+
+    %old code
      % Y grid 
+     %{
      [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
      % Z grid
      [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
     
      % den = ||X-Y||^2
-     d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
-     den = d1.^2 + d2.^2 + d3.^2;
+    d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+    den = d1.^2 + d2.^2 + d3.^2;
     %}
 
      %testing TODO
-     d1 = X1(:,1) - X2(:,1).';
-     d2 = X1(:,2) - X2(:,2).';
-     d3 = X1(:,3) - X2(:,3).';    
+     %d1 = X1(:,1) - X2(:,1).';
+     %d2 = X1(:,2) - X2(:,2).';
+     %d3 = X1(:,3) - X2(:,3).';    
      
      den = (X1(:,1) - X2(:,1).').^2 + (X1(:,2) - X2(:,2).').^2 + (X1(:,3) - X2(:,3).').^2;
+
+     %den = sum(X1.^2, 2) + sum(X2.^2, 2).' - 2*(X1*X2.');
+
+     %disp(norm(den - den_old, 'fro')/norm(den_old, 'fro'))
+     %assert(isequal(den, den_old))
+
+     %assert(isequal(den,den_new));
+     %assert(isequal(d1,d1_new));
+     %assert(isequal(d2,d2_new));
+     %assert(isequal(d3,d3_new));
 
      switch params.flag_pot
      case 'SL_L_3D'  
@@ -436,47 +448,55 @@ else
         a = params.a;
         wh = (1/(4*pi))*wh;
 
-        % old code
+        % old code 
         %{
         N1 = repmat(params.nor(:,1).',size(X1,1),1);
         N2 = repmat(params.nor(:,2).',size(X1,1),1);
         N3 = repmat(params.nor(:,3).',size(X1,1),1);
         NdotR = d1.*N1+d2.*N2+d3.*N3;
-        A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        A_old = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
         %}
 
         %theoretically we are saving on the cost of 4 dense matrices here
-        N1 = params.nor(:,1).';
-        N2 = params.nor(:,2).';
-        N3 = params.nor(:,3).';
-        A = a*(den==0) + (wh.*(d1.*N1 + d2.*N2 + d3.*N3).*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        N = params.nor';
+        NdotR = (X1(:,1) - X2(:,1).').*N(1,:) + (X1(:,2) - X2(:,2).').*N(2,:) + (X1(:,3) - X2(:,3).').*N(3,:);
+        A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+
+
+        %assert(isequaln(A_old, A))
 
      case 'dSL_LMOD_3D'
 
         lambda=params.lambda;
         a = params.a;
         wh = -(1/(4*pi))*wh;
+        
+        %old code
         %{
         N1 = repmat(params.nor(:,1),1,size(X2,1));
         N2 = repmat(params.nor(:,2),1,size(X2,1));
         N3 = repmat(params.nor(:,3),1,size(X2,1));
         NdotR = d1.*N1+d2.*N2+d3.*N3;    
             
-        A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        A_old = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
         %}
 
         %theoretically we are saving on the cost of 4 dense matrices here
-        N1 = params.nor(:,1);
-        N2 = params.nor(:,2);
-        N3 = params.nor(:,3);
-        A = a*(den==0) + (wh.*(d1.*N1 + d2.*N2 + d3.*N3).*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        N = params.nor;
+        NdotR = (X1(:,1) - X2(:,1).').*N(:, 1) + (X1(:,2) - X2(:,2).').*N(:, 2) + (X1(:,3) - X2(:,3).').*N(:, 3);
+        % Maybe try 
+        A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+
+        %assert(isequaln(A_old, A))
 
         case 'dDL_LMOD_3D'
         lambda=params.lambda;
         a=params.a;
         wh=-(1/(4*pi))*wh;
-        %{
+        
+        %old code
         %computes the dot products <r,n_source>,<r,n_target>
+        %{
         SourceN1 = repmat(params.nor(:,1).',size(X1,1),1);
         SourceN2 = repmat(params.nor(:,2).',size(X1,1),1);
         SourceN3 = repmat(params.nor(:,3).',size(X1,1),1);
@@ -497,21 +517,36 @@ else
         %}
 
         %trying for a memory efficient version
+        %{
         SourceN1 = params.nor(:,1).';
         SourceN2 = params.nor(:,2).';
         SourceN3 = params.nor(:,3).';
-
+        NdotRSource = (X1(:,1) - X2(:,1).').*SourceN1+(X1(:,2) - X2(:,2).').*SourceN2+(X1(:,3) - X2(:,3).').*SourceN3;
         TargN1 = params.targnor(:,1);
         TargN2 = params.targnor(:,2);
         TargN3 = params.targnor(:,3);
-
-        NdotRTargAndNdotRSource = (d1.*SourceN1+d2.*SourceN2+d3.*SourceN3).*(d1.*TargN1+d2.*TargN2+d3.*TargN3);
+        NdotRTarg = (X1(:,1) - X2(:,1).').*TargN1+(X1(:,2) - X2(:,2).').*TargN2+(X1(:,3) - X2(:,3).').*TargN3;
         dotnorm=TargN1.*SourceN1+TargN2.*SourceN2+SourceN3.*TargN3;
+        rbar=sqrt(den); %%%
+        expy=exp(-lambda*rbar);  %%%
+        A =(lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3);  %%%
+        B=(lambda./rbar + 1./rbar.^2);  %%%
+        delsquared=-1./rbar.^3.*NdotRTarg.*NdotRSource + 1./rbar.*dotnorm; %%%
+        A1 =(expy./rbar.^2).*(A.*NdotRTarg.*NdotRSource);
+        A2=expy.*B.*delsquared;
+        A = a*(den==0) + wh.*(A1 - A2) -(den==0);
+        %}
+
+        N = params.nor';
+        T = params.targnor;
+        NdotRTargAndNdotRSource = ((X1(:,1) - X2(:,1).').*N(1,:)+(X1(:,2) - X2(:,2).').*N(2,:)+(X1(:,3) - X2(:,3).').*N(3,:)).*((X1(:,1) - X2(:,1).').*T(:,1)+(X1(:,2) - X2(:,2).').*T(:,2)+(X1(:,3) - X2(:,3).').*T(:,3));
+        dotnorm=T(:,1).*N(1,:)+T(:,2).*N(2,:)+T(:,3).*N(3,:);
         rbar=sqrt(den); %%%
         expy=exp(-lambda*rbar);  %%%
         A = (expy./rbar.^2).*((lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3).*NdotRTargAndNdotRSource) - expy.*(lambda./rbar + 1./rbar.^2).*(-1./rbar.^3.*NdotRTargAndNdotRSource + 1./rbar.*dotnorm);
         A= a*(den==0) + wh.*(A) - (den==0);
-
+        
+        %assert(isequaln(A, A_old))
      case 'Distance'
         A = sqrt(den); 
      case 'zeros'

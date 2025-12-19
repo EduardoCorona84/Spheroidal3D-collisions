@@ -1,4 +1,4 @@
-n=6; % size of the lattice
+n=4; % size of the lattice
 meanRadius=1; % mean radius of each of the particles
 ep=.3; % distance where we consider collisions in the LCP
 p=8; % number of spherical harmonics
@@ -12,7 +12,7 @@ lcpWarmStart=0;
 lcpPLo=6;
 lcpTolLo=0.000001; % 1e-6
 % Time disc params
-Nt=5; % number of time-steps
+Nt=20; % number of time-steps
 dt=.1; %time discretization
 
 Test_ModLap_Mobility_Amphi(n,meanRadius,Cdst,p,ep,polydisperseRatio,lcpSlvr,lcpTol,lcpMaxIter,lcpWarmStart, lcpPLo, lcpTolLo,Nt,dt); % number of time-steps
