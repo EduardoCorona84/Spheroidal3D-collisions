@@ -206,6 +206,10 @@ else
         A = -6*(den==0)+1*(den==1);  
      % Single Layer Stokes 3D   
      case 'SL_Stk_3D' 
+        %need to think about a way to not explicity compute the d's
+    d1 = X1(:,1) - X2(:,1).';
+     d2 = X1(:,2) - X2(:,2).';
+     d3 = X1(:,3) - X2(:,3).';
      % Single layer Stokes 
      wh = (1/(8*pi*params.mu))*wh; 
      a = params.a; 
@@ -324,6 +328,11 @@ else
      
      A = A1+A2;      
      case 'TSL_Stk_3D'    
+
+     % create d matrices for now
+     d1 = X1(:,1) - X2(:,1).';
+     d2 = X1(:,2) - X2(:,2).';
+     d3 = X1(:,3) - X2(:,3).';
      % Traction Stokes 
      wh = (-3/(4*pi))*wh; 
      a = params.a; 
@@ -337,8 +346,7 @@ else
      N1 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,1);
      N2 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,2);
      N3 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,3);
-     NdotR = d1.*N1+d2.*N2+d3.*N3;    
-     
+     NdotR = (X1(:,1) - X2(:,1).').*N1+ (X1(:,2) - X2(:,2).').*N2+ (X1(:,3) - X2(:,3).').*N3;    
      % diagonal part 
      A1 = (CI==CJ).*(a*(den==0));
      
