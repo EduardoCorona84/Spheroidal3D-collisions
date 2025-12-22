@@ -34,7 +34,7 @@ end
 
 %old code
 % X grid
-%[Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+[Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
 
 %testing TODO
 
@@ -126,19 +126,18 @@ else
     den = d1.^2 + d2.^2 + d3.^2;
     %}
 
-     %testing TODO
-     %d1 = X1(:,1) - X2(:,1).';
-     %d2 = X1(:,2) - X2(:,2).';
-     %d3 = X1(:,3) - X2(:,3).';    
+    %{
+    d1_new = X1(:,1) - X2(:,1).';
+    d2_new = X1(:,2) - X2(:,2).';
+    d3_new = X1(:,3) - X2(:,3).';
+    %}
+
      
      den = (X1(:,1) - X2(:,1).').^2 + (X1(:,2) - X2(:,2).').^2 + (X1(:,3) - X2(:,3).').^2;
 
-     %den = sum(X1.^2, 2) + sum(X2.^2, 2).' - 2*(X1*X2.');
+     %%assert(isequal(den, den_old))
 
-     %disp(norm(den - den_old, 'fro')/norm(den_old, 'fro'))
-     %assert(isequal(den, den_old))
-
-     %assert(isequal(den,den_new));
+     %assert(isequaln(den,den_new));
      %assert(isequal(d1,d1_new));
      %assert(isequal(d2,d2_new));
      %assert(isequal(d3,d3_new));
@@ -206,8 +205,8 @@ else
         A = -6*(den==0)+1*(den==1);  
      % Single Layer Stokes 3D   
      case 'SL_Stk_3D' 
-        %need to think about a way to not explicity compute the d's
-    d1 = X1(:,1) - X2(:,1).';
+    %need to think about a way to not explicity compute the d's
+     d1 = X1(:,1) - X2(:,1).';
      d2 = X1(:,2) - X2(:,2).';
      d3 = X1(:,3) - X2(:,3).';
      % Single layer Stokes 
@@ -513,15 +512,15 @@ else
         TargN2 = repmat(params.targnor(:,2),1,size(X2,1));
         TargN3 = repmat(params.targnor(:,3),1,size(X2,1));
         NdotRTarg = d1.*TargN1+d2.*TargN2+d3.*TargN3;  
-        dotnorm=TargN1.*SourceN1+TargN2.*SourceN2+SourceN3.*TargN3;
+        dotnorm_old=TargN1.*SourceN1+TargN2.*SourceN2+SourceN3.*TargN3;
         rbar=sqrt(den); %%%
         expy=exp(-lambda*rbar);  %%%
-        A=(lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3);  %%%
+        A_old=(lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3);  %%%
         B=(lambda./rbar + 1./rbar.^2);  %%%
-        delsquared=-1./rbar.^3.*NdotRTarg.*NdotRSource + 1./rbar.*dotnorm; %%%
-        A1 =(expy./rbar.^2).*(A.*NdotRTarg.*NdotRSource);
+        delsquared=-1./rbar.^3.*NdotRTarg.*NdotRSource + 1./rbar.*dotnorm_old; %%%
+        A1 =(expy./rbar.^2).*(A_old.*NdotRTarg.*NdotRSource);
         A2=expy.*B.*delsquared;
-        A= a*(den==0) + wh.*(A1 - A2) -(den==0);
+        A_old= a*(den==0) + wh.*(A1 - A2) -(den==0);
         %}
 
         %trying for a memory efficient version
@@ -545,16 +544,27 @@ else
         A = a*(den==0) + wh.*(A1 - A2) -(den==0);
         %}
 
+        %old new code
+        
         N = params.nor';
         T = params.targnor;
         NdotRTargAndNdotRSource = ((X1(:,1) - X2(:,1).').*N(1,:)+(X1(:,2) - X2(:,2).').*N(2,:)+(X1(:,3) - X2(:,3).').*N(3,:)).*((X1(:,1) - X2(:,1).').*T(:,1)+(X1(:,2) - X2(:,2).').*T(:,2)+(X1(:,3) - X2(:,3).').*T(:,3));
         dotnorm=T(:,1).*N(1,:)+T(:,2).*N(2,:)+T(:,3).*N(3,:);
         rbar=sqrt(den); %%%
         expy=exp(-lambda*rbar);  %%%
+        %}
+        %{
         A = (expy./rbar.^2).*((lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3).*NdotRTargAndNdotRSource) - expy.*(lambda./rbar + 1./rbar.^2).*(-1./rbar.^3.*NdotRTargAndNdotRSource + 1./rbar.*dotnorm);
         A= a*(den==0) + wh.*(A) - (den==0);
+        %}
+        A=(lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3);  %%%
+        B=(lambda./rbar + 1./rbar.^2);  %%%
+        delsquared=-1./rbar.^3.*NdotRTargAndNdotRSource + 1./rbar.*dotnorm; %%%
+        A1 =(expy./rbar.^2).*(A.*NdotRTargAndNdotRSource);
+        A2=expy.*B.*delsquared;
+        A= a*(den==0) + wh.*(A1 - A2) -(den==0);
         
-        %assert(isequaln(A, A_old))
+        %%assert(isequaln(A, A_old))
      case 'Distance'
         A = sqrt(den); 
      case 'zeros'
