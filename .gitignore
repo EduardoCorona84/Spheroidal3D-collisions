@@ -5,6 +5,7 @@
 *.png
 *.pdf
 *.fig
+*.bin
 data/*
 Janus_3D_code/LCPsolvers/data/*
 docs/*

@@ -151,7 +151,7 @@ if( iprec ==  0), nqtri = 3; end;
 if( iprec >=  1), nqtri = 6; end;
 
 
-mex_id_ = 'h3dtriadirect(i int[x], i dcomplex[x], i int[x], i double[], i double[xx], i double[xx], i int[x], i dcomplex[], i int[x], i dcomplex[], i double[xx], i int[x], io dcomplex[], i int[x], io dcomplex[], i int[x], i double[], i int[x], io dcomplex[], i int[x], io dcomplex[])';
+mex_id_ = 'h3dtriadirect(c i int[x], c i dcomplex[x], c i int[x], c i double[], c i double[xx], c i double[xx], c i int[x], c i dcomplex[], c i int[x], c i dcomplex[], c i double[xx], c i int[x], c io dcomplex[], c i int[x], c io dcomplex[], c i int[x], c i double[], c i int[x], c io dcomplex[], c i int[x], c io dcomplex[])';
 [pot, fld, pottarg, fldtarg] = fmm3d_r2012a(mex_id_, nqtri, zk, nsource, triaflat, trianorm, source, ifcharge, charge, ifdipole, dipstr, dipvec, ifpot, pot, iffld, fld, ntarget, target, ifpottarg, pottarg, iffldtarg, fldtarg, 1, 1, 1, 3, nsource, 3, nsource, 1, 1, 3, nsource, 1, 1, 1, 1, 1);
 
 

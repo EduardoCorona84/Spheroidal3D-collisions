@@ -5,7 +5,7 @@ MW=mwrap
 MEX_FC=gfortran
 MEX_CC=g++
 # Set compile flags
-FFLAGS=-g -O3 --openmp -fPIC -fallow-argument-mismatch
+FFLAGS=-g -O3 --openmp -fPIC -fallow-argument-mismatch -std=legacy
 CFLAGS= -fPIC -O3 -march=native -funroll-loops -std=gnu17
 # Idk if this is necessary
 TESTC99COMPLEX=test_c99_complex

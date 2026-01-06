@@ -86,7 +86,7 @@ lused=0;
 
 ier = 0;
 
-mex_id_ = 'd3tstrcr(io int[x], i double[], i int[x], io int[x], io int[x], io int[], io int[], io int[x], io double[], io double[], i double[], i int[x], io int[], io double[], i int[x], io int[x])';
+mex_id_ = 'd3tstrcr(c io int[x], c i double[], c i int[x], c io int[x], c io int[x], c io int[], c io int[], c io int[x], c io double[], c io double[], c i double[], c i int[x], c io int[], c io double[], c i int[x], c io int[x])';
 [ier, nbox, nboxes, isource, laddr, nlev, center, size, itarget, w, lused] = fmm3d_r2012a(mex_id_, ier, source, nsource, nbox, nboxes, isource, laddr, nlev, center, size, target, ntarget, itarget, w, lw, lused, 1, 1, 1, 1, 1, 1, 1, 1);
 
 if( ier > 0 ) 

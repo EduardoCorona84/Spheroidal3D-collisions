@@ -32,9 +32,12 @@ end
 %display('size of weight is:');
 %display(size(wh));
 
-
-% X grid
+%old code
+%{
+%X grid
 [Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+%}
+
 
 if params.dim == 1
    den = abs(X_g1 - Y_g1); 
@@ -42,7 +45,7 @@ if params.dim == 1
        case 'SL_L_2D'
           wh = (1/2/pi)*wh; 
           A = (den==0) + 0.5*wh.*log((den + (den==0))); 
-  
+   
    end
 
 % 2D (plane or curves on plane)
@@ -109,15 +112,24 @@ elseif params.dim == 2
     end
  % 3D (surfaces and volume)   
 else
-     % Y grid 
-     [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
-     % Z grid
-     [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
+
+    %old code
     
-     % den = ||X-Y||^2
-     d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
-     den = d1.^2 + d2.^2 + d3.^2;
-     
+    % Y grid 
+    %{
+    [Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+    [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
+    % Z grid
+    [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
+    
+    % den = ||X-Y||^2
+    d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+    den = d1.^2 + d2.^2 + d3.^2;
+    %}
+
+
+     den = (X1(:,1) - X2(:,1).').^2 + (X1(:,2) - X2(:,2).').^2 + (X1(:,3) - X2(:,3).').^2;
+
      switch params.flag_pot
      case 'SL_L_3D'  
         % Determine functions b(x) and c(y) 
@@ -168,9 +180,9 @@ else
         A2=expy.*B.*delsquared;
         A= a*(den==0) + wh.*(A1 - A2) -(den==0);
     case 'SL_H_3D'
-        % Determine functions b(x) and c(y)
-        [b,c] = LOCAL_get_bc({X_g1,X_g2,X_g3},{Y_g1,Y_g2,Y_g3},params,4); 
-        
+            % Determine functions b(x) and c(y)
+            [b,c] = LOCAL_get_bc({X_g1,X_g2,X_g3},{Y_g1,Y_g2,Y_g3},params,4); 
+            
         % Single layer 3D Helmholtz   
         kh = params.kh; 
         C = exp(1i*kh);
@@ -181,6 +193,10 @@ else
         A = -6*(den==0)+1*(den==1);  
      % Single Layer Stokes 3D   
      case 'SL_Stk_3D' 
+    %need to think about a way to not explicity compute the d's
+     d1 = X1(:,1) - X2(:,1).';
+     d2 = X1(:,2) - X2(:,2).';
+     d3 = X1(:,3) - X2(:,3).';
      % Single layer Stokes 
      wh = (1/(8*pi*params.mu))*wh; 
      a = params.a; 
@@ -299,6 +315,11 @@ else
      
      A = A1+A2;      
      case 'TSL_Stk_3D'    
+
+     % create d matrices for now
+     d1 = X1(:,1) - X2(:,1).';
+     d2 = X1(:,2) - X2(:,2).';
+     d3 = X1(:,3) - X2(:,3).';
      % Traction Stokes 
      wh = (-3/(4*pi))*wh; 
      a = params.a; 
@@ -312,8 +333,7 @@ else
      N1 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,1);
      N2 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,2);
      N3 = (wh./(sqrt(den+(den==0)).^3)).*params.nor(:,3);
-     NdotR = d1.*N1+d2.*N2+d3.*N3;    
-     
+     NdotR = (X1(:,1) - X2(:,1).').*N1+ (X1(:,2) - X2(:,2).').*N2+ (X1(:,3) - X2(:,3).').*N3;    
      % diagonal part 
      A1 = (CI==CJ).*(a*(den==0));
      
@@ -413,43 +433,141 @@ else
      A = A1+A2; 
      %Single Layer Modified Laplace 
      case 'SL_LMOD_3D'
+        % old code TESTING
+        %{
+        [Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+        [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
+        % Z grid
+        [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
+        
+
+        % den = ||X-Y||^2
+        d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+        den_old = d1.^2 + d2.^2 + d3.^2;
+        assert(isequaln(den, den_old))
+        %}
         lambda=params.lambda;  
         a=params.a;
         wh = (1/4/pi)*wh;
         A = a*(den==0)+wh.*(exp(-lambda*sqrt(den))./sqrt(den + (den==0)) - (den==0));
+        
      case 'DL_LMOD_3D'
-         lambda=params.lambda;
-         a = params.a;
+
+        % old code TESTING
+        %{
+        [Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+        [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
+        % Z grid
+        [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
+        
+
+        % den = ||X-Y||^2
+        d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+        den_old = d1.^2 + d2.^2 + d3.^2;
+        assert(isequaln(den, den_old))
+        %}
+        lambda=params.lambda;
+        a = params.a;
         wh = (1/(4*pi))*wh;
+
+        % old code 
+        %{
         N1 = repmat(params.nor(:,1).',size(X1,1),1);
         N2 = repmat(params.nor(:,2).',size(X1,1),1);
         N3 = repmat(params.nor(:,3).',size(X1,1),1);
         NdotR = d1.*N1+d2.*N2+d3.*N3;
+        A_old = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        %}
+        
+
+        % new code
+        N = params.nor';
+        NdotR = (X1(:,1) - X2(:,1).').*N(1,:) + (X1(:,2) - X2(:,2).').*N(2,:) + (X1(:,3) - X2(:,3).').*N(3,:);
         A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+
+
+        %assert(isequaln(A_old, A))
+
      case 'dSL_LMOD_3D'
-         lambda=params.lambda;
+
+        % old code TESTING% old code TESTING
+        %{
+        [Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+        [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
+        % Z grid
+        [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
+        
+
+        % den = ||X-Y||^2
+        d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+        den_old = d1.^2 + d2.^2 + d3.^2;
+        assert(isequaln(den, den_old))
+        %}
+        lambda=params.lambda;
         a = params.a;
         wh = -(1/(4*pi))*wh;
+        
+        %old code
+        %{
         N1 = repmat(params.nor(:,1),1,size(X2,1));
         N2 = repmat(params.nor(:,2),1,size(X2,1));
         N3 = repmat(params.nor(:,3),1,size(X2,1));
         NdotR = d1.*N1+d2.*N2+d3.*N3;    
             
+        A_old = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        %}
+
+        N = params.nor;
+        NdotR = (X1(:,1) - X2(:,1).').*N(:, 1) + (X1(:,2) - X2(:,2).').*N(:, 2) + (X1(:,3) - X2(:,3).').*N(:, 3);
         A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
-         case 'dDL_LMOD_3D'
-          lambda=params.lambda;
-          a=params.a;
-          wh=-(1/(4*pi))*wh;
-          %computes the dot products <r,n_source>,<r,n_target>
+
+        %assert(isequaln(A_old, A))
+
+        case 'dDL_LMOD_3D'
+        lambda=params.lambda;
+        a=params.a;
+        wh=-(1/(4*pi))*wh;
+
+        % old code TESTING
+        %{
+        [Y_g1,  X_g1  ] = meshgrid(X2(:,1), X1(:,1));
+        [Y_g2,  X_g2  ] = meshgrid(X2(:,2), X1(:,2)); 
+        % Z grid
+        [Y_g3,X_g3] = meshgrid(X2(:,3),X1(:,3));
+        
+
+        % den = ||X-Y||^2
+        d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
+        den_old = d1.^2 + d2.^2 + d3.^2;
+        assert(isequaln(den, den_old))
+        
+        %old code
+        %computes the dot products <r,n_source>,<r,n_target>
+        
         SourceN1 = repmat(params.nor(:,1).',size(X1,1),1);
         SourceN2 = repmat(params.nor(:,2).',size(X1,1),1);
         SourceN3 = repmat(params.nor(:,3).',size(X1,1),1);
-        NdotRSource = d1.*SourceN1+d2.*SourceN2+d3.*SourceN3;
+        NdotRSource_old = d1.*SourceN1+d2.*SourceN2+d3.*SourceN3;
         TargN1 = repmat(params.targnor(:,1),1,size(X2,1));
         TargN2 = repmat(params.targnor(:,2),1,size(X2,1));
         TargN3 = repmat(params.targnor(:,3),1,size(X2,1));
-        NdotRTarg = d1.*TargN1+d2.*TargN2+d3.*TargN3;  
-        dotnorm=TargN1.*SourceN1+TargN2.*SourceN2+SourceN3.*TargN3;
+        NdotRTarg_old = d1.*TargN1+d2.*TargN2+d3.*TargN3;  
+        dotnorm_old=TargN1.*SourceN1+TargN2.*SourceN2+SourceN3.*TargN3;
+        rbar_old=sqrt(den); %%%
+        expy_old=exp(-lambda*rbar_old);  %%%
+        A_old=(lambda^2./rbar_old + 2*lambda./rbar_old.^2 + 2./rbar_old.^3);  %%%
+        B_old=(lambda./rbar_old + 1./rbar_old.^2);  %%%
+        delsquared_old=-1./rbar_old.^3.*NdotRTarg_old.*NdotRSource_old + 1./rbar_old.*dotnorm_old; %%%
+        A1_old =(expy_old./rbar_old.^2).*(A_old.*NdotRTarg_old.*NdotRSource_old);
+        A2_old=expy_old.*B_old.*delsquared_old;
+        A_old= a*(den==0) + wh.*(A1_old - A2_old) -(den==0);
+        %}
+        
+        N = params.nor';
+        T = params.targnor;
+        NdotRSource = (X1(:,1) - X2(:,1).').*N(1,:)+(X1(:,2) - X2(:,2).').*N(2,:)+(X1(:,3) - X2(:,3).').*N(3,:);
+        NdotRTarg = ((X1(:,1) - X2(:,1).').*T(:,1)+(X1(:,2) - X2(:,2).').*T(:,2)+(X1(:,3) - X2(:,3).').*T(:,3));
+        dotnorm=T(:,1).*N(1,:)+T(:,2).*N(2,:)+T(:,3).*N(3,:);
         rbar=sqrt(den); %%%
         expy=exp(-lambda*rbar);  %%%
         A=(lambda^2./rbar + 2*lambda./rbar.^2 + 2./rbar.^3);  %%%
@@ -458,6 +576,17 @@ else
         A1 =(expy./rbar.^2).*(A.*NdotRTarg.*NdotRSource);
         A2=expy.*B.*delsquared;
         A= a*(den==0) + wh.*(A1 - A2) -(den==0);
+        
+        %{
+        assert(isequaln(rbar, rbar_old));
+        assert(isequaln(expy, expy_old));
+        assert(isequaln(delsquared, delsquared_old));
+        assert(isequaln(B, B_old));
+        assert(isequaln(A1, A1_old));
+        assert(isequaln(A2, A2_old));
+        assert(isequaln(A, A_old))
+        %}
+
      case 'Distance'
         A = sqrt(den); 
      case 'zeros'

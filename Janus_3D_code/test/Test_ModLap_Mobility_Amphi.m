@@ -116,13 +116,13 @@ if ~exist('gmresTol','var') || isempty(gmresTol)
 end
 %% Nuisance default params
 if ~exist('saveLCPs','var') || isempty(saveLCPs)
-    saveLCPs=true; 
+    saveLCPs=false; 
 end
 if ~exist('initMode','var') || isempty(initMode)
     initMode='lattice'; 
 end
 if ~exist('loadIntermediate','var') || isempty(loadIntermediate)
-    loadIntermediate=true; 
+    loadIntermediate=false; 
 end
 if ~exist('plotFlag','var') || isempty(plotFlag)
     plotFlag=false; 
@@ -143,7 +143,7 @@ resDir = fullfile(basedir, 'resultsForRecord');
 postFix = ['.' initMode '.n_' num2str(n) '.p_' num2str(p) ...
     '.cDist_' num2str(Cdst) '.lcpSlvr_' lcpSlvr ...
     '.polyDisperseRatio_' num2str(polydisperseRatio)];
-fname = fullfile(resDir, ['amphi' postFix]); % Name of file for regular results file
+fname = fullfile(resDir, ['amphi' postFix 'verification.new']); % Name of file for regular results file
 LCP_file_path = fullfile(resDir, ['amphi.lcp' postFix]); % Name of the LCP results file
 % Make directories if they do not exist 
 mkdir(resDir)

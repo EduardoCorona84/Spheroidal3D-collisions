@@ -129,10 +129,10 @@ if( iffldtarg == 1 ), fldtarg=zeros(3,ntarget)+1i*zeros(3,ntarget); end;
 ier=0;
 
 if( ntarget == 0 ) 
-mex_id_ = 'hfmm3dtriaself(io int[x], i int[x], i dcomplex[x], i int[x], i double[], i double[xx], i double[xx], i int[x], i dcomplex[], i int[x], i dcomplex[], i double[xx], i int[x], io dcomplex[], i int[x], io dcomplex[])';
+mex_id_ = 'hfmm3dtriaself(c io int[x], c i int[x], c i dcomplex[x], c i int[x], c i double[], c i double[xx], c i double[xx], c i int[x], c i dcomplex[], c i int[x], c i dcomplex[], c i double[xx], c i int[x], c io dcomplex[], c i int[x], c io dcomplex[])';
 [ier, pot, fld] = fmm3d_r2012a(mex_id_, ier, iprec, zk, nsource, triaflat, trianorm, source, ifcharge, charge, ifdipole, dipstr, dipvec, ifpot, pot, iffld, fld, 1, 1, 1, 1, 3, nsource, 3, nsource, 1, 1, 3, nsource, 1, 1);
 else
-mex_id_ = 'hfmm3dtriatarg(io int[x], i int[x], i dcomplex[x], i int[x], i double[], i double[xx], i double[xx], i int[x], i dcomplex[], i int[x], i dcomplex[], i double[xx], i int[x], io dcomplex[], i int[x], io dcomplex[], i int[x], i double[], i int[x], io dcomplex[], i int[x], io dcomplex[])';
+mex_id_ = 'hfmm3dtriatarg(c io int[x], c i int[x], c i dcomplex[x], c i int[x], c i double[], c i double[xx], c i double[xx], c i int[x], c i dcomplex[], c i int[x], c i dcomplex[], c i double[xx], c i int[x], c io dcomplex[], c i int[x], c io dcomplex[], c i int[x], c i double[], c i int[x], c io dcomplex[], c i int[x], c io dcomplex[])';
 [ier, pot, fld, pottarg, fldtarg] = fmm3d_r2012a(mex_id_, ier, iprec, zk, nsource, triaflat, trianorm, source, ifcharge, charge, ifdipole, dipstr, dipvec, ifpot, pot, iffld, fld, ntarget, target, ifpottarg, pottarg, iffldtarg, fldtarg, 1, 1, 1, 1, 3, nsource, 3, nsource, 1, 1, 3, nsource, 1, 1, 1, 1, 1);
 end
 

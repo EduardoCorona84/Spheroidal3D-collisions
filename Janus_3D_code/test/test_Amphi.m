@@ -1,6 +1,6 @@
 clear;clc;
 %% Hyperparameters that will change depending on the simulation
-p=8; 
+p=10; 
 lambda=0.1;
 rd=1;
 n=4;
