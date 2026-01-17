@@ -1,5 +1,8 @@
 %{
 Test of spheroids in free Stokes flow subjected to gravity.
+
+One spheroid should not induce any rotation, but multiple spheroids might
+(even if they don't collide) due to pressure disturbances.
 %}
 
 %% SETUP

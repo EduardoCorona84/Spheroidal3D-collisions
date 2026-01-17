@@ -22,8 +22,8 @@ function spheroidal_mobility(fname,Fparams,init)
         equ_radii   - (double) n_b x 1 array of equatorial radii for spheres/spheroids; advised to be set to 1 for efficiency purposes.
         polar_radii - (double) n_b x 1 array of polar radii for spheres/spheroids; obviously, this should be less than major_radii
             If one truly wants the u0/a values for the spheroids instead, see the utility functions -Brian.
-            The convention for the codebase is that if equi_radius > polar_radius, it is a oblate. Otherwise,
-            it's an prolate.
+            The convention for the codebase is that if equi_radius > polar_radius, it is an oblate. Otherwise,
+            it's a prolate.
         shape_type  - (string) n_b x 1 array of strings: should be 'prolate', 'oblate', or 'sphere'.
             Spheres are not implemented for the time being.
         p           - (int) spheroidal harmonic order (bodies) 
@@ -536,8 +536,7 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
     parslv = Fparams.parslv; 
     lprec=[]; 
     acc = parslv.tol; rst = parslv.rst; maxit = parslv.maxit;
-    
-    %W = Fparams.parbd.W; 
+
     n3=Fparams.parbd.n3; p = Fparams.parbd.p; np = Fparams.parbd.np; 
     VW=[]; C = Fparams.parbd.C; 
     Bk = Nullsp.B; Ck = Nullsp.C; Lk = Nullsp.L; 
@@ -552,6 +551,69 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         Torque = Tfun(t,Ct);
         FT = [Force;Torque]; FT = FT(:); 
         fM = Bk'*FT;
+    case 'MHD'
+        error('MHD not finished.');
+        KLD = Kernels.KLD; 
+        SLD = Kernels.SLD; 
+        fprintf('\n Magnetic potential Solve at time %.2f \n',t)
+
+        %% Magnetic solve for potential \phi.
+        % Build RHS (i.e. \eta H_0 \cdot n)
+        rhs = zeros(np*n3,1);
+
+        % TODO: add functionality to get normal vectors, and replaced the
+        % Sc code below.
+        for j=1:n3
+            
+        end
+
+        if size(Sc,2)>1
+            for j=1:n3
+                Nr = reshape(Sc{p,j}.geoProp.nor.to_array,[],3);
+                indx=(1:np)+np*(j-1); 
+                rhs(indx) = Fparams.eta*Nr*Fparams.H0; 
+            end
+        else
+            Nr = reshape(Sc{p}.geoProp.nor.to_array,[],3); 
+            rhs = Fparams.eta*repmat(Nr,n3,1)*Fparams.H0; 
+        end
+        
+        % Solve
+        q_density = Lslv(KLD,rhs,parslv); 
+
+        fprintf('\n Magnetic potential solve res = %1.4g \n',norm(Lapp(KLD,q_density)-rhs)); 
+
+        % Compute Maxwell stress, forces and torques
+        % dphi/dn at Gamma
+        phi_n_e = Fparams.mur/(1-Fparams.mur)*q_density; 
+        phi_n_i = 1/(1-Fparams.mur)*q_density; 
+        % phi at Gamma (Continuous)
+        phi = -Xt*Fparams.H0 + Lapp(SLD,q_density); 
+
+        % Formulas 
+        Pot2Field = @(phi, phi_n,S) -1*S.geoProp.Grad(phi) -1*vec3d([phi_n; phi_n; phi_n]).*S.geoProp.nor;  %  -Grad phi - phi_n n
+        maxwellSnor = @(E,S) times(dot(E, S.geoProp.nor), E) - times(dot(E,E), S.geoProp.nor)/2; % n \cdot (E \oprod E - 1/2 |E|^2 I)
+
+        % Magnetic Field (exterior and interior)
+        fM = zeros(3*np*n3,1); 
+        H_i = cell(n3,1); H_e=H_i; 
+        for j=1:n3
+            indx=(1:np)+np*(j-1); 
+            indv=(1:3*np)+3*np*(j-1); 
+            sj = min(j,size(Sc,2));   
+            H_i{j} = Pot2Field(phi(indx), phi_n_i(indx),Sc{p,sj});
+            H_e{j} = Pot2Field(phi(indx), phi_n_e(indx),Sc{p,sj});
+            %Maxwell stress . normal (traction)
+            ftmp = maxwellSnor(H_e{j},Sc{p,sj}) - maxwellSnor(H_i{j},Sc{p,sj}); 
+            ftmp = real(reshape(ftmp.to_array,[],3))'; 
+            fM(indv) = ftmp(:); 
+        end
+
+        fprintf('\n Magnetic forces and torques \n'); 
+        FT = real(Ck*fM); 
+        display(reshape(FT,6,n3))
+    otherwise
+        error('Type of problem passed in is not implemented.');
     end
 end
     
