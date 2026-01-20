@@ -778,7 +778,7 @@ function [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, 
         xind = (1:np)+np*(k-1); 
         normW(k) = norm(VW(4:6,k));
 
-        if normW(k) > ROTATIONAL_VELOCITY_TOL % Checks if significant enough to update.
+        if normW(k) > 1e-14 % Checks if significant enough to update.
             Mtp{k} = MRot(VW(4:6,k),dt)*Mt{k};          
             Xtp(xind,:) = X0(xind,:)*Mtp{k}';
         else   
@@ -1064,7 +1064,7 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
 
     %}
     n3 = Fparams.parbd.n3; 
-    np2 = Fparams.parbd.np2; 
+    np2 = 2*(2*Fparams.parbd.p)*(2*Fparams.parbd.p+1); % Discretization order of target body
     eps = Fparams.parbd.eps;  
     
     % Check for collision at the next time step 

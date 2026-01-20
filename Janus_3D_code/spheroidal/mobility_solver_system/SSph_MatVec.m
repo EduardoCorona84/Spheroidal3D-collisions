@@ -97,11 +97,16 @@ Xv = params.X;
 
 %% ACTUAL MATVEC
 if strcmp(V, 'Mat')
-    error('Dense matrix requested; this is not implemented yet.');
-
     % Start with Kernel Eval (correct for far-interactions)
     % Then, replace self-to-self and self-to-near appropriately.
-    Y = Kernel_Eval(Xv,Xv,params); 
+    Y = Kernel_Eval(Xv,Xv,params);
+
+    prm = zeros(1, Nb);
+    prm(1:np) = 1:3:Nb;
+    prm(np+1:2*np) = 2:3:Nb;
+    prm(2*np+1:3*np) = 3:3:Nb;
+    iprm = zeros(1, Nb);
+    iprm(prm) = 1:Nb;
 
     for body_ind=1:n3
         % Indices for source particle
@@ -111,7 +116,7 @@ if strcmp(V, 'Mat')
         % that are needed for near-evaluation).
         num_ngh = length(neigh{body_ind});
 
-        % Build neighbor sphere index
+        % Build neighbor indices
         neigh{body_ind} = reshape(neigh{body_ind},1,[]);         
         I_nghv = repmat((1:Nb)',1,num_ngh)+Nb*(repmat(neigh{body_ind},Nb,1)-1);  
         I_nghv = I_nghv(:);
@@ -119,10 +124,129 @@ if strcmp(V, 'Mat')
         equ_radius = equ_radii(body_ind);
         polar_radius = polar_radii(body_ind);
         body_shape_type = params.shape_type(body_ind);
+
+        target_pts = params.X(I_nghv(1:kerd:end),:);
+        target_normals = params.nor(I_nghv(1:kerd:end),:);
+
+        % Near-interaction
+        if rot
+            target_pts = (target_pts - C(body_ind, :)) * MRot{body_ind};
+            target_normals = target_normals * MRot{body_ind};
+        else
+            target_pts = (target_pts - repmat(C(body_ind,:), size(target_pts,1), 1));
+        end
+
+        if strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate')
+            if kerd==1
+                error('not implemented.');
+            else
+                [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
+                if num_ngh > 1
+                    slf = find(neigh{body_ind}==body_ind); 
+                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+                    Ynear = zeros(Nb*num_ngh, Nb);
+
+                    if ~isempty(ind_off)
+                        target_pts_off = target_pts(ind_off,:);
+                        target_normals_off = target_normals(ind_off,:);
+                        Ynear(indv_off,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts_off, target_normals_off, np, iprm);
+                    end
+                    Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm);
+                else
+                    Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm);
+                end
+            end
+        elseif strcmp(body_shape_type, 'sphere')
+            if kerd==1
+                error('Scalar kernels on spheres not implemented here.');
+            end
+
+            % Map pot to kernel type (as in VSh_MatVec_RB2)
+            switch pot(1:3)
+                case 'SL_'
+                    pMat = 'SMat';
+                case 'SDL'
+                    pMat = 'SDMat';
+                case 'dSL'
+                    pMat = 'SpMat';
+                case 'TSL'
+                    pMat = 'TSMat';
+                case 'DL_'
+                    pMat = 'DMat';
+                case 'dDL'
+                    pMat = 'DpMat';
+                case 'TDL'
+                    pMat = 'TDMat';
+                otherwise
+                    error('Unsupported pot for spherical near-eval.');
+            end
+
+            % Rescale geometry to unit sphere for spectral near-eval
+            Xtrg = (1/equ_radius) * target_pts;
+            Nrtrg = params.nor(I_nghv,:);
+            if rot
+                Nrtrg = Nrtrg * MRot{body_ind};
+            end
+
+            [th, phi, rho] = cart2sph(Xtrg(:,1), Xtrg(:,2), Xtrg(:,3));
+            th(th<0) = th(th<0) + 2*pi;
+            phi = pi/2 - phi;
+
+            Ynear = Vsh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
+
+            if rot && kerd==3
+                Ynear = permute(reshape(Ynear,[3 np*num_ngh Nb]),[2 3 1]); 
+                Ynear = reshape(Ynear,[],3)*MRot{body_ind};   
+                Ynear = permute(reshape(Ynear,[np*num_ngh Nb 3]),[3 1 2]); 
+                Ynear = reshape(Ynear,[],Nb); 
+            end
+
+            if strncmp(pot,'SL_',3)
+                rda = equ_radius; % SLP scales like r
+            elseif strncmp(pot,'dDL',3)
+                rda = 1/equ_radius; % dDL scales like 1/r
+            else
+                rda = 1;
+            end
+            Ynear = rda * Ynear;
+        else
+            error('Invalid body shape type; should be "sphere" or "prolate" or "oblate".');
+        end
+
+        if rot && kerd==3 && (strcmp(body_shape_type,'prolate') || strcmp(body_shape_type,'oblate'))
+            Ynear = reshape(Ynear, [], 3) * MRot{body_ind}; % Reformat vector into matrix and rotate back
+            Ynear = reshape(Ynear, 3*size(target_pts,1), Nb); % Place back into a vector
+        end
+
+        Y(I_nghv, I_box) = Ynear;
     end
 
-    if ismember(params.shape_type, 'sphere')
-        error('Dense matrix is not implemented for spheres and spheroids.');
+    if out
+        ct = 0.5;
+    else
+        ct = -0.5;
+    end
+
+    % Add jump relation on the diagonal
+    if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
+        if isfield(params,'a')
+            if strcmp(pot(2:3),'SL') 
+                if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
+                    Y = params.eta*Y + (params.a+ct)*eye(N); 
+                else
+                    Y = Y + (params.a+ct)*eye(N); 
+                end
+            else
+                Y = Y + (params.a-ct)*eye(N); 
+            end
+        end
+    end
+
+    % Add nullspace term
+    if ~isempty(L)
+        Y = Y + L;
     end
 elseif ~isempty(V) && isnumeric(V)
     % Actually do the matvec given a numeric input
@@ -492,6 +616,49 @@ function Y = LOCAL_FMM_Eval(Q, W, kerd, pot, Xtrg, Xsrc, Nr)
         otherwise
             Y = zeros(ntarget,size(Q,2)); 
     end
+end
+
+function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, target_normals, np, iprm)
+    %{
+    Builds the dense block for near-field interaction from one source spheroid by applying
+    the near matvec to unit-basis densities.
+
+    Inputs
+    pot - (string) Stokes potential
+    u0 - (double)
+    a - (double)
+    oblate - (bool)
+    target_pts - (double ntrg x 3) target points in the local frame
+        if empty, implies self-evaluation on the source surface
+    target_normals - (double ntrg x 3) target normals in the local frame
+        required for the TSL
+    np - (int) number of discretization points
+    iprm - (int 1 x 3*np) permutation from blocked to interleaved
+
+    Output
+    Ynear - (double 3*ntrg x 3*np) dense near-interaction block in interleaved format
+    %}
+
+    I = eye(np);
+    Z = zeros(np);
+
+    Yx = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, I, Z, Z, target_pts, target_normals);
+    Yy = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, Z, I, Z, target_pts, target_normals);
+    Yz = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, Z, Z, I, target_pts, target_normals);
+
+    if isempty(target_pts)
+        ntrg = np;
+    else
+        ntrg = size(target_pts,1);
+    end
+
+    Yx = reshape(Yx, 3*ntrg, np);
+    Yy = reshape(Yy, 3*ntrg, np);
+    Yz = reshape(Yz, 3*ntrg, np);
+    Ynear = [Yx, Yy, Yz];
+
+    % Go from block format to interleaved format.
+    Ynear = Ynear(:, iprm);
 end
 
 function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_type)

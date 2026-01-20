@@ -15,7 +15,7 @@ dense = true; % Dense vs FMM off diagonal
 out = true; % outside vs inside sphere
 Nt = 100;
 dt = 0.1;
-denseMV = false;
+denseMV = true;
 tdisc = 'euler';
 
 % Spheroid parameters
