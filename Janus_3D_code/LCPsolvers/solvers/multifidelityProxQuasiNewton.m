@@ -1,37 +1,37 @@
 function [x, info, opts] = multifidelityProxQuasiNewton(fg, x0, opts)
-    %I think I want to remove this whole thing
-    %{
-    fgMid =  @(x, Ax) quadraticLoss(x, opts.low.A, opts.low.b, Ax);
-    opts.low.b = opts.low.b;
-    opts.low.A = opts.low.A;
-    opts.low = defaultLCPOpts(opts.low, x0);
-    if opts.low.initWithLofi
-        [x0, ~, opts.low] = proxQuasiNewton(fgMid, x0, opts.low);
-        Ahatx_k = opts.low.Ax_k;
-    else
-        Ahatx_k = opts.low.A(x0);
-        opts.low.Ax_k = Ahatx_k;
-    end
-    %}
-    % For the outer part of the struct, we will use default opts
-    % The memory will be the same size as max_iter (we will set this to be small).
-    opts.m = opts.max_iter;
-    [opts, info] = defaultLCPOpts(opts, x0);
-    %checkOpts(opts)
+
+    % Initialize high fidelity info
     n = numel(x0); k = 0;
-    x_k = x0; Ax_k = opts.A(x_k);
-    % the first secant condition can is free
-    % s = (x0 - 0), y = A[x0] - A[0] = A[x0]
-    s = x_k; y = Ax_k;
-    % For efficiency also cache low fidelity evaluation of \hat{A}[s].
-    Ahats = Ahatx_k;
-    x_km1=[]; grad_km1=[];
+    x_k = x0; Ax_k = zeros(n,1); s = []; y = [];
+    if ~all(x0 == 0) && ~isfield(opts, 'Ax_k') % No iterate history
+        Ax_k = opts.A(x_k);
+        s = x_k;
+        y = Ax_k;
+    elseif isfield(opts, 'Ax_k') 
+        % Has iterate history, assuming solving a subproblem
+        Ax_k = opts.Ax_k;
+        s = x_k;
+        y = Ax_k;
+    end
+
+    % Initialize low fidelity info
+    if ~all(x0 == 0) && ~isfield(opts.low, 'Ax_k') % No low fidelity iterate history
+        Ahatx_k = opts.Ahat(x_k);
+        Ahats = Ahatx_k;
+    elseif isfield(opts.low, 'Ax_k') 
+        % Has iterate history, assuming solving a subproblem
+        Ahatx_k = opts.low.Ax_k;
+        Ahats = opts.low.Ax_k;
+    end
+
     [f_k, grad_k] = fg(x_k, Ax_k);
     while true
         [converged, info] = checkConvergence(k, f_k, x_k, ...
             grad_k, [], info, opts, x_km1, grad_km1);
         if converged
             x = x_k; 
+            opts.Ax_k = Ax_k;
+            [~, ~, ~, ~, opts] = updateQNMemory(s, y, opts);
             break
         end
         % Increase k 
@@ -154,13 +154,28 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     opts.low.b = c;
     opts.low.qn.Y(:,1:r2) = BS;
     opts.low.qn.rho(1:r2) = rho;
+    % Compute tolerances for the subproblem
+    %{
+    TODO: Add adaptive tolerance based on lee 2014 paper. Will need to update defaultLCPOpts and checkConvergence to handle this. I also may want to update the semismooth newton solver to use an adaptive tolerance as well.
+    %}
     fg_sub = @(x, Bx) quadraticLoss(x, B, c, Bx);
     % Solve the subproblem 
     n = numel(c);
+    %{
+    Need to double check this.
     opts.low.qn.S = zeros(n,n);
     opts.low.qn.Y = zeros(n,n);
+    %}
     opts.low.Ax_k = Bx_km1;
-    [xhat_k, info, opts.low] = proxQuasiNewton(fg_sub, x_km1, opts.low);
+    
+    % Choose solver based on whether we have another fidelity level
+    if isfield(opts.low, 'low') && ~isempty(opts.low.low)
+        % Recursive case: use multifidelity with the next level down
+        [xhat_k, info, opts.low] = multifidelityProxQuasiNewton(fg_sub, x_km1, opts.low);
+    else
+        % Base case: solve with proxQuasiNewton
+        [xhat_k, info, opts.low] = proxQuasiNewton(fg_sub, x_km1, opts.low);
+    end
     
     Bx_k = opts.low.Ax_k;
     % After solving the subproblem, in order for bookkeeping to be simplified,
