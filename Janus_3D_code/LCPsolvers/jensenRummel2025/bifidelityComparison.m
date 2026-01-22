@@ -21,7 +21,6 @@ for i = 1:Nt
     if isempty(F)
         continue
     end
-    disp("Processing contact pairs for problem " + i + " of " + Nt);
     n = size(F,2); % number of contact pairs
     N = size(F,1) / 6; % number of particles
     % For spheres torque is 0, so F will only be nonzero at the
