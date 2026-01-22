@@ -154,9 +154,12 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     opts.low.qn.rho(1:r2) = rho;
     fg_sub = @(x, Bx) quadraticLoss(x, B, c, Bx);
     % Solve the subproblem 
-    n = numel(c);
-    opts.low.qn.S = zeros(n,n);
-    opts.low.qn.Y = zeros(n,n);
+    global fixBifi 
+    if ~fixBifi
+        n = numel(c);
+        opts.low.qn.S = zeros(n,n);
+        opts.low.qn.Y = zeros(n,n);
+    end
     opts.low.Ax_k = Bx_km1;
     [xhat_k, info, opts.low] = proxQuasiNewton(fg_sub, x_km1, opts.low);
     

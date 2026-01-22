@@ -53,10 +53,16 @@ algoNames = {
     'B-PQN$\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)$';
     'B-PQN$\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)$';
     'B-PQN$\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)$';
+    '(fixed) B-PQN$\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)$';
+    '(fixed) B-PQN$\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)$';
+    '(fixed) B-PQN$\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)$';
     };
 algoSlvr = {
     'bbpgd';
     'proxquasinewton';
+    'bifi';
+    'bifi';
+    'bifi';
     'bifi';
     'bifi';
     'bifi';
@@ -67,13 +73,19 @@ algoHndls = {
     @bifidelityProxQuasiNewton;
     @bifidelityProxQuasiNewton;
     @bifidelityProxQuasiNewton
+    @bifidelityProxQuasiNewton;
+    @bifidelityProxQuasiNewton;
+    @bifidelityProxQuasiNewton
     };
 biFi = {
     struct(); 
     struct();
-    struct('p', 3, 'tol', 1e-5);
-    struct('p', 4, 'tol', 1e-6);
-    struct('p', 6, 'tol', 1e-6);
+    struct('p', 3, 'tol', 1e-5, 'fixed', false);
+    struct('p', 4, 'tol', 1e-6, 'fixed', false);
+    struct('p', 6, 'tol', 1e-6, 'fixed', false);
+    struct('p', 3, 'tol', 1e-5, 'fixed', true);
+    struct('p', 4, 'tol', 1e-6, 'fixed', true);
+    struct('p', 6, 'tol', 1e-6, 'fixed', true);
 };
 numAlgo = numel(algoNames);
 assert(numel(algoNames) == numel(algoHndls));
@@ -154,6 +166,8 @@ for ii = 1:numel(mcGood)
         end
         %% Set up bifi method 
         if isfield(biFi{ixAlgo},'p')
+            global fixBifi 
+            fixBifi = biFi{ixAlgo}.fixed;
             pLo = biFi{ixAlgo}.p;
             tolLo = biFi{ixAlgo}.tol;
             jLo = find(res.ps == pLo);

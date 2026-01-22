@@ -55,7 +55,7 @@ if ~exist('meanRadius','var') || isempty(meanRadius)
     meanRadius=1;
 end
 if ~exist('n','var') || isempty(n)
-    n=5;
+    n=2;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
     Cdst=3; 
@@ -106,7 +106,7 @@ if ~exist('mdist','var') || isempty(mdist)
     mdist=3; 
 end
 if ~exist('denseMV','var') || isempty(denseMV)
-    denseMV=false; 
+    denseMV=true; 
 end
 if ~exist('denseforce','var') || isempty(denseforce)
     denseforce=true;
@@ -193,10 +193,12 @@ Fparams.plotFlag = plotFlag;
 Fparams.init_dir = init_dir;
 % parbd - matVec params
 n3 = size(C,1); 
-Fparams.parbd = struct('Shape','','n3',n3,'rd',rd,'diam',2*rd,'p',p,'mdist',mdist,'mxrd',max(rd),'eps',ep,'out',1);
+Fparams.parbd = struct('Shape','','n3',n3,'rd',rd,'diam',2*rd,'p',p,...
+    'mdist',mdist,'mxrd',max(rd),'eps',ep,'out',1,'dense',denseMV);
 Fparams.parbd.Ct = C;
 % parslv - linear solver parameters
-Fparams.parslv = struct('solver','gmres','tol',gmresTol,'maxit',50,'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
+Fparams.parslv = struct('solver','gmres','tol',gmresTol,'maxit',50,...
+    'rst',4,'prtype','bkdiag','prec',[],'prLCP',false); 
 % LCP solver parameters
 Fparams.lcpOpts = defaultLCPOpts(struct(...
     'solver',lcpSlvr, ...
