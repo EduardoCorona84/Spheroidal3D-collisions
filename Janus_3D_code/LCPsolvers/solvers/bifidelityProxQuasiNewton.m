@@ -144,6 +144,7 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     rho = reshape(sum(S.*BS, 1).^-1, [], 1);
     
     % Fill the opts struct for the subproblem
+    tempLowA = opts.low.A;
     B = @(x) opts.low.A(x) + U*(U'*x) - V*(V'*x);
     Ahatx_km1 = opts.low.Ax_k;
     Bx_km1 = Ahatx_km1 + U*(U'*x_km1) - V*(V'*x_km1);
@@ -163,6 +164,7 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     opts.low.Ax_k = Bx_km1;
     [xhat_k, info, opts.low] = proxQuasiNewton(fg_sub, x_km1, opts.low);
     
+    opts.low.A = tempLowA;
     Bx_k = opts.low.Ax_k;
     % After solving the subproblem, in order for bookkeeping to be simplified,
     % we need to store the secant conditions for \hat{A} (not B).
