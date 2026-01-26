@@ -1,70 +1,32 @@
 function  zipDenseMats
-correctA = true;
-%% set path
 [dirname, ~] = setPaths();
-%% set defaults
-%if ~exist('srcDir', 'var') || isempty(srcDir)
-    srcDir = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5');
-%     srcDir = fullfile(dirname, '../data/amphi.special.n_3.p_8.cDist_2.3');
-%end
-disp(['zipping mats in ' srcDir])
-load(fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5.mat'), 'lcp_list', 'Fparams');
-C = {lcp_list.C};
-F = {lcp_list.F};
-%% Set all outputs
-% disp(['- looking for all *.mat files in ' srcDir])
-% out = ls(fullfile(srcDir, '*.mat'));
-% out = split(out);
-% MC = -1;
-% ps = [];
-% tols = [];
-% for i = 1:numel(out)
-%     fn = out{i};
-%     if isempty(out)
-%         continue
-%     end
-%     prts = split(fn, [srcDir '/']);
-%     fn = prts{end};
-%     disp(['-- ' fn])
-%     prts = split(fn, '.');
-%     for j = 1:numel(prts)
-%         prt = prts{j};
-%         if contains(prt,'ix')
-%             prt = split(prt, "_");
-%             ix = str2double(prt{end});
-%             disp(['--- ix = ' prt{end}])
-%             if ix > MC
-%                 disp(['---- MC = ' prt{end}])
-%                 MC = ix;
-%             end
-%         elseif contains(prt,'p')
-%             prt = split(prt, "_");
-%             p = str2double(prt{end});
-%             disp(['--- p = ' prt{end}])
-%             if ~any(ps == p)
-%                 ps(end+1) = p; %#ok<*AGROW> 
-%                 disp(['---- ps = ' num2str(ps)])
-%             end
-%          elseif contains(prt,'tol')
-%             prt = split(prt, "_");
-%             tol = str2double(prt{end});
-%             disp(['--- tol = ' prt{end}])
-%             if ~any(tols == tol)
-%                 tols(end+1) = tol;
-%                 disp(['---- tols = ' num2str(tols)])
-%             end
-%         end
-%     end
-% end
-MC = 600;
-ps = [3,4,5,6,7,8];
-tols = 10.0.^(-5:-1:-8);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% old params
+    % srcDir = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5');
+% correctAx = true;
+% MC = 600;
+% ps = [3,4,5,6,7,8];
+% tols = 10.0.^(-5:-1:-8);
+%% new params 
+root = '/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/test/../resultsForRecord/'
+prefix = 'amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2'
+srcDir = fullfile(root, [prefix '.denseMats']);
+correctA = false;
+Nt = 50;
+ps = [2,3,4,5,6,7,8];
+tols = 10.0.^(-3:-1:-6);
 ps = sort(ps);
 tols = sort(tols);
-disp(['- Found MC=' num2str(MC) ', ps=' num2str(ps) ', tols=' num2str(tols)]);
-A = cell(MC, numel(ps), numel(tols));
-dt = cell(MC, numel(ps), numel(tols));
-for i = 1:MC
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+disp(['zipping mats in ' srcDir])
+load(fullfile(root, [prefix '.mat']), 'lcp_list','Fparams')
+C = {lcp_list.C};
+F = {lcp_list.F};
+b = arrayfun(@(lcp) lcp.b, lcp_list, 'UniformOutput',false);
+disp(['- Found Nt=' num2str(Nt) ', ps=' num2str(ps) ', tols=' num2str(tols)]);
+A = cell(Nt, numel(ps), numel(tols));
+dt = cell(Nt, numel(ps), numel(tols));
+for i = 1:Nt
     for j = 1:numel(ps)
         p = ps(j);
         if correctA 
@@ -112,9 +74,7 @@ for i = 1:MC
 end
 %%
 disp(['Saving to ' [srcDir '.allMats.mat'] ])
-load([srcDir '.mat'], 'lcp_list')
-b = arrayfun(@(lcp) lcp.b, lcp_list, 'UniformOutput',false);
-save([srcDir '.allMats.mat'], 'MC', 'ps', 'tols', 'A', 'b', 'dt');
+save([srcDir '.allMats.mat'], 'Nt', 'ps', 'tols', 'A', 'b', 'dt');
 
 end
 function T = getTCorrector(p,Ct, Fparams,Fhat)
@@ -175,3 +135,55 @@ assert(norm(F -Fhat) / norm(Fhat) < 1e-8);
 %% Define the final corrector
 T = @(Abad) F'*W*(F' \ Abad);
 end
+
+
+%% set defaults
+%if ~exist('srcDir', 'var') || isempty(srcDir)
+%     srcDir = fullfile(dirname, '../data/amphi.special.n_3.p_8.cDist_2.3');
+%end
+
+%% Set all outputs
+% disp(['- looking for all *.mat files in ' srcDir])
+% out = ls(fullfile(srcDir, '*.mat'));
+% out = split(out);
+% MC = -1;
+% ps = [];
+% tols = [];
+% for i = 1:numel(out)
+%     fn = out{i};
+%     if isempty(out)
+%         continue
+%     end
+%     prts = split(fn, [srcDir '/']);
+%     fn = prts{end};
+%     disp(['-- ' fn])
+%     prts = split(fn, '.');
+%     for j = 1:numel(prts)
+%         prt = prts{j};
+%         if contains(prt,'ix')
+%             prt = split(prt, "_");
+%             ix = str2double(prt{end});
+%             disp(['--- ix = ' prt{end}])
+%             if ix > MC
+%                 disp(['---- MC = ' prt{end}])
+%                 MC = ix;
+%             end
+%         elseif contains(prt,'p')
+%             prt = split(prt, "_");
+%             p = str2double(prt{end});
+%             disp(['--- p = ' prt{end}])
+%             if ~any(ps == p)
+%                 ps(end+1) = p; %#ok<*AGROW> 
+%                 disp(['---- ps = ' num2str(ps)])
+%             end
+%          elseif contains(prt,'tol')
+%             prt = split(prt, "_");
+%             tol = str2double(prt{end});
+%             disp(['--- tol = ' prt{end}])
+%             if ~any(tols == tol)
+%                 tols(end+1) = tol;
+%                 disp(['---- tols = ' num2str(tols)])
+%             end
+%         end
+%     end
+% end

@@ -10,7 +10,7 @@ if ~exist('desiredTol','var') || isempty(desiredTol)
     desiredTol = floor(n^3 / 10);
 end
 if ~exist('debug','var') || isempty(debug)
-    debug = true;
+    debug = false;
 end
 lx=0:Cdst:Cdst*(n-1);
 lx = lx - mean(lx); 
