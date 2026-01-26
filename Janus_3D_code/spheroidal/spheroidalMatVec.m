@@ -1,4 +1,4 @@
-function LP=spheroidalMatVec(params,potential,X,nu_vec)
+function LP=spheroidalMatVec(params,potential,X,nu_vec,useFMM)
 %--------------------------------------------------------------------%
 % spheroidalMatVec computes the Laplace layer potential of spheroids with 
 % density 'sigma' evaluated either on the surfaces of all spheroids or at targets X. "far"
@@ -17,15 +17,22 @@ function LP=spheroidalMatVec(params,potential,X,nu_vec)
 %       (o) sigma_coefficients = spherical harmonic coefficients of sigma
 %       (o) matvec_eta = cutoff distance for near / far.
 %    (o) potential = 'DL' for double layer, 'SL' for single layer
+%        'SP' for d/dn of single layer, and 'DP' for d/dn of double layer
 %    (o) X = target points at which to evaluate the potential. If not
 %        provided, this function evaluates the potential at points on each
 %        spheroid surface.
 %    (o) nu_vec = the normal vectors associated with EACH target point (note
 %        that this is only used for spheroidalSP and spheroidalDP).
+%    (o) useFMM = boolean flag to enable the usage of FMM; set to false by
+%        default (i.e. if not passed in).
 %    
 % Returns LP of size(sigma) for particle-to-particle evaluation or size [nrows(X),nf].
 % 
 %--------------------------------------------------------------------%
+
+if nargin<5
+    useFMM = false;
+end
 
 if isempty(params.sigma)
     error("No surface density given")
@@ -155,7 +162,7 @@ elseif nargin > 2
     X_spectral = cell(1,ns);
     if strcmp(potential,'SP') || strcmp(potential, 'DP')
         nu_spectral = cell(1,ns);
-        Nu_t = params.get_nu_targets(nu_vec);
+        Nu_t = params.get_nu_targets(nu_vec); % There is a bug here.
     end
     
     % Separate target points and normal vectors into nearby and far
@@ -181,15 +188,15 @@ elseif nargin > 2
     else
         error("Invalid potential given");
     end
-    
+
+
     %%%
-    %%% Do "far" evaluation with smooth quadrature
+    %%% Do far evaluation
     %%%
     LP=zeros(nt,nf);
     
-    % Calculate effect from each particle on each target point
+    % Calculate effect from each particle on target points
     for i=1:ns
-
         % Add contributions from spectral method
         LP(sep(:,i)==0,:) = LP(sep(:,i)==0,:) + LP_spectral_cell{i}; 
     
@@ -207,41 +214,99 @@ elseif nargin > 2
                 Xself=oblate_spheroid_shape(p,u0(i),a(i));
             end
             Sns=SurfaceSph(Xself);
-            
-            if strcmp(potential,'SP')
-                pot='dSL_L_3D';
-            elseif strcmp(potential, 'DP')
-                pot='dDL_L_3D';
-            else
-                pot=strcat(potential,'_L_3D');
-            end
-            KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-8,2,400,1);
-            KEparams.dim = 3;
+
             [~, gwt]=g_grid(p+1);
             wt = pi/p*repmat(gwt', 2*p, 1)./sin(gl_grid(p));
             wt = wt(:);
             Wns = Sns.geoProp.W; Wns= Wns.*wt;
-
-            %%% Normal vector handling
-            if strcmp(potential,'SP')
-                target_norm_vecs = Nu_t(sep(:,i)==1,:,i);
-                KEparams.nor = target_norm_vecs; 
-            elseif strcmp(potential, 'DP')
-                source_norm_vecs = reshape(Sns.geoProp.nor.to_array,[],3);
-                target_norm_vecs = Nu_t(sep(:,i)==1,:);
-                KEparams.nor = source_norm_vecs;
-                KEparams.targnor = target_norm_vecs;
-            else
-                Nrns = reshape(Sns.geoProp.nor.to_array,[],3);
-                KEparams.nor = Nrns;
-            end
-            KEparams.X = Xself;
-            KEparams.W2 = Wns.';
             
-            LP_smooth = Kernel_Eval(X_smooth,Xself,KEparams)*sigma(:,:,i);
+            if ~useFMM
+                if strcmp(potential,'SP')
+                    pot='dSL_L_3D';
+                elseif strcmp(potential, 'DP')
+                    pot='dDL_L_3D';
+                else
+                    pot=strcat(potential,'_L_3D');
+                end
+                KEparams = Kernel_Eval_parameters(pot,0,1,1,1,1e-8,2,400,1);
+                KEparams.dim = 3;
     
+                %%% Normal vector handling
+                if strcmp(potential,'SP')
+                    target_norm_vecs = Nu_t(sep(:,i)==1,:,i);
+                    KEparams.nor = target_norm_vecs; 
+                elseif strcmp(potential, 'DP')
+                    source_norm_vecs = reshape(Sns.geoProp.nor.to_array,[],3);
+                    target_norm_vecs = Nu_t(sep(:,i)==1,:);
+                    KEparams.nor = source_norm_vecs;
+                    KEparams.targnor = target_norm_vecs;
+                else
+                    Nrns = reshape(Sns.geoProp.nor.to_array,[],3);
+                    KEparams.nor = Nrns;
+                end
+                KEparams.X = Xself;
+                KEparams.W2 = Wns.';
+                
+                LP_smooth = Kernel_Eval(X_smooth,Xself,KEparams)*sigma(:,:,i);
+            else % Use FMM
+                disp('FMM being used.');
+                Q = params.sigma(:,:,i);
+                source = Xself.';
+                target = X_smooth.';
+                nsource = size(Xself, 1);
+                ntarget = size(X_smooth,1);
+
+                if strcmp(potential,'SL') || strcmp(potential,'SP')
+                    % SL and dSL
+                    sigma_sl = reshape(Wns.*Q, 1, nsource); 
+                    ifsingle = 1; 
+                    ifdouble = 0; 
+                    sigma_dl = zeros(1, nsource); 
+                    sigma_dv = zeros(3, nsource); 
+                    ifpot = 0;
+                    ifpottarg = 1;
+                    ifgradtarg = 0;
+                else
+                    % DL and dDL
+                    sigma_dl = reshape(Wns.*Q, 1, nsource); 
+                    ifsingle = 0; 
+                    ifdouble = 1; 
+                    sigma_sl = zeros(1, nsource); 
+                    sigma_dv = nu_vec.'; 
+                    ifpot = 0;
+                    ifpottarg = 1;
+                    ifgradtarg = 1;
+                end
+
+                if strcmp(potential, 'SP') || strcmp(potential, 'DP')
+                    ifgrad = 1;
+                    error('not implemented.');
+                else
+                    ifgrad = 0;
+                end
+
+                % precision for FMM, roughly 3*iprec digits of acc
+                iprec=2;
+
+                U = lfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
+                     sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);
+
+                switch potential
+                    case {'SL', 'DL'}
+                        % Single layer potential at targets
+                        LP_smooth = (1/4/pi)*U.pottarg.'; 
+                    case 'SP'
+                        % compute du/dNrtrg
+                        GSF = -(1/4/pi)*U.fldtarg; % Gradient, size 3 x ntarget
+                        LP_smooth = sum(GSF.*Nr.'); LP_smooth=LP_smooth(:); 
+                    otherwise
+                        error('Potential not implemented; should be SL, SP, or DL.')
+                end
+            end
+        
+            % Add contribution from smooth
             LP(sep(:,i)==1,:) = LP(sep(:,i)==1,:) + LP_smooth;
-        end 
+        end
     end
 end
 
@@ -249,4 +314,4 @@ if isReal
     LP = real(LP);
 end
 
-end
+end %% END MAIN FUNCTION
