@@ -237,7 +237,7 @@ elseif nargin > 2
                     KEparams.nor = target_norm_vecs; 
                 elseif strcmp(potential, 'DP')
                     source_norm_vecs = reshape(Sns.geoProp.nor.to_array,[],3);
-                    target_norm_vecs = Nu_t(sep(:,i)==1,:);
+                    target_norm_vecs = Nu_t(sep(:,i)==1,:,i);
                     KEparams.nor = source_norm_vecs;
                     KEparams.targnor = target_norm_vecs;
                 else
@@ -256,33 +256,35 @@ elseif nargin > 2
                 nsource = size(Xself, 1);
                 ntarget = size(X_smooth,1);
 
-                if strcmp(potential,'SL') || strcmp(potential,'SP')
-                    % SL and dSL
-                    sigma_sl = reshape(Wns.*Q, 1, nsource); 
-                    ifsingle = 1; 
-                    ifdouble = 0; 
-                    sigma_dl = zeros(1, nsource); 
-                    sigma_dv = zeros(3, nsource); 
-                    ifpot = 0;
-                    ifpottarg = 1;
-                    ifgradtarg = 0;
-                else
-                    % DL and dDL
-                    sigma_dl = reshape(Wns.*Q, 1, nsource); 
-                    ifsingle = 0; 
-                    ifdouble = 1; 
-                    sigma_sl = zeros(1, nsource); 
-                    sigma_dv = nu_vec.'; 
-                    ifpot = 0;
-                    ifpottarg = 1;
-                    ifgradtarg = 1;
-                end
-
-                if strcmp(potential, 'SP') || strcmp(potential, 'DP')
-                    ifgrad = 1;
-                    error('not implemented.');
-                else
-                    ifgrad = 0;
+                % Setup flags for FMM call
+                ifpot = 0; ifgrad = 0; % Don't need potential/gradients at source points
+                switch potential
+                    case 'SL'
+                        ifsingle = 1; ifdouble = 0;
+                        ifpottarg = 1; ifgradtarg = 0;
+                        sigma_sl = reshape(Wns.*Q, 1, nsource);
+                        sigma_dl = zeros(1, nsource); 
+                        sigma_dv = zeros(3, nsource); 
+                    case 'DL'
+                        ifsingle = 0; ifdouble = 1;
+                        ifpottarg = 1; ifgradtarg = 0;
+                        sigma_sl = zeros(1, nsource); 
+                        sigma_dl = reshape(Wns.*Q, 1, nsource);
+                        sigma_dv = reshape(Sns.geoProp.nor.to_array,[],3).';
+                    case 'SP'
+                        ifsingle = 1; ifdouble = 0;
+                        ifpottarg = 0; ifgradtarg = 1;
+                        sigma_sl = reshape(Wns.*Q, 1, nsource);
+                        sigma_dl = zeros(1, nsource); 
+                        sigma_dv = zeros(3, nsource);
+                    case 'DP'
+                        ifsingle = 0; ifdouble = 1;
+                        ifpottarg = 0; ifgradtarg = 1;
+                        sigma_sl = zeros(1, nsource);
+                        sigma_dl = reshape(Wns.*Q, 1, nsource); 
+                        sigma_dv = reshape(Sns.geoProp.nor.to_array,[],3).';
+                    otherwise
+                        error('Potential not implemented.');
                 end
 
                 % precision for FMM, roughly 3*iprec digits of acc
@@ -295,10 +297,11 @@ elseif nargin > 2
                     case {'SL', 'DL'}
                         % Single layer potential at targets
                         LP_smooth = (1/4/pi)*U.pottarg.'; 
-                    case 'SP'
-                        % compute du/dNrtrg
-                        GSF = -(1/4/pi)*U.fldtarg; % Gradient, size 3 x ntarget
-                        LP_smooth = sum(GSF.*Nr.'); LP_smooth=LP_smooth(:); 
+                    case {'SP', 'DP'}
+                        % compute dS/dn at target points
+                        target_normals = Nu_t(sep(:,i)==1,:,i); % local frame
+                        G = -(1/4/pi)*U.fldtarg; % Gradient, size 3 x ntarget
+                        LP_smooth = sum(G.*target_normals.'); LP_smooth=LP_smooth(:); 
                     otherwise
                         error('Potential not implemented; should be SL, SP, or DL.')
                 end

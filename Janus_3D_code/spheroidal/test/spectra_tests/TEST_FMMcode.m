@@ -21,8 +21,24 @@ params_target.sigma = params_source.sigma;
 
 X_src = params_source.get_X();
 X_trg = params_target.get_X();
+nu = params_target.get_Norm();
 
-matvec_res_with_FMM = spheroidalMatVec(params_source, 'SL', X_trg, [], true);
-matvec_res_with_smoothquad = spheroidalMatVec(params_source, 'SL', X_trg, [], false);
+matvec_res_with_FMM = spheroidalMatVec(params_source, 'SL', X_trg, nu, true);
+matvec_res_with_smoothquad = spheroidalMatVec(params_source, 'SL', X_trg, nu, false);
+
+abs_err = norm(matvec_res_with_smoothquad - matvec_res_with_FMM)
+
+matvec_res_with_FMM = spheroidalMatVec(params_source, 'DL', X_trg, nu, true);
+matvec_res_with_smoothquad = spheroidalMatVec(params_source, 'DL', X_trg, nu, false);
+
+abs_err = norm(matvec_res_with_smoothquad - matvec_res_with_FMM)
+
+matvec_res_with_FMM = spheroidalMatVec(params_source, 'SP', X_trg, nu, true);
+matvec_res_with_smoothquad = spheroidalMatVec(params_source, 'SP', X_trg, nu, false);
+
+abs_err = norm(matvec_res_with_smoothquad - matvec_res_with_FMM)
+
+matvec_res_with_FMM = spheroidalMatVec(params_source, 'DP', X_trg, nu, true);
+matvec_res_with_smoothquad = spheroidalMatVec(params_source, 'DP', X_trg, nu, false);
 
 abs_err = norm(matvec_res_with_smoothquad - matvec_res_with_FMM)
