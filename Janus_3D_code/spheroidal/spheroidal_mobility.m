@@ -238,12 +238,12 @@ function spheroidal_mobility(fname,Fparams,init)
         dt = dt0;
         if strcmp(timedisc,'euler')
             fprintf('\n ---------------------------------------------------------- \n')
-            fprintf('\n (1) Explicit euler step \n')
+            fprintf('\nExplicit euler step for timestep %d\n', i)
             [Xt{i+1},Mt(i+1,:),Ct{i+1},U{i},FT{i},sigma{i},mu{i},VW{i},Kernels,Nullsp,...
-                Fparams,colevent,collist,dt,psi_Lap{i},Energy(i)] = ...
+                Fparams,colevent,closest_points1,closest_points2,collist,dt,psi_Lap{i},Energy(i)] = ...
                 LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t, dt,i);
-
         elseif strcmp(timedisc,'trapz')
+            error('Calls need to be updated.')
             % (1) Predictor step: 
             fprintf('\n ---------------------------------------------------------- \n')
             fprintf('\n (1) Trapezoidal, predictor step \n')
@@ -276,6 +276,7 @@ function spheroidal_mobility(fname,Fparams,init)
                 LOCAL_advance_step(VW{i},mu{i},sigma{i},Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt,i);
             
         elseif strcmp(timedisc,'rk4')
+            error('Calls need to be updated.')
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    
             % Explicit Runge-Kutta 4th order method
             % (1) First step, f1 = f(t0,u0)
@@ -378,7 +379,81 @@ function spheroidal_mobility(fname,Fparams,init)
 end
     
 %% Mobility solver system code
-function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)
+% function [state, ops, collision] = LOCAL_advance_step(state, ops, VW, mu, sigma, it)
+%     arguments
+%         state struct
+%         ops struct
+%         VW double
+%         mu double
+%         sigma double
+%         it (1,1) double {mustBeInteger, mustBePositive}
+%     end
+
+%     global timings
+
+%     np = Fparams.parbd.np; 
+%     n3 = Fparams.parbd.n3; 
+    
+%     MRot = @(wh,t) RotationMat(wh,t);
+    
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     % Advance center Ct 
+%     tic; 
+%     Ctp = LOCAL_advance_center(state.Ct, state.dt, VW); 
+%     fprintf('\n Time to advance centers C(t): %e',toc); 
+%     timings.advance(it) = timings.advance(it) + toc; 
+
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     % Advance rotation Mt TODO TODO Need to figure this wout with spheroids
+%     tic; 
+%     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3);
+%     fprintf('\n Time to advance centers C(t): %e',toc); 
+%     timings.advance(it) = timings.advance(it) + toc;
+    
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     % Check for collision after moving centers
+%     tic; 
+%     [colevent,collist,dt,Ctp, closest_points_1, closest_points_2] ...
+%     = LOCAL_collision_info(Fparams,Ct,Ctp,VW,MRot,Mt, Mtp, dt);
+%     fprintf('\n Time for collision detection: %e',toc);
+    
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     % Advance rotation matrix Mt and X, TODO 
+%     tic; 
+%     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
+%     fprintf('\n Time to advance R(t) and X(t): %e',toc)
+%     timings.advance(it) = timings.advance(it) + toc; 
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     % Update operators
+%     fprintf('\n Surface and operator update')
+%     [Kernels,Nullsp,Fparams,timings] ...
+%     = RBS_Update_Operators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it);
+%     timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
+%     fprintf('\n Time to update operators: %e',timings.operator.total(it));
+% end
+
+% function [state, ops, solution, collision, forces] = LOCAL_euler_step(state, ops, collision, t, i)
+%     %{
+%     Performs a single forward-Euler step of the system of rigid-body particles.
+%     Uses the BIE operators and boundary information at time t to compute surface
+%     velocities and rigid-body motions, advances centers and orientations,
+%     updates operators for the new geometry at the next timestep.
+
+%     Inputs
+%     state       - (struct) simulation state info
+%     ops         - (struct) operators associated with simulation
+%     collision   - (struct) collision state info
+
+%     Outputs
+%     state       - (struct) simulation state info
+%     ops         - (struct) operators associated with simulation
+%     collision   - (struct) collision state info
+%     %}
+
+
+% end
+
+function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,closest_points_1,closest_points_2,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)
     %{
     Performs a single forward-Euler step of the system of rigid-body particles.
     Uses the BIE operators and boundary information at time t to compute surface
@@ -446,6 +521,8 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist, 
     psi_Lap  - placeholder
     Energy   - placeholder
     %}
+
+    psi_Lap = NaN; % ugly placeholder
     
     global timings; 
     %Sc = Fparams.parbd.Sc; 
@@ -458,7 +535,6 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist, 
     % Get incoming force distribution: 
     tic; 
     [FT,sigma,VW,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt); 
-    Ct
     fprintf('\n Time to compute incoming force: %e ',toc)
     timings.incoming(it) = timings.incoming(it) + toc; 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -492,9 +568,6 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist, 
     %Update Sc and operators
     fprintf('\n Surface and operator update')
     [Kernels,Nullsp,Fparams,timings] = SpheroidalMS_UpdateOperators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it); 
-    %{
-    [Kernels,Nullsp,Fparams,timings] = RBS_Update_Operators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it);
-    %}
     timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
     fprintf('\n Time to update surface and operators: %e',timings.operator.total(it));
     % We also need to pass closest_points_1 and closest_points_2 to the next step
@@ -531,6 +604,7 @@ function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1,
     [colevent,collist,dt,Ctp, closest_points_1, closest_points_2] ...
     = LOCAL_collision_info(Fparams,Ct,Ctp,VW,MRot,Mt, Mtp, dt);
     fprintf('\n Time for collision detection: %e',toc);
+    
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Advance rotation matrix Mt and X, TODO 
     tic; 

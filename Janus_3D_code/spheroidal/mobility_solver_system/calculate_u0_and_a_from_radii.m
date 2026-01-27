@@ -3,7 +3,7 @@ function [u0, a] = calculate_u0_and_a_from_radii(shape_type, equ_radii, polar_ra
 Helper function to determine the parameters u0 and a that are associated with spheroids.
 %}
     if isempty(shape_type)
-        shape_type = calculate_shape_type(equ_radii, polar_radii)
+        shape_type = calculate_shape_type(equ_radii, polar_radii);
     end
 
     if strcmp(shape_type, 'prolate')
