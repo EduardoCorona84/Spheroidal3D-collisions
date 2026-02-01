@@ -11,6 +11,10 @@ oblate = params.oblate;
 
 [np, nf, ns] = size(sigma_x);
 
+if ~isempty(X_trg) && (size(X_trg, 2) ~= 3 || size(X_trg, 3) ~= ns)
+    error("X_trg must be nt x 3 x ns.");
+end
+
 % Compute y dot sigma on the source surface (local frame)
 y_dot_sig = zeros(np, nf, ns);
 for i = 1:ns
@@ -27,24 +31,14 @@ end
 [Gshc_x, Gshc_y, Gshc_z, Gshc_ydotsig] = generate_mod_shc(source_Gmatrix, shc_x, shc_y, shc_z, shc_ydotsig);
 
 % Combine the densities so we can evaluate in one pass
-shc_all = cat(2, shc_x, shc_y, shc_z, shc_ydotsig);
 Gshc_all = cat(2, Gshc_x, Gshc_y, Gshc_z, Gshc_ydotsig);
-sigma_all = cat(2, sigma_x, sigma_y, sigma_z, y_dot_sig);
 
 % Build unit vectors for SP
 [nu_x, nu_y, nu_z] = build_unit_nu(X_trg, np, ns);
 
 % Evaluate SL and SP in one pass each
-if isempty(X_trg)
-    SL_all = spheroidalSLOptimized(p, u0, a, oblate, Gshc_all, isReal, X_trg);
-    [SPx_all, SPy_all, SPz_all] = spheroidalSPOptimized(p, u0, a, oblate, Gshc_all, isReal, nu_x, nu_y, nu_z, X_trg);
-else
-    if ndims(X_trg) ~= 3 || size(X_trg, 2) ~= 3 || size(X_trg, 3) ~= ns
-        error("X_trg must be nt x 3 x ns for numeric-only mode.");
-    end
-    SL_all = spheroidalSLOptimized(p, u0, a, oblate, Gshc_all, isReal, X_trg);
-    [SPx_all, SPy_all, SPz_all] = spheroidalSPOptimized(p, u0, a, oblate, Gshc_all, isReal, nu_x, nu_y, nu_z, X_trg);
-end
+SL_all = spheroidalSLOptimized(p, u0, a, oblate, Gshc_all, isReal, X_trg);
+[SPx_all, SPy_all, SPz_all] = spheroidalSPOptimized(p, u0, a, oblate, Gshc_all, isReal, nu_x, nu_y, nu_z, X_trg);
 
 % Retrieve back the layer potentials
 idx1 = 1:nf;

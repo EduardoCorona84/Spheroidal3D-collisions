@@ -41,6 +41,8 @@ Y - (double) 3*N_trg x 1 array
     also is in interleaved format; see the comment for the input V.
 %}
 
+persistent Gmatrix_cache
+
 %% SETUP
 p  = params.p;      % Spharm degree p 
 n3 = params.n3;     % Number of objects
@@ -51,6 +53,22 @@ out = params.out;   % outside vs inside sphere
 
 equ_radii = params.equ_radii;
 polar_radii = params.polar_radii;
+
+if isempty(Gmatrix_cache)
+    body_shape_types = params.shape_type;
+    ns = numel(equ_radii);
+    Gmatrix_cache = cell(1, ns);
+    for i=1:ns
+        body_shape = body_shape_types(i);
+        switch body_shape
+            case 'sphere'
+                    continue
+            otherwise
+                [u0, ~] = calculate_u0_and_a_from_radii(body_shape, equ_radii(i), polar_radii(i));
+                Gmatrix_cache{i} = sparse(Gmatrix(params.p, u0, 0, strcmp(body_shape, 'oblate')));
+        end
+    end
+end
 
 % Input validation
 assert(kerd==3, 'Kernel dimension 1 is not implemented.');
@@ -124,6 +142,10 @@ if strcmp(V, 'Mat')
         equ_radius = equ_radii(body_ind);
         polar_radius = polar_radii(body_ind);
         body_shape_type = params.shape_type(body_ind);
+        source_Gmatrix = [];
+        if ~isempty(Gmatrix_cache)
+            source_Gmatrix = Gmatrix_cache{body_ind};
+        end
 
         target_pts = params.X(I_nghv(1:kerd:end),:);
         target_normals = params.nor(I_nghv(1:kerd:end),:);
@@ -151,11 +173,11 @@ if strcmp(V, 'Mat')
                     if ~isempty(ind_off)
                         target_pts_off = target_pts(ind_off,:);
                         target_normals_off = target_normals(ind_off,:);
-                        Ynear(indv_off,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts_off, target_normals_off, np, iprm);
+                        Ynear(indv_off,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts_off, target_normals_off, np, iprm, source_Gmatrix);
                     end
-                    Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm);
+                    Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
                 else
-                    Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm);
+                    Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
                 end
             end
         elseif strcmp(body_shape_type, 'sphere')
@@ -489,6 +511,7 @@ elseif ~isempty(V) && isnumeric(V)
     end
 
 elseif isempty(V)
+    fprintf('\nGoing matrix free...\n')
     % Matrix-free
     Y = @(V) SSph_MatVec(V,L,params);
 else
@@ -618,7 +641,7 @@ function Y = LOCAL_FMM_Eval(Q, W, kerd, pot, Xtrg, Xsrc, Nr)
     end
 end
 
-function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, target_normals, np, iprm)
+function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, target_normals, np, iprm, source_Gmatrix)
     %{
     Builds the dense block for near-field interaction from one source spheroid by applying
     the near matvec to unit-basis densities.
@@ -642,9 +665,40 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
     I = eye(np);
     Z = zeros(np);
 
-    Yx = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, I, Z, Z, target_pts, target_normals);
-    Yy = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, Z, I, Z, target_pts, target_normals);
-    Yz = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, Z, Z, I, target_pts, target_normals);
+    % Build parameters once and reuse across the three basis evaluations.
+    params_i = SpheroidalParameters();
+    params_i.sigma = I; % set p for geometry generation
+    params_i.u0 = u0;
+    params_i.a = a;
+    params_i.oblate = oblate;
+    params_i.centers = [0 0 0];
+    params_i.thetas = 0;
+    params_i.phis = 0;
+    params_i.Rmat = eye(3);
+    ns = 1;
+
+    if isempty(target_pts)
+        X_eval_numeric = [];
+        Nu_eval_numeric = [];
+    else
+        X_eval_numeric = reshape(target_pts, size(target_pts,1), 3, 1);
+        Nu_eval_numeric = reshape(target_normals, size(target_normals,1), 3, 1);
+    end
+
+    switch pot
+        case 'SL_Stk_3D'
+            Yx = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, I, Z, Z, ns, source_Gmatrix);
+            Yy = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, Z, I, Z, ns, source_Gmatrix);
+            Yz = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, Z, Z, I, ns, source_Gmatrix);
+        case 'DL_Stk_3D'
+            error('No reason to use this for the mobility solver.');
+        case 'TSL_Stk_3D'
+            Yx = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, I, Z, Z, source_Gmatrix);
+            Yy = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, Z, I, Z, source_Gmatrix);
+            Yz = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, Z, Z, I, source_Gmatrix);
+        otherwise
+            error('Incorrect potential passed in.');
+    end
 
     if isempty(target_pts)
         ntrg = np;
@@ -661,6 +715,20 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
     Ynear = Ynear(:, iprm);
 end
 
+function eval = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, sigma_x, sigma_y, sigma_z, ns, source_Gmatrix)
+    [vx, vy, vz] = L2StkSLPOptimized(X_eval_numeric, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix);
+
+    % Interleave result
+    eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
+end
+
+function eval = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, sigma_x, sigma_y, sigma_z, source_Gmatrix)
+    [vx, vy, vz] = L2StkTLPOptimized(X_eval_numeric, Nu_eval_numeric, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false);
+
+    % Interleave result
+    eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
+end
+
 function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_type)
     %{
     TODO: Don't do this.
@@ -668,3 +736,4 @@ function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_
     [u0, a] = calculate_u0_and_a_from_radii(shape_type, equ_radius, polar_radius);
     oblate = strcmp(shape_type,'oblate');
 end
+

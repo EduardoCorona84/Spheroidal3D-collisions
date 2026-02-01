@@ -114,11 +114,16 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Update Stokes kernels
-tic;
+% tic;
 
 % Stokes kernels 
-Kernels.TD = SpheroidalMS_MatVec([],Lk,typeMV,Fparams.parbd,sdim,0.5,'TSL_Stk_3D');
+tic
 Kernels.SD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,sdim,0,'SL_Stk_3D'); 
+fprintf('Time for SLP update: %e\n',toc);
+
+tic
+Kernels.TD = SpheroidalMS_MatVec([],Lk,typeMV,Fparams.parbd,sdim,0.5,'TSL_Stk_3D');
+fprintf('Time for TSL update: %e\n',toc);
 
 fprintf('Time for kernel eval update: %e\n',toc) 
 if i>0

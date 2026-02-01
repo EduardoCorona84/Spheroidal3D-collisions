@@ -43,10 +43,6 @@ if isempty(X_trg)
         end
     end
 else
-    if ~isnumeric(X_trg) || ndims(X_trg) ~= 3 || size(X_trg, 2) ~= 3 || size(X_trg, 3) ~= ns
-        error("X_trg must be nt x 3 x ns for numeric-only mode.");
-    end
-
     nt = size(X_trg, 1);
     SPx = zeros(nt, nf, ns);
     SPy = zeros(nt, nf, ns);

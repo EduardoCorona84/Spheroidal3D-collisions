@@ -5,6 +5,8 @@ This is a wrapper function; see SpheroidalMS_set_params for more helpful
 comments on the required inputs.
 %}
 
+disp('Initializing parameters...');
+
 % Params struct for rigid bodies
 p = Fparams.parbd.p;
 C = Fparams.parbd.Ct;
@@ -29,9 +31,9 @@ Fparams.parbd = SpheroidalMS_set_params(...
     flag_pot='SL_Stk_3D', ...
     kerd=kerd, ...
     dense=dense ...
-); 
+);
 
-% time discretization (adams bashford multistep)
+% Time discretization (adams bashford multistep)
 if strcmp(Fparams.tdisc,'abash')
    Fparams.abk = {1,[3/2 -1/2],[23/12 -4/3 5/12], [55/24 -59/24 37/24 -3/8]}; 
    Fparams.tdisc = 'abash'; 
