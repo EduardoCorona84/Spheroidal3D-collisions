@@ -47,6 +47,21 @@ function spheroidal_mobility(fname,Fparams,init)
     
     init    - (string) optional filename to resume a simulation from last
     recorded timestep
+
+    Plot options (Fparams):
+        plotFlag          enable plotting (bool)
+        plotEvery         update cadence in timesteps (int, >=1)
+        plotView          fixed camera view [azimuth elevation] or 3-vector
+        plotAxis          fixed axis limits [xmin xmax ymin ymax zmin zmax]
+        plotTitle         title prefix (string)
+        plotGrid          grid on/off (bool)
+        plotColor         'sigma' | 'mu' | 'none' (default none)
+        plotColorMode     'inf' (default) | 'l2'
+        plotColorLimits   [cmin cmax]
+        plotSurfaceAlpha  surface transparency in (0, 1)
+        plotTrajectories  show center trajectories (bool)
+        plotTrajMaxPoints cap trajectory length (int)
+        plotTrajLineWidth trajectory line width (scalar)
     ----
 
     %%%
@@ -104,9 +119,12 @@ function spheroidal_mobility(fname,Fparams,init)
             'Fparams.parbd.mdist must be a strictly positive scalar.');
         assert(islogical(Fparams.parbd.out) || ismember(Fparams.parbd.out,[0,1]), ...
             'Fparams.parbd.out must be true or false.');
+    end
 
-        assert(Fparams.parbd.n3 == Fparams.parbd.n3, ...
-            'Fparams.parbd.n3 must equal size(Fparams.parbd.Ct,1).');
+    if isfield(Fparams, 'plotFlag')
+        plot_enabled = Fparams.plotFlag;
+    else
+        plot_enabled = false;
     end
 
     %%(0.1) (optional) Load data in init, initialize output arrays
@@ -230,8 +248,23 @@ function spheroidal_mobility(fname,Fparams,init)
     np2 = 2*(2*Fparams.parbd.p)*(2*Fparams.parbd.p+1);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % (0.5) Timestepping (i.e. the main loop)
-    Xt{1}=Xrp; Ct{1}=Fparams.parbd.C;
+    % (0.5) Initial state + plot setup
+    if isempty(Xt{1})
+        Xt{1} = Xrp;
+        Ct{1} = Fparams.parbd.C;
+    end
+
+    plot_state = [];
+    if Fparams.plotFlag
+        plot_state = plot_init(Fparams, Xt{1}, np, num_body);
+        if plot_state.traj_enable
+            plot_state = plot_update_trajectory(plot_state, Ct{1});
+        end
+        plot_state = plot_update(plot_state, Xt{1}, Ct{1}, t, [], []);
+    end
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % (1.0) Timestepping (i.e. the main loop)
     
     % Linearize differential variational inequality each timestep
     for i=1:num_timesteps
@@ -368,6 +401,13 @@ function spheroidal_mobility(fname,Fparams,init)
         tt(i+1)=t;
         fprintf('\n dt: %2.2f ',dt)
 
+        if plot_enabled
+            if plot_state.traj_enable
+                plot_state = plot_update_trajectory(plot_state, Ct{i+1});
+            end
+            plot_state = plot_update(plot_state, Xt{i+1}, Ct{i+1}, t, sigma{i}, mu{i});
+        end
+
         % Save progress every other step.
         if mod(i,2)==1                                                                                                                                              
             save(fname,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
@@ -379,80 +419,6 @@ function spheroidal_mobility(fname,Fparams,init)
 end
     
 %% Mobility solver system code
-% function [state, ops, collision] = LOCAL_advance_step(state, ops, VW, mu, sigma, it)
-%     arguments
-%         state struct
-%         ops struct
-%         VW double
-%         mu double
-%         sigma double
-%         it (1,1) double {mustBeInteger, mustBePositive}
-%     end
-
-%     global timings
-
-%     np = Fparams.parbd.np; 
-%     n3 = Fparams.parbd.n3; 
-    
-%     MRot = @(wh,t) RotationMat(wh,t);
-    
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     % Advance center Ct 
-%     tic; 
-%     Ctp = LOCAL_advance_center(state.Ct, state.dt, VW); 
-%     fprintf('\n Time to advance centers C(t): %e',toc); 
-%     timings.advance(it) = timings.advance(it) + toc; 
-
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     % Advance rotation Mt TODO TODO Need to figure this wout with spheroids
-%     tic; 
-%     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3);
-%     fprintf('\n Time to advance centers C(t): %e',toc); 
-%     timings.advance(it) = timings.advance(it) + toc;
-    
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     % Check for collision after moving centers
-%     tic; 
-%     [colevent,collist,dt,Ctp, closest_points_1, closest_points_2] ...
-%     = LOCAL_collision_info(Fparams,Ct,Ctp,VW,MRot,Mt, Mtp, dt);
-%     fprintf('\n Time for collision detection: %e',toc);
-    
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     % Advance rotation matrix Mt and X, TODO 
-%     tic; 
-%     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
-%     fprintf('\n Time to advance R(t) and X(t): %e',toc)
-%     timings.advance(it) = timings.advance(it) + toc; 
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     % Update operators
-%     fprintf('\n Surface and operator update')
-%     [Kernels,Nullsp,Fparams,timings] ...
-%     = RBS_Update_Operators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it);
-%     timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
-%     fprintf('\n Time to update operators: %e',timings.operator.total(it));
-% end
-
-% function [state, ops, solution, collision, forces] = LOCAL_euler_step(state, ops, collision, t, i)
-%     %{
-%     Performs a single forward-Euler step of the system of rigid-body particles.
-%     Uses the BIE operators and boundary information at time t to compute surface
-%     velocities and rigid-body motions, advances centers and orientations,
-%     updates operators for the new geometry at the next timestep.
-
-%     Inputs
-%     state       - (struct) simulation state info
-%     ops         - (struct) operators associated with simulation
-%     collision   - (struct) collision state info
-
-%     Outputs
-%     state       - (struct) simulation state info
-%     ops         - (struct) operators associated with simulation
-%     collision   - (struct) collision state info
-%     %}
-
-
-% end
-
 function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,closest_points_1,closest_points_2,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)
     %{
     Performs a single forward-Euler step of the system of rigid-body particles.
@@ -652,29 +618,14 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
 
         %% Magnetic solve for potential \phi.
         % Build RHS (i.e. \eta H_0 \cdot n)
-        rhs = zeros(np*n3,1);
-
-        % TODO: add functionality to get normal vectors, and replaced the
-        % Sc code below.
-        for j=1:n3
-            
-        end
-
-        if size(Sc,2)>1
-            for j=1:n3
-                Nr = reshape(Sc{p,j}.geoProp.nor.to_array,[],3);
-                indx=(1:np)+np*(j-1); 
-                rhs(indx) = Fparams.eta*Nr*Fparams.H0; 
-            end
-        else
-            Nr = reshape(Sc{p}.geoProp.nor.to_array,[],3); 
-            rhs = Fparams.eta*repmat(Nr,n3,1)*Fparams.H0; 
-        end
+        H0 = Fparams.H0;
+        Nr_all = Fparams.parbd.Nrp; % Normals are calculated in set_params
+        rhs = Fparams.eta * (Nr_all * H0);  % (np*n3) x 1
         
         % Solve
         q_density = Lslv(KLD,rhs,parslv); 
 
-        fprintf('\n Magnetic potential solve res = %1.4g \n',norm(Lapp(KLD,q_density)-rhs)); 
+        fprintf('\n Magnetic potential solve res = %1.4g \n', norm(Lapp(KLD,q_density)-rhs)); 
 
         % Compute Maxwell stress, forces and torques
         % dphi/dn at Gamma

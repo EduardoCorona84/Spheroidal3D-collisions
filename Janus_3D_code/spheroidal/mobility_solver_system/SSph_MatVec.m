@@ -56,9 +56,8 @@ polar_radii = params.polar_radii;
 
 if isempty(Gmatrix_cache)
     body_shape_types = params.shape_type;
-    ns = numel(equ_radii);
-    Gmatrix_cache = cell(1, ns);
-    for i=1:ns
+    Gmatrix_cache = cell(1, n3);
+    for i=1:n3
         body_shape = body_shape_types(i);
         switch body_shape
             case 'sphere'
