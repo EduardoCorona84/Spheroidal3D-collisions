@@ -90,20 +90,21 @@ Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.L = Lk;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Set preconditioner
-if n3>1
-    if strcmp(prtype,'TT')        
-        fprintf('\n TT preconditioner build'); 
-        [parslv.prec,parslv.prev] = RBS_setprec(Kernels.ITSSDd,n3,prtype,p,Fparams.parbd,prev); 
-    elseif strcmp(prtype,'bkdiag')
-        fprintf('\n Block diagonal preconditioner build');
-        parslv.prec = RBS_setprec(Kernels.ITSSDd,n3,prtype);  
-    elseif strcmp(prtype(1:3),'Vsh')
-        fprintf(['\n Sparse / TT ' prtype ' preconditioner build']);
-        [parslv.prec,parslv.prev] = RBS_setprec(Lk,n3,prtype,p,Fparams.parbd,prev);
-    else
-        parslv.prec=[]; 
-    end
-end
+% if n3>1
+%     if strcmp(prtype,'TT')        
+%         fprintf('\n TT preconditioner build'); 
+%         [parslv.prec,parslv.prev] = RBS_setprec(Kernels.ITSSDd,n3,prtype,p,Fparams.parbd,prev); 
+%     elseif strcmp(prtype,'bkdiag')
+%         fprintf('\n Block diagonal preconditioner build');
+%         parslv.prec = RBS_setprec(Kernels.ITSSDd,n3,prtype);  
+%     elseif strcmp(prtype(1:3),'Vsh')
+%         fprintf(['\n Sparse / TT ' prtype ' preconditioner build']);
+%         [parslv.prec,parslv.prev] = RBS_setprec(Lk,n3,prtype,p,Fparams.parbd,prev);
+%     else
+%         parslv.prec=[]; 
+%     end
+% end
+parslv.prec = [];
 
 Fparams.parslv = parslv;
 
@@ -124,6 +125,12 @@ fprintf('Time for SLP update: %e\n',toc);
 tic
 Kernels.TD = SpheroidalMS_MatVec([],Lk,typeMV,Fparams.parbd,sdim,0.5,'TSL_Stk_3D');
 fprintf('Time for TSL update: %e\n',toc);
+
+if strcmp(Fparams.type,'MHD')
+    % Laplace kernels
+    Kernels.SLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0,'SL_L_3D',Kernels.SLD0); 
+    Kernels.KLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0.5,'dSL_L_3D',Kernels.KLD0);
+end
 
 fprintf('Time for kernel eval update: %e\n',toc) 
 if i>0

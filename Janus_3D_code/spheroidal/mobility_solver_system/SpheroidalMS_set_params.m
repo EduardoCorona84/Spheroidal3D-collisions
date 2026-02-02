@@ -65,10 +65,10 @@ tau = cell(n3,1);
 Cg = reshape(repmat(C.',np,1),3,[]).';
 Xg = zeros(np*n3,3); Wg=zeros(np*n3,1); Nrg=Xg; Xrp = Xg;
 
-shape_type = calculate_shape_type(equ_radii, polar_radii);
+body_shape_types = calculate_shape_type(equ_radii, polar_radii);
 
 for j=1:n3
-    shape_type = shape_type(j);
+    shape_type = body_shape_types(j);
     equatorial_radius = equ_radii(j);
     polar_radius = polar_radii(j);
     surface = LOCAL_build_axisymmetric_shape(p, shape_type, equatorial_radius, polar_radius);
@@ -142,7 +142,7 @@ parbd = struct(...
     'eps',eps, ...
     'a',0, ...
     'doAna',doAna, ...
-    'shape_type',shape_type ...
+    'shape_type',body_shape_types ...
 ); 
 
 parbd.W = W; 
