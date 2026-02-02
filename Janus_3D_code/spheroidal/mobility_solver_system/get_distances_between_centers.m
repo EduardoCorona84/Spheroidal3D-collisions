@@ -14,7 +14,9 @@ function den = get_distances_between_centers(C)
     d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
     den = sqrt(d1.^2 + d2.^2 + d3.^2);
 
-    if any(den(:) == 0)
-        warning('Zero distance in LOCAL_CenterDistance; handling of this is not implemented.');
+    % Diagonal entries are self-distances; only warn on zero off-diagonal distances.
+    n = size(C, 1);
+    if n > 1 && any(den(~eye(n)) == 0)
+        warning('Zero distance between distinct centers in LOCAL_CenterDistance; handling of this is not implemented.');
     end
 end
