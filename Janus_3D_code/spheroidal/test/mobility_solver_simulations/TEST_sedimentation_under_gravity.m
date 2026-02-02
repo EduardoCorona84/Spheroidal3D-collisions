@@ -9,7 +9,7 @@ addpath(genpath('../../../spheroidal'));
 addpath(genpath('../../../support'));
 
 %% SETUP
-scenario = '1body';
+scenario = '2body';
 
 % Simulation parameters
 kerd = 3; % Kernel dimension
