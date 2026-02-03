@@ -54,6 +54,8 @@ out = params.out;   % outside vs inside sphere
 equ_radii = params.equ_radii;
 polar_radii = params.polar_radii;
 
+pot = params.flag_pot;
+
 if isempty(Gmatrix_cache)
     body_shape_types = params.shape_type;
     Gmatrix_cache = cell(1, n3);
@@ -69,9 +71,6 @@ if isempty(Gmatrix_cache)
     end
 end
 
-% Input validation
-assert(kerd==3, 'Kernel dimension 1 is not implemented.');
-
 % Rotation of bodies
 if isfield(params,'MRot')
     MRot = params.MRot;
@@ -82,7 +81,6 @@ else
 end
 
 % Handle neighbors
-% TODO: remove params.neigh, as it's just clutter
 if isfield(params,'neigh')
     neigh=params.neigh; % Neighbor list (cell(n3,1)) 
 else
@@ -96,8 +94,6 @@ else
     end
     params.neigh=neigh;  
 end
- 
-pot = params.flag_pot;
 
 % Determine whether Kernel_Eval needs target normals
 nortrg = true;
@@ -118,12 +114,16 @@ if strcmp(V, 'Mat')
     % Then, replace self-to-self and self-to-near appropriately.
     Y = Kernel_Eval(Xv,Xv,params);
 
-    prm = zeros(1, Nb);
-    prm(1:np) = 1:3:Nb;
-    prm(np+1:2*np) = 2:3:Nb;
-    prm(2*np+1:3*np) = 3:3:Nb;
-    iprm = zeros(1, Nb);
-    iprm(prm) = 1:Nb;
+    if kerd == 3
+        prm = zeros(1, Nb);
+        prm(1:np) = 1:3:Nb;
+        prm(np+1:2*np) = 2:3:Nb;
+        prm(2*np+1:3*np) = 3:3:Nb;
+        iprm = zeros(1, Nb);
+        iprm(prm) = 1:Nb;
+    else
+        iprm = 1:Nb;
+    end
 
     for body_ind=1:n3
         % Indices for source particle
@@ -158,33 +158,24 @@ if strcmp(V, 'Mat')
         end
 
         if strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate')
-            if kerd==1
-                error('not implemented.');
-            else
-                [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
-                if num_ngh > 1
-                    slf = find(neigh{body_ind}==body_ind); 
-                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
-                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+            [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
+            if num_ngh > 1
+                slf = find(neigh{body_ind}==body_ind); 
+                indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
 
-                    Ynear = zeros(Nb*num_ngh, Nb);
+                Ynear = zeros(Nb*num_ngh, Nb);
 
-                    if ~isempty(ind_off)
-                        target_pts_off = target_pts(ind_off,:);
-                        target_normals_off = target_normals(ind_off,:);
-                        Ynear(indv_off,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts_off, target_normals_off, np, iprm, source_Gmatrix);
-                    end
-                    Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
-                else
-                    Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
+                if ~isempty(ind_off)
+                    target_pts_off = target_pts(ind_off,:);
+                    target_normals_off = target_normals(ind_off,:);
+                    Ynear(indv_off,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts_off, target_normals_off, np, iprm, source_Gmatrix);
                 end
+                Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
+            else
+                Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
             end
         elseif strcmp(body_shape_type, 'sphere')
-            if kerd==1
-                error('Scalar kernels on spheres not implemented here.');
-            end
-
-            % Map pot to kernel type (as in VSh_MatVec_RB2)
             switch pot(1:3)
                 case 'SL_'
                     pMat = 'SMat';
@@ -206,22 +197,28 @@ if strcmp(V, 'Mat')
 
             % Rescale geometry to unit sphere for spectral near-eval
             Xtrg = (1/equ_radius) * target_pts;
-            Nrtrg = params.nor(I_nghv,:);
-            if rot
-                Nrtrg = Nrtrg * MRot{body_ind};
-            end
 
             [th, phi, rho] = cart2sph(Xtrg(:,1), Xtrg(:,2), Xtrg(:,3));
             th(th<0) = th(th<0) + 2*pi;
             phi = pi/2 - phi;
 
-            Ynear = Vsh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
+            if kerd == 1
+                Nrtrg = target_normals;
+                Ynear = Sh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
+            else
+                Nrtrg = params.nor(I_nghv,:);
+                if rot
+                    Nrtrg = Nrtrg * MRot{body_ind};
+                end
 
-            if rot && kerd==3
-                Ynear = permute(reshape(Ynear,[3 np*num_ngh Nb]),[2 3 1]); 
-                Ynear = reshape(Ynear,[],3)*MRot{body_ind};   
-                Ynear = permute(reshape(Ynear,[np*num_ngh Nb 3]),[3 1 2]); 
-                Ynear = reshape(Ynear,[],Nb); 
+                Ynear = Vsh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
+
+                if rot
+                    Ynear = permute(reshape(Ynear,[3 np*num_ngh Nb]),[2 3 1]); 
+                    Ynear = reshape(Ynear,[],3)*MRot{body_ind};   
+                    Ynear = permute(reshape(Ynear,[np*num_ngh Nb 3]),[3 1 2]); 
+                    Ynear = reshape(Ynear,[],Nb); 
+                end
             end
 
             if strncmp(pot,'SL_',3)
@@ -290,6 +287,10 @@ elseif ~isempty(V) && isnumeric(V)
         equ_radius = equ_radii(body_ind);
         polar_radius = polar_radii(body_ind);
         body_shape_type = params.shape_type(body_ind);
+        source_Gmatrix = [];
+        if ~isempty(Gmatrix_cache)
+            source_Gmatrix = Gmatrix_cache{body_ind};
+        end
 
         target_pts = params.X(I_nghv(1:kerd:end),:);
         target_normals = params.nor(I_nghv(1:kerd:end),:);
@@ -307,15 +308,68 @@ elseif ~isempty(V) && isnumeric(V)
 
         if strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate')
             if kerd==1
-                error('not implemented.');
+                % Scalar Laplace near-eval on spheroids
+                sigma = V(I_box,:);
+
+                % Build local parameters
+                [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
+                params_i = SpheroidalParameters();
+                params_i.sigma = sigma; % set p for geometry generation
+                params_i.u0 = u0;
+                params_i.a = a;
+                params_i.oblate = oblate;
+                params_i.centers = [0 0 0];
+                params_i.thetas = 0;
+                params_i.phis = 0;
+                params_i.Rmat = eye(3);
+
+                if num_ngh > 1
+                    slf = find(neigh{body_ind}==body_ind); 
+                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+                    Ynear = zeros(Nb*num_ngh, size(sigma,2));
+
+                    if ~isempty(ind_off)
+                        target_pts_off = target_pts(ind_off,:);
+                        target_normals_off = target_normals(ind_off,:);
+                        if strcmp(pot,'SL_L_3D')
+                            Ynear(indv_off,:) = LOCAL_eval_lslp(params_i, target_pts_off, sigma, source_Gmatrix);
+                        else
+                            Ynear(indv_off,:) = LOCAL_eval_ldslp(params_i, target_pts_off, target_normals_off, sigma, source_Gmatrix);
+                        end
+                    end
+
+                    if strcmp(pot,'SL_L_3D')
+                        Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_eval_lslp(params_i, [], sigma, source_Gmatrix);
+                    else
+                        Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_eval_ldslp(params_i, [], [], sigma, source_Gmatrix);
+                    end
+                else
+                    if strcmp(pot,'SL_L_3D')
+                        Ynear = LOCAL_eval_lslp(params_i, [], sigma, source_Gmatrix);
+                    else
+                        Ynear = LOCAL_eval_ldslp(params_i, [], [], sigma, source_Gmatrix);
+                    end
+                end
             else
                 % Grab density on source particle
                 sig_x = V(I_box(1:3:end));
                 sig_y = V(I_box(2:3:end));
                 sig_z = V(I_box(3:3:end));
 
-                % Calculate u0, a, and oblate for L2Stk.
+                % Build local parameters for optimized L2Stk
                 [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
+                params_i = SpheroidalParameters();
+                params_i.sigma = sig_x; % set p for geometry generation
+                params_i.u0 = u0;
+                params_i.a = a;
+                params_i.oblate = oblate;
+                params_i.centers = [0 0 0];
+                params_i.thetas = 0;
+                params_i.phis = 0;
+                params_i.Rmat = eye(3);
+
                 if num_ngh > 1
                     % Get indices of target sources (self vs off-diagonal within neighbor list)
                     slf = find(neigh{body_ind}==body_ind); 
@@ -323,24 +377,46 @@ elseif ~isempty(V) && isnumeric(V)
                     ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
 
                     Ynear = zeros(Nb*num_ngh,1);
-                    
-                    % Evaluate desired layer potential on source particle on off-diagonal neighbor targets
-                    target_pts_off = target_pts(ind_off,:);
-                    target_normals_off = target_normals(ind_off,:);
-                    Ynear(indv_off) = SpheroidalMS_L2Stk_MatVec_near(pot, u0, a, oblate, sig_x, sig_y, sig_z, target_pts_off, target_normals_off);
-                    
-                    % Add self-evaluation
-                    Ynear(Nb*(slf-1)+1:Nb*slf) = SpheroidalMS_L2Stk_MatVec_near(pot,u0,a,oblate,sig_x,sig_y,sig_z,[],[]);
+
+                    if ~isempty(ind_off)
+                        target_pts_off = reshape(target_pts(ind_off,:), [], 3, 1);
+                        target_normals_off = reshape(target_normals(ind_off,:), [], 3, 1);
+                        switch pot
+                            case 'SL_Stk_3D'
+                                Ynear(indv_off) = LOCAL_eval_l2stk_slp(params_i, target_pts_off, sig_x, sig_y, sig_z, source_Gmatrix);
+                            case 'TSL_Stk_3D'
+                                Ynear(indv_off) = LOCAL_eval_l2stk(params_i, target_pts_off, target_normals_off, sig_x, sig_y, sig_z, source_Gmatrix);
+                            case 'DL_Stk_3D'
+                                error('No reason to use this.');
+                            otherwise
+                                error('Incorrect potential passed in.');
+                        end
+                    end
+
+                    switch pot
+                        case 'SL_Stk_3D'
+                            Ynear(Nb*(slf-1)+1:Nb*slf) = LOCAL_eval_l2stk_slp(params_i, [], sig_x, sig_y, sig_z, source_Gmatrix);
+                        case 'TSL_Stk_3D'
+                            Ynear(Nb*(slf-1)+1:Nb*slf) = LOCAL_eval_l2stk(params_i, [], [], sig_x, sig_y, sig_z, source_Gmatrix);
+                        case 'DL_Stk_3D'
+                            error('No reason to use this.');
+                        otherwise
+                            error('Incorrect potential passed in.');
+                    end
                 else
-                    Ynear = SpheroidalMS_L2Stk_MatVec_near(pot,u0,a,oblate,sig_x,sig_y,sig_z,[],[]);
+                    switch pot
+                        case 'SL_Stk_3D'
+                            Ynear = LOCAL_eval_l2stk_slp(params_i, [], sig_x, sig_y, sig_z, source_Gmatrix);
+                        case 'TSL_Stk_3D'
+                            Ynear = LOCAL_eval_l2stk(params_i, [], [], sig_x, sig_y, sig_z, source_Gmatrix);
+                        case 'DL_Stk_3D'
+                            error('No reason to use this.');
+                        otherwise
+                            error('Incorrect potential passed in.');
+                    end
                 end
             end
         elseif strcmp(body_shape_type, 'sphere')
-            if kerd==1
-                error('Scalar kernels on spheres not implemented here.');
-            end
-
-            % Map pot to kernel type (as in VSh_MatVec_RB2)
             switch pot(1:3)
                 case 'SL_'
                     pMat = 'SMat';
@@ -364,41 +440,62 @@ elseif ~isempty(V) && isnumeric(V)
             % target_pts are already translated (and rotated if rot) into the local frame
             Xtrg = (1/equ_radius) * target_pts;
 
-            % Target normals in the local frame, duplicated per component
-            Nrtrg = params.nor(I_nghv,:);
-            if rot
-                Nrtrg = Nrtrg * MRot{body_ind};
-            end
-
             % Spherical coordinates on unit sphere frame
             [th, phi, rho] = cart2sph(Xtrg(:,1), Xtrg(:,2), Xtrg(:,3));
             th(th<0) = th(th<0) + 2*pi;
             phi = pi/2 - phi;
 
-            % Build vector SH coefficients for the source body's density
             Vloc = V(I_box,:);
-            % Densities are assumed in the local body frame
-            Vh_loc = VshAna([Vloc(1:3:end,:); Vloc(2:3:end,:); Vloc(3:3:end,:)],'VW');
+            if kerd == 1
+                Nrtrg = target_normals;
+                Vh_loc = shAna(Vloc);
 
-            if num_ngh>1
-                slf = find(neigh{body_ind}==body_ind); 
-                indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
-                ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+                if num_ngh>1
+                    slf = find(neigh{body_ind}==body_ind); 
+                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
 
-                Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
+                    Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
 
-                % Self term (evaluate at unit radius)
-                Ynear(Nb*(slf-1)+1:Nb*slf, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
-                % Off-diagonal neighbor terms at specified spherical coordinates and normals
-                if ~isempty(ind_off)
-                    Ynear(indv_off, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off,:));
+                    % Self term (evaluate at unit radius)
+                    Ynear(Nb*(slf-1)+1:Nb*slf, :) = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                    % Off-diagonal neighbor terms at specified spherical coordinates and normals
+                    if ~isempty(ind_off)
+                        Ynear(indv_off, :) = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(ind_off,:));
+                    end
+                else
+                    Ynear = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
                 end
             else
-                Ynear = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
-            end
+                % Target normals in the local frame, duplicated per component
+                Nrtrg = params.nor(I_nghv,:);
+                if rot
+                    Nrtrg = Nrtrg * MRot{body_ind};
+                end
 
-            if size(Ynear,2) > 1
-                Ynear = sum(Ynear, 2);
+                % Densities are assumed in the local body frame
+                Vh_loc = VshAna([Vloc(1:3:end,:); Vloc(2:3:end,:); Vloc(3:3:end,:)],'VW');
+
+                if num_ngh>1
+                    slf = find(neigh{body_ind}==body_ind); 
+                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+                    Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
+
+                    % Self term (evaluate at unit radius)
+                    Ynear(Nb*(slf-1)+1:Nb*slf, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                    % Off-diagonal neighbor terms at specified spherical coordinates and normals
+                    if ~isempty(ind_off)
+                        Ynear(indv_off, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off,:));
+                    end
+                else
+                    Ynear = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                end
+
+                if size(Ynear,2) > 1
+                    Ynear = sum(Ynear, 2);
+                end
             end
 
             % Scale from unit sphere back to radius r
@@ -674,27 +771,30 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
     params_i.thetas = 0;
     params_i.phis = 0;
     params_i.Rmat = eye(3);
-    ns = 1;
 
     if isempty(target_pts)
-        X_eval_numeric = [];
-        Nu_eval_numeric = [];
+        X_eval = [];
+        Nu_eval = [];
     else
-        X_eval_numeric = reshape(target_pts, size(target_pts,1), 3, 1);
-        Nu_eval_numeric = reshape(target_normals, size(target_normals,1), 3, 1);
+        X_eval = reshape(target_pts, size(target_pts,1), 3, 1);
+        Nu_eval = reshape(target_normals, size(target_normals,1), 3, 1);
     end
 
     switch pot
+        case 'SL_L_3D'
+            Ynear = LOCAL_eval_lslp(params_i, X_eval, I, source_Gmatrix);
+        case 'dSL_L_3D'
+            Ynear = LOCAL_eval_ldslp(params_i, X_eval, Nu_eval, I, source_Gmatrix);
         case 'SL_Stk_3D'
-            Yx = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, I, Z, Z, ns, source_Gmatrix);
-            Yy = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, Z, I, Z, ns, source_Gmatrix);
-            Yz = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, Z, Z, I, ns, source_Gmatrix);
+            Yx = LOCAL_eval_l2stk_slp(params_i, X_eval, I, Z, Z, source_Gmatrix);
+            Yy = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, I, Z, source_Gmatrix);
+            Yz = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, Z, I, source_Gmatrix);
         case 'DL_Stk_3D'
             error('No reason to use this for the mobility solver.');
         case 'TSL_Stk_3D'
-            Yx = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, I, Z, Z, source_Gmatrix);
-            Yy = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, Z, I, Z, source_Gmatrix);
-            Yz = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, Z, Z, I, source_Gmatrix);
+            Yx = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, I, Z, Z, source_Gmatrix);
+            Yy = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, Z, I, Z, source_Gmatrix);
+            Yz = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, Z, Z, I, source_Gmatrix);
         otherwise
             error('Incorrect potential passed in.');
     end
@@ -703,6 +803,12 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
         ntrg = np;
     else
         ntrg = size(target_pts,1);
+    end
+
+    if strcmp(pot,'SL_L_3D') || strcmp(pot,'dSL_L_3D')
+        Ynear = reshape(Ynear, ntrg, np);
+        Ynear = Ynear(:, iprm);
+        return;
     end
 
     Yx = reshape(Yx, 3*ntrg, np);
@@ -714,18 +820,66 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
     Ynear = Ynear(:, iprm);
 end
 
-function eval = LOCAL_eval_l2stk_slp(params_i, X_eval_numeric, sigma_x, sigma_y, sigma_z, ns, source_Gmatrix)
-    [vx, vy, vz] = L2StkSLPOptimized(X_eval_numeric, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix);
+function eval = LOCAL_eval_l2stk_slp(params_i, X_eval, sigma_x, sigma_y, sigma_z, source_Gmatrix)
+    [vx, vy, vz] = L2StkSLPOptimized(X_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix);
 
     % Interleave result
     eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
 end
 
-function eval = LOCAL_eval_l2stk(params_i, X_eval_numeric, Nu_eval_numeric, sigma_x, sigma_y, sigma_z, source_Gmatrix)
-    [vx, vy, vz] = L2StkTLPOptimized(X_eval_numeric, Nu_eval_numeric, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false);
+function eval = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, sigma_x, sigma_y, sigma_z, source_Gmatrix)
+    [vx, vy, vz] = L2StkTLPOptimized(X_eval, Nu_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false);
 
     % Interleave result
     eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
+end
+
+function eval = LOCAL_eval_lslp(params_i, X_eval, sigma, source_Gmatrix)
+    shc = shAna(sigma);
+    if isempty(source_Gmatrix)
+        Gshc = shc;
+    else
+        Gshc = source_Gmatrix \ shc;
+    end
+    Gshc = reshape(Gshc, size(Gshc,1), size(Gshc,2), 1);
+
+    if isempty(X_eval)
+        X_trg = [];
+    else
+        X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
+    end
+
+    SL = spheroidalSLOptimized(params_i.p, params_i.u0, params_i.a, params_i.oblate, Gshc, params_i.isReal, X_trg);
+    eval = reshape(SL, size(SL,1), size(SL,2));
+end
+
+function eval = LOCAL_eval_ldslp(params_i, X_eval, Nu_eval, sigma, source_Gmatrix)
+    shc = shAna(sigma);
+    if isempty(source_Gmatrix)
+        Gshc = shc;
+    else
+        Gshc = source_Gmatrix \ shc;
+    end
+    Gshc = reshape(Gshc, size(Gshc,1), size(Gshc,2), 1);
+
+    if isempty(X_eval)
+        X_trg = [];
+        Nu = params_i.get_Norm();
+    else
+        X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
+        Nu = Nu_eval;
+    end
+
+    if isempty(Nu)
+        error('Target normals required for dSL_L_3D evaluation.');
+    end
+
+    nu_x = reshape(Nu, size(Nu,1), 3, 1);
+    nu_y = nu_x;
+    nu_z = nu_x;
+
+    [SPx, ~, ~] = spheroidalSPOptimized(params_i.p, params_i.u0, params_i.a, params_i.oblate, Gshc, params_i.isReal, nu_x, nu_y, nu_z, X_trg);
+    eval = reshape(SPx, size(SPx,1), size(SPx,2));
 end
 
 function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_type)

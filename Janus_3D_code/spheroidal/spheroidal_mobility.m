@@ -588,8 +588,7 @@ end
     
 function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt)
     %{
-        This functions mostly seems to be for debugging and not too relevant for the
-        actual mobility solver.
+        This function is used to calculate the data on the surfaces for the solve.
     %}
     Energy = 0;
     parslv = Fparams.parslv; 
@@ -611,7 +610,6 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         FT = [Force;Torque]; FT = FT(:); 
         fM = Bk'*FT;
     case 'MHD'
-        error('MHD not finished.');
         KLD = Kernels.KLD; 
         SLD = Kernels.SLD; 
         fprintf('\n Magnetic potential Solve at time %.2f \n',t)
@@ -624,19 +622,23 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         
         % Solve
         q_density = Lslv(KLD,rhs,parslv); 
-
         fprintf('\n Magnetic potential solve res = %1.4g \n', norm(Lapp(KLD,q_density)-rhs)); 
 
         % Compute Maxwell stress, forces and torques
-        % dphi/dn at Gamma
-        phi_n_e = Fparams.mur/(1-Fparams.mur)*q_density; 
-        phi_n_i = 1/(1-Fparams.mur)*q_density; 
+
         % phi at Gamma (Continuous)
         phi = -Xt*Fparams.H0 + Lapp(SLD,q_density); 
 
-        % Formulas 
+        % Formulas
         Pot2Field = @(phi, phi_n,S) -1*S.geoProp.Grad(phi) -1*vec3d([phi_n; phi_n; phi_n]).*S.geoProp.nor;  %  -Grad phi - phi_n n
-        maxwellSnor = @(E,S) times(dot(E, S.geoProp.nor), E) - times(dot(E,E), S.geoProp.nor)/2; % n \cdot (E \oprod E - 1/2 |E|^2 I)
+        
+        % Maxwell stress dotted with normal: n \cdot (E \oprod E - 1/2 |E|^2 I)
+        maxwell_traction = @(E,S) times(dot(E, S.geoProp.nor), E) - times(dot(E,E), S.geoProp.nor)/2;
+
+        % dphi/dn at Gamma (this is derived from continuity at the interface)
+        % Fparams.mur = \mu / \mu_0 (dimensionless quantity)
+        phi_n_e = Fparams.mur/(1-Fparams.mur)*q_density; 
+        phi_n_i = 1/(1-Fparams.mur)*q_density; 
 
         % Magnetic Field (exterior and interior)
         fM = zeros(3*np*n3,1); 
@@ -644,13 +646,17 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         for j=1:n3
             indx=(1:np)+np*(j-1); 
             indv=(1:3*np)+3*np*(j-1); 
-            sj = min(j,size(Sc,2));   
-            H_i{j} = Pot2Field(phi(indx), phi_n_i(indx),Sc{p,sj});
-            H_e{j} = Pot2Field(phi(indx), phi_n_e(indx),Sc{p,sj});
+
+            % Rebuild surface (since we need access to geoProp.Grad)
+            S = SurfaceSph(vec3d(Xt(indx,:)));
+
+            H_i{j} = Pot2Field(phi(indx), phi_n_i(indx), S);
+            H_e{j} = Pot2Field(phi(indx), phi_n_e(indx), S);
+
             %Maxwell stress . normal (traction)
-            ftmp = maxwellSnor(H_e{j},Sc{p,sj}) - maxwellSnor(H_i{j},Sc{p,sj}); 
-            ftmp = real(reshape(ftmp.to_array,[],3))'; 
-            fM(indv) = ftmp(:); 
+            traction = maxwell_traction(H_e{j}, S) - maxwell_traction(H_i{j}, S); 
+            traction = real(reshape(traction.to_array,[],3))'; 
+            fM(indv) = traction(:); 
         end
 
         fprintf('\n Magnetic forces and torques \n'); 
