@@ -29,12 +29,12 @@ if isempty(X_trg)
     [Yr, v_k, phi_k] = LOCAL_precompute_gd_grid(p);
     nt = length(v_k);
 
-    GDSL_U = zeros(nt, nf, ns, "like", Gshc_x);
-    GDSL_V = zeros(nt, nf, ns, "like", Gshc_x);
-    GDSL_PHI = zeros(nt, nf, ns, "like", Gshc_x);
+    GDSL_U = zeros(nt, nf, ns);
+    GDSL_V = zeros(nt, nf, ns);
+    GDSL_PHI = zeros(nt, nf, ns);
 
     for k = 1:ns
-        u_k = u0(k) .* ones(nt, 1, "like", v_k);
+        u_k = u0(k) .* ones(nt, 1);
         [Ucomp, Vcomp, PHIcomp] = LOCAL_graddivSL_eval( ...
             p, u0(k), a(k), u_k, v_k, phi_k, ...
             Gshc_x(:, :, k), Gshc_y(:, :, k), Gshc_z(:, :, k), oblate(k), Yr);
@@ -55,9 +55,9 @@ else
     end
 
     nt = size(X_trg, 1);
-    GDSL_U = zeros(nt, nf, ns, "like", Gshc_x);
-    GDSL_V = zeros(nt, nf, ns, "like", Gshc_x);
-    GDSL_PHI = zeros(nt, nf, ns, "like", Gshc_x);
+    GDSL_U = zeros(nt, nf, ns);
+    GDSL_V = zeros(nt, nf, ns);
+    GDSL_PHI = zeros(nt, nf, ns);
 
     for k = 1:ns
         Xtk = X_trg(:, :, k);
@@ -75,9 +75,9 @@ else
 
         regions = {indices_interior, indices_surface, indices_exterior};
 
-        GDSL_k_U = zeros(ntk, nf, "like", Gshc_x);
-        GDSL_k_V = zeros(ntk, nf, "like", Gshc_x);
-        GDSL_k_PHI = zeros(ntk, nf, "like", Gshc_x);
+        GDSL_k_U = zeros(ntk, nf);
+        GDSL_k_V = zeros(ntk, nf);
+        GDSL_k_PHI = zeros(ntk, nf);
 
         for r = 1:3
             idx = regions{r};
@@ -175,21 +175,21 @@ function [Ucomponent, Vcomponent, PHIcomponent] = LOCAL_graddivSL_eval(p, u0, a,
                     Yn2m_coeff .* Yr2;
     end
 
-    Ucomponent = zeros(nt_r, size(Gshc_x, 2), "like", Gshc_x);
+    Ucomponent = zeros(nt_r, size(Gshc_x, 2));
     for i = 1:3
         type = gshc_types{i};
         Gshc_coeff = calculate_gshc_coeff(coeffs.U.(type));
         Ucomponent = Ucomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
     end
 
-    Vcomponent = zeros(nt_r, size(Gshc_x, 2), "like", Gshc_x);
+    Vcomponent = zeros(nt_r, size(Gshc_x, 2));
     for i = 1:3
         type = gshc_types{i};
         Gshc_coeff = calculate_gshc_coeff(coeffs.V.(type));
         Vcomponent = Vcomponent + (common_coeffs.' .* Gshc_coeff) * Gshc_data{i};
     end
 
-    PHIcomponent = zeros(nt_r, size(Gshc_x, 2), "like", Gshc_x);
+    PHIcomponent = zeros(nt_r, size(Gshc_x, 2));
     for i = 1:3
         type = gshc_types{i};
         Gshc_coeff = calculate_gshc_coeff(coeffs.PHI.(type));
@@ -233,7 +233,7 @@ end
 function Yr = LOCAL_build_Yr(p, v, phi)
     nt = length(v);
     sp = (p + 1)^2;
-    Yr = zeros(nt * 3, sp, "like", v);
+    Yr = zeros(nt * 3, sp);
     v_row = real(acos(v)).';
 
     for n = 0:p

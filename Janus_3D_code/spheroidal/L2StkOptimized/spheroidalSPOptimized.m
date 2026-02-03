@@ -14,7 +14,7 @@ if isempty(X_trg)
     SPz = zeros(nt_r, nf, ns);
 
     for k = 1:ns
-        u_k = u0(k) .* ones(nt_r, 1, "like", v_k);
+        u_k = u0(k) .* ones(nt_r, 1);
         S = [u_k, v_k, phi_k];
 
         nu_cart_list = {nu_x, nu_y, nu_z};
@@ -64,7 +64,7 @@ else
 
         nu_cart_list = {nu_x, nu_y, nu_z};
         for nu_ind = 1:3
-            SPk = zeros(ntk, nf, "like", Gshc);
+            SPk = zeros(ntk, nf);
             nu_cart_k = nu_cart_list{nu_ind}(:, :, k);
 
             for r = 1:3
@@ -85,7 +85,7 @@ else
 
                 [Fr, Fp] = LOCAL_solid_harmonic_prime(p, u0(k), u_x_r, oblate(k));
                 nt_r = length(u_x_r);
-                Yr = zeros(nt_r * 2, (p + 1)^2, "like", Gshc);
+                Yr = zeros(nt_r * 2, (p + 1)^2);
 
                 for n = 0:p
                     Yn = Ynm(n, [], real(acos(v_x_r))', phi_x_r);

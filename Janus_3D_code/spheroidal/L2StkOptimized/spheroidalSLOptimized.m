@@ -38,12 +38,8 @@ if isempty(X_trg)
         SL = real(SL);
     end
 else
-    if ~isnumeric(X_trg) || ndims(X_trg) ~= 3 || size(X_trg, 2) ~= 3 || size(X_trg, 3) ~= ns
-        error("X_trg must be nt x 3 x ns for numeric-only mode.");
-    end
-
     nt = size(X_trg, 1);
-    SL = zeros(nt, nf, ns, "like", Gshc);
+    SL = zeros(nt, nf, ns);
     [spectra_int, spectra_surf, spectra_ext] = LOCAL_SLspectrum(p, u0, a, oblate);
 
     for k = 1:ns
@@ -61,7 +57,7 @@ else
         regions = {indices_interior, indices_surface, indices_exterior};
         spectra_regions = {spectra_int(:, k), spectra_surf(:, k), spectra_ext(:, k)};
 
-        SLk = zeros(ntk, nf, "like", Gshc);
+        SLk = zeros(ntk, nf);
         for r = 1:3
             idx = regions{r};
             if ~any(idx)
@@ -75,7 +71,7 @@ else
 
             Fr = LOCAL_solid_harmonic(p, u0(k), u_x_r, oblate(k));
             nt_r = length(u_x_r);
-            Yr = zeros(nt_r, sp, "like", Gshc);
+            Yr = zeros(nt_r, sp);
             v_row = real(acos(v_x_r));
 
             for n = 0:p
