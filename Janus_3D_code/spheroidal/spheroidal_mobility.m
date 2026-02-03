@@ -93,8 +93,6 @@ function spheroidal_mobility(fname,Fparams,init)
             'Fparams.dt must be a strictly positive scalar.');
         assert(any(strcmp(Fparams.tdisc, {'euler','trapz','rk4','abash'})), ...
             'Fparams.tdisc must be one of: euler, trapz, rk4, abash.');
-        assert(any(strcmp(Fparams.type, {'FTfun'})), ...
-            'Fparams.type must be one of: FTfun.');
         assert(islogical(Fparams.denseMV) || ismember(Fparams.denseMV,[0,1]), ...
             'Fparams.denseMV must be true or false.');
         assert(islogical(Fparams.comp) || ismember(Fparams.comp,[0,1]), ...
@@ -650,8 +648,8 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
             % Rebuild surface (since we need access to geoProp.Grad)
             S = SurfaceSph(vec3d(Xt(indx,:)));
 
-            H_i{j} = Pot2Field(phi(indx), phi_n_i(indx), S);
-            H_e{j} = Pot2Field(phi(indx), phi_n_e(indx), S);
+            H_i{j} = Pot2Field(phi(indx).', phi_n_i(indx), S);
+            H_e{j} = Pot2Field(phi(indx).', phi_n_e(indx), S);
 
             %Maxwell stress . normal (traction)
             traction = maxwell_traction(H_e{j}, S) - maxwell_traction(H_i{j}, S); 

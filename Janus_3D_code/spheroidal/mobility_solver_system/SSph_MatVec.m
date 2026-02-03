@@ -106,13 +106,24 @@ np = 2*p*(p+1);
 Nb = kerd*np; % 3*np
 N = Nb*n3; % Number of "data points" needed for entire system
 X = params.Xp;
-Xv = params.X; 
+Xv = params.X;
+Nor = params.nor;
+W2 = params.W2;
+
+if kerd == 1 % For this, get the unstacked versions
+    Xv = params.Xp;
+    Nor = params.Nrp;
+    W2 = params.Wg.';
+end
 
 %% ACTUAL MATVEC
 if strcmp(V, 'Mat')
     % Start with Kernel Eval (correct for far-interactions)
     % Then, replace self-to-self and self-to-near appropriately.
-    Y = Kernel_Eval(Xv,Xv,params);
+    params_KE = params; % Copy it to handle this for kerd = 1 (maybe not so efficient)
+    params_KE.W2 = W2;
+    params_KE.nor = Nor;
+    Y = Kernel_Eval(Xv,Xv,params_KE);
 
     if kerd == 3
         prm = zeros(1, Nb);
@@ -146,8 +157,8 @@ if strcmp(V, 'Mat')
             source_Gmatrix = Gmatrix_cache{body_ind};
         end
 
-        target_pts = params.X(I_nghv(1:kerd:end),:);
-        target_normals = params.nor(I_nghv(1:kerd:end),:);
+        target_pts = Xv(I_nghv(1:kerd:end),:);
+        target_normals = Nor(I_nghv(1:kerd:end),:);
 
         % Near-interaction
         if rot
@@ -206,7 +217,7 @@ if strcmp(V, 'Mat')
                 Nrtrg = target_normals;
                 Ynear = Sh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
             else
-                Nrtrg = params.nor(I_nghv,:);
+                Nrtrg = Nor(I_nghv,:);
                 if rot
                     Nrtrg = Nrtrg * MRot{body_ind};
                 end
@@ -292,8 +303,8 @@ elseif ~isempty(V) && isnumeric(V)
             source_Gmatrix = Gmatrix_cache{body_ind};
         end
 
-        target_pts = params.X(I_nghv(1:kerd:end),:);
-        target_normals = params.nor(I_nghv(1:kerd:end),:);
+        target_pts = Xv(I_nghv(1:kerd:end),:);
+        target_normals = Nor(I_nghv(1:kerd:end),:);
 
         %% Near-interaction
         % No matter what, we need to rotate the target spheres and spheroids to be in the local frame
@@ -468,7 +479,7 @@ elseif ~isempty(V) && isnumeric(V)
                 end
             else
                 % Target normals in the local frame, duplicated per component
-                Nrtrg = params.nor(I_nghv,:);
+                Nrtrg = Nor(I_nghv,:);
                 if rot
                     Nrtrg = Nrtrg * MRot{body_ind};
                 end
@@ -531,12 +542,12 @@ elseif ~isempty(V) && isnumeric(V)
 
         if dense
             if nortrg
-                parnear.nor = params.nor(far_idx_v,:);
+                parnear.nor = Nor(far_idx_v,:);
             else
                 % DL/SDL: source normals per source block
-                parnear.nor = params.nor(I_box,:);
+                parnear.nor = Nor(I_box,:);
             end
-            parnear.W2 = params.W2(I_box);
+            parnear.W2 = W2(I_box);
             if isfield(parnear,'ci')
                 parnear.ci = repmat((1:kerd)',sum(far_idx_v)/kerd,1);
             end
@@ -554,11 +565,11 @@ elseif ~isempty(V) && isnumeric(V)
             end
         else
             if nortrg
-               parnear.nor = params.nor(I_nghv,:);  
+               parnear.nor = Nor(I_nghv,:);  
             else
-               parnear.nor = params.nor(I_box,:);
+               parnear.nor = Nor(I_box,:);
             end
-            parnear.W2 = params.W2(I_box); 
+            parnear.W2 = W2(I_box); 
             if isfield(parnear,'ci')
                 parnear.ci = repmat((1:kerd)',sum(~far_idx_v)/3,1);
             end
@@ -574,8 +585,8 @@ elseif ~isempty(V) && isnumeric(V)
 
     % If using FMM flag (dense==false), add far interactions via FMM
     if ~dense
-        Nr = params.nor(1:kerd:end,:);
-        W = params.W2.';
+        Nr = Nor(1:kerd:end,:);
+        W = W2.';
         Y = Y + LOCAL_FMM_Eval(V, W, kerd, pot, X, X, Nr);
     end
 
