@@ -39,7 +39,8 @@ V = V(:, perm);
 D = V ./ sqrt(w);
 
 % Have to normalize so the spheroidal wave functions are normalized
-% ||P_l^m||^2 = 2/(2l+1) * (l+m)!/(l-m)!
+% Recall that:
+%   ||P_l^m||^2 = 2/(2l+1) * (l+m)!/(l-m)!
 normalization_constant = 2./(2*deg+1) .* factorial(deg+abs(m)+1) ./ factorial(deg-abs(m)+1);
 
 for j = 1:N
