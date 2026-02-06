@@ -1167,7 +1167,8 @@ function [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams)
         jp = jj(id); 
     
         % Compute minimum relative distance between spheres
-        mindst=min(reshape((distC-diam)./mxrd,[],1));
+        reldist = (distC-diam)./max_radii;
+        mindst=min(reshape(reldist(~eye(n3)),[],1));
     else
         ip=[]; jp=[]; 
         mindst=Inf; 
@@ -1263,8 +1264,9 @@ function den = LOCAL_CenterDistances(C)
     d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
     den = sqrt(d1.^2 + d2.^2 + d3.^2);
 
-    if any(den(:) == 0)
-        error('Zero distance in LOCAL_CenterDistance; handling of this is not implemented.');
+    % Use a logical mask to ignore the diagonal (distance from particle to itself)
+    if any(den(~eye(size(den))) == 0)
+        error('Zero distance between distinct particles in LOCAL_CenterDistance; handling of this is not implemented.');
     end
 end
 
@@ -1272,8 +1274,8 @@ function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_dist
 
     %switch statement for different distance algorithms.
     %right now we will just implement two options, moving balls and GJK signed volumes accelerated
-    switch lower(Fparams.parbd.distance.algo)
-        case 'moving balls'
+    switch lower(Fparams.parbd.bodydist.algo)
+        case 'moving_balls'
             distance_algo = @moving_balls_pair;
         case 'gjk signed volumes accelerated'
             distance_algo = @GJK_signed_volumes_accelerated_pair;
@@ -1282,31 +1284,53 @@ function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_dist
     end
 
     %row vector of the pairwise distances
-    distances = zeros(1, size(collist, 2));
+    distances = zeros(1, size(collist, 1));
     %row vector of the closest points of the 1st particle in the collision pair
-    closest_points_1 = zeros(3, size(collist, 2));
+    closest_points_1 = zeros(3, size(collist, 1));
     %row vector of the closest points of the 2nd particle in the collision pair
-    closest_points_2 = zeros(3, size(collist, 2));
+    closest_points_2 = zeros(3, size(collist, 1));
     % These are column vectors
 
     for collision_pair = 1:size(distances, 2)
         %this depends on how I implement the distance algorithms, which params are passed, the params are just placeholders for now, but we really just need the centers, the shapes (and rotation matrices), tolerance and iters
 
         %create temporary structs to hold the spheroid params for the 2 spheroids in the collision pair
-        spheroid_1_params.C = C(collist(collision_pair, 1), :);
-        spheroid_1_params.R = Mt{collist(collision_pair, 1)};
-        spheroid_1_params.a = Fparams.parbd.polar_radii(collist(collision_pair, 1));
-        spheroid_1_params.b = Fparams.parbd.equ_radii(collist(collision_pair, 1));
-        spheroid_1_params.c = spheroid_1_params.b;
+
+        curr_index_1 = collist(collision_pair, 1);
+        curr_index_2 = collist(collision_pair, 2);
+
+        %spheroid 1spheroid_1_params.b = spheroid_1_params.a;
+        spheroid_1_params.C = C(curr_index_1, :);
+        spheroid_1_params.R = Mt{curr_index_1};
+        switch(lower(Fparams.parbd.shape_type(curr_index_1)))
+            case 'oblate' 
+            spheroid_1_params.a = Fparams.parbd.polar_radii(curr_index_1);
+            spheroid_1_params.c = Fparams.parbd.equ_radii(curr_index_1);
+
+            case 'prolate'
+            spheroid_1_params.a = Fparams.parbd.equ_radii(curr_index_1); 
+            spheroid_1_params.c = Fparams.parbd.polar_radii(curr_index_1);
+
+        end
+        spheroid_1_params.b = spheroid_1_params.a;
 
         %spheroid 2
-        spheroid_2_params.C = C(collist(collision_pair, 2), :);
-        spheroid_2_params.R = Mt{collist(collision_pair, 2)};
-        spheroid_2_params.a = Fparams.parbd.polar_radii(collist(collision_pair, 2));
-        spheroid_2_params.b = Fparams.parbd.equ_radii(collist(collision_pair, 2));
-        spheroid_2_params.c = spheroid_2_params.b;
+        spheroid_2_params.C = C(curr_index_2, :);
+        spheroid_2_params.R = Mt{curr_index_2};
+        switch(lower(Fparams.parbd.shape_type(curr_index_2)))
+            case 'oblate' 
+            spheroid_2_params.a = Fparams.parbd.polar_radii(curr_index_2);
+            spheroid_2_params.c = Fparams.parbd.equ_radii(curr_index_2);
 
-        [closest_points_1(:, collision_pair), closest_points_2(:, collision_pair), distances(collision_pair)] = distance_algo(spheroid_1_params, spheroid_2_params, Fparams.parbd.distance.tol, Fparams.parbd.distance.max_iters);
+        case 'prolate'
+            spheroid_2_params.a = Fparams.parbd.equ_radii(curr_index_2);
+            spheroid_2_params.c = Fparams.parbd.polar_radii(curr_index_2);
+
+        end
+        spheroid_2_params.b = spheroid_2_params.a;
+        
+
+        [closest_points_1(:, collision_pair), closest_points_2(:, collision_pair), distances(collision_pair)] = distance_algo(spheroid_1_params, spheroid_2_params, Fparams.parbd.bodydist.tol, Fparams.parbd.bodydist.max_iter);
     end
 
 end

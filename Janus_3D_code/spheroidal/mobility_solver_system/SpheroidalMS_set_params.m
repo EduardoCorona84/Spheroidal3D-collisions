@@ -34,6 +34,7 @@ arguments
     opts.flag_pot (1,1) string {mustBeMember(opts.flag_pot,["SL_Stk_3D", "TSL_Stk_3D"])}
     opts.kerd (1,1) double
     opts.dense (1,1) logical
+    opts.bodydist (1,1) struct
 end
 
 % Alias variables
@@ -49,6 +50,7 @@ doAna = opts.doAna;
 flag_pot = opts.flag_pot;
 kerd = opts.kerd;
 dense = opts.dense;
+bodydist = opts.bodydist;
 
 np=2*p*(p+1); 
 Nb = kerd*np; % DOF per particle   
@@ -142,7 +144,8 @@ parbd = struct(...
     'eps',eps, ...
     'a',0, ...
     'doAna',doAna, ...
-    'shape_type',body_shape_types ...
+    'shape_type',body_shape_types, ...
+    'bodydist', bodydist ...
 ); 
 
 parbd.W = W; 
