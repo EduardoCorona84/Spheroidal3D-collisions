@@ -7,6 +7,10 @@ but evaluated using Ynm to avoid manual Legendre summation.
 Inputs:
     n, m    - degree/order (|m| <= n). If m = [], returns all orders m=-n:n.
     v       - evaluation points in (-1,1)
+              A common pattern to pass into this function:
+                [theta, phi] = gl_grid(qp);
+                v = cos(theta);
+                ASWFnm(n, m, v, phi, gamma);
     phi     - azimuth
     c       - spheroidal parameter
     p       - max Legendre degree for truncation (optional)

@@ -25,16 +25,12 @@ a=params.a;
 isReal=params.isReal;
 oblate=params.oblate;
 
-gamma = 1j * lambda * a;
-
 shc = params.sigma_coefficients;
 
 [sp, nf, ns] = size(shc);
 if sp ~= (p + 1)^2
     error("shc first dimension must be (p+1)^2.");
 end
-
-swfc = shc_to_swfc(shc, p, oblate, gamma); 
 
 if isscalar(u0)
     u0 = u0 .* ones(1, ns);
@@ -47,21 +43,25 @@ if isscalar(oblate)
 end
 
 if isempty(X_trg)
-    Snm = LOCAL_compute_Snm(p, gamma);
-    nt = size(Snm, 1);
+    [theta2, ~] = gl_grid(p);
+    nt = numel(theta2);
+    modDL = zeros(nt, nf, ns);
 
-    [~, spectra_surf, ~] = LOCAL_modDLPspectrum(p, u0, a, oblate, gamma);
-    spectra_surf = reshape(spectra_surf, sp, 1, ns);
-    spectra_matrix = repmat(spectra_surf, 1, nf, 1);
-
-    modDL_coefs = spectra_matrix .* swfc;
-    modDL = Snm * reshape(modDL_coefs, sp, []);
-    modDL = reshape(modDL, nt, nf, ns);
+    for k = 1:ns
+        gamma_k = 1j * lambda * a(k);
+        swfc_k = shc_to_swfc(shc(:, :, k), p, oblate(k), gamma_k);
+        Snm_k = LOCAL_compute_Snm(p, gamma_k);
+        [~, spectra_surf_k, ~] = LOCAL_modDLPspectrum(p, u0(k), a(k), oblate(k), gamma_k);
+        spectra_surf_k = spectra_surf_k(:);
+        modDL(:, :, k) = Snm_k * (spectra_surf_k .* swfc_k);
+    end
 
     if isReal
         modDL = real(modDL);
     end
 else
+    gamma = 1j * lambda * a;
+    swfc = shc_to_swfc(shc, p, oblate, gamma);
     nt = size(X_trg, 1);
     modDL = zeros(nt, nf, ns);
     [spectra_int, spectra_surf, spectra_ext] = LOCAL_modDLPspectrum(p, u0, a, oblate);
@@ -94,17 +94,17 @@ else
             Fr = LOCAL_solid_swf(p, u0(k), u_x_r, oblate(k));
             nt_r = length(u_x_r);
             Sr = zeros(nt_r, sp);
-            v_row = real(acos(v_x_r));
+            v_row = real(v_x_r);
 
             for n = 0:p
                 An = ASWFnm(n, [], v_row, phi_x_r, gamma);
                 Sr(:, n^2+1:(n+1)^2) = An;
             end
 
-            FYr = Fr .* Sr;
+            SYr = Fr .* Sr;
             spectra_matrix = repmat(spectra_regions{r}, 1, nf);
             modDLcoefs_r = spectra_matrix .* swfc(:, :, k);
-            modDLk(idx, :) = FYr * modDLcoefs_r;
+            modDLk(idx, :) = SYr * modDLcoefs_r;
         end
 
         if isReal, modDLk = real(modDLk); end
@@ -115,27 +115,25 @@ end %% END MAIN FUNCTION
 
 function [lambda_int, lambda_surf, lambda_ext] = LOCAL_modDLPspectrum(p, u0, a, oblate, c)
     sp = (p + 1)^2;
-    ii = (1:sp)'; nn = floor(sqrt(ii-1)); mm = ii - nn.^2 - nn - 1;
 
     if oblate
         error('Not implemented.')
     else
-        cnm = -1j*c*(u0^2 - 1);
+        cnm = 1j*c*(u0^2 - 1);
 
-        Rnm1_vec = zeros(1, (p+1)^2);
-        Rnm3_vec = zeros(1, (p+1)^2);
-        dRnm1_vec = zeros(1, (p+1)^2);
-        dRnm3_vec = zeros(1, (p+1)^2);
+        Rnm1_vec = zeros(1, sp);
+        Rnm3_vec = zeros(1, sp);
+        dRnm1_vec = zeros(1, sp);
+        dRnm3_vec = zeros(1, sp);
 
-        for j=1:p % Really ugly and inefficient, but it works (also can be solved by just caching).
-            % [Rnm1_vec(j^2+1:(j+1)^2), dRnm1_vec(j^2+1:(j+1)^2)] = Rnm1(j, [], u0, c);
-            [a, b] = Rnm1(j, [], u0, c);
-            Rnm1_vec(j^2+1:(j+1)^2) = a;
-            dRnm1_vec(j^2+1:(j+1)^2) = b;
-            % [Rnm3_vec(j^2+1:(j+1)^2), dRnm3_vec(j^2+1:(j+1)^2)] = Rnm3(j, [], u0, c);
-            [a, b] = Rnm3(j, [], u0, c);
-            Rnm3_vec(j^2+1:(j+1)^2) = a;
-            dRnm3_vec(j^2+1:(j+1)^2) = b;
+        for j = 0:p
+            idx = j^2 + 1:(j + 1)^2;
+            [R1_j, dR1_j] = Rnm1(j, [], u0, c);
+            [R3_j, dR3_j] = Rnm3(j, [], u0, c);
+            Rnm1_vec(idx) = R1_j;
+            dRnm1_vec(idx) = dR1_j;
+            Rnm3_vec(idx) = R3_j;
+            dRnm3_vec(idx) = dR3_j;
         end
     end
     if oblate
@@ -172,9 +170,9 @@ function S = LOCAL_compute_Snm(p, c)
     sp = (p + 1)^2;
 
     S = zeros(nt_r, sp);
-    v_row = real(acos(v_k)).';
+    v_row = real(v_k);
     for n = 0:p
-        Yn = ASWFnm(n, [], v_row, phi_k, c);
+        Yn = ASWFnm(n, [], v_row, phi_k, c, p, 0);
         S(:, n^2+1:(n+1)^2) = Yn;
     end
 end
