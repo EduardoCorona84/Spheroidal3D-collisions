@@ -1,4 +1,4 @@
-function [x1, x2, d, distanceIters] = movingBallsPair(par1, par2, tol, maxIter, val)
+function [x1, x2, d, distanceIters] = moving_balls_pair(par1, par2, tol, maxIter, val)
 
 %get parameters of the ellipsoids.
 %for notation:
