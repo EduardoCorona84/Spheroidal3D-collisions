@@ -7,17 +7,17 @@ One spheroid should not induce any rotation, but multiple spheroids might
 
 addpath(genpath('../../../spheroidal'));
 addpath(genpath('../../../support'));
+addpath(genpath('../../../FMMLIB'));
 
 %% SETUP
-scenario = '2body';
+scenario = '1body';
 
 % Simulation parameters
 kerd = 3; % Kernel dimension
-dense = true; % Dense vs FMM off diagonal 
 out = true; % outside vs inside sphere
 Nt = 100;
 dt = 0.1;
-denseMV = true;
+denseMV = true; % Dense vs FMM off diagonal 
 tdisc = 'euler';
 p = 8;
 mdist = 1e-2; % Collision parameter ?

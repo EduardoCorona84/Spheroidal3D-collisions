@@ -598,7 +598,7 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
     Bk = Nullsp.B; Ck = Nullsp.C; Lk = Nullsp.L; 
     
     switch Fparams.type
-    case 'FTfun' 
+    case 'FTfun' % Force and torque are given
         Ffun = Fparams.Ffun; 
         Tfun = Fparams.Tfun; 
         Ct = Fparams.parbd.C; 

@@ -34,7 +34,7 @@ prtype -> block diagonal or tensor train (so format of data)?
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Initialize variables to be used later
-sdim=3; 
+sdim=3; ldim=1;
 parslv = Fparams.parslv; 
 prec=parslv.prec;
 prev=parslv.prev;
@@ -128,8 +128,8 @@ fprintf('Time for TSL update: %e\n',toc);
 
 if strcmp(Fparams.type,'MHD')
     % Laplace kernels
-    Kernels.SLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0,'SL_L_3D',Kernels.SLD0); 
-    Kernels.KLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0.5,'dSL_L_3D',Kernels.KLD0);
+    Kernels.SLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0,'SL_L_3D'); 
+    Kernels.KLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0.5,'dSL_L_3D');
 end
 
 fprintf('Time for kernel eval update: %e\n',toc) 
