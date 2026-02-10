@@ -7,6 +7,15 @@ comments on the required inputs.
 
 disp('Initializing parameters...');
 
+% Handling of variables for specific problem types
+if isfield(Fparams, 'type')
+switch Fparams.type
+   case 'MHD'
+      % MHD parameters for Laplace BIE
+      Fparams.eta = (Fparams.mur-1)/(Fparams.mur+1); 
+end
+end
+
 % Params struct for rigid bodies
 p = Fparams.parbd.p;
 C = Fparams.parbd.Ct;

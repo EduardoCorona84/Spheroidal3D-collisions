@@ -1,4 +1,4 @@
-function [C,B,D,L] = Build_SpheroidalAuxMats(Wg,Xg,Xc,np,n3)
+function [C,B,D,A,L] = Build_SpheroidalAuxMats(Wg,Xg,Xc,np,n3)
 %{
 Builds the rigid-body motion completion operator. Note that these operators
 assume the input density is in an interleaved format; i.e. for a body with
@@ -40,6 +40,8 @@ B : 6*n3 x 3*np*n3 array
     the spheroids.
 D : 6*n3 x 3*np*n3 array
     unweighted version of C
+A : 6*n3 x 3*np*n3 array
+    weighted version of B
 L : 3*np*n3 x 3*np*n3 array
     the projection operator L = B^T * C. projects any surface density onto
     the space of densities that correspond to rigid body motion
@@ -48,9 +50,9 @@ L : 3*np*n3 x 3*np*n3 array
 N = 3*np*n3; 
 % I = row index, J = column index, V = value
 IC = []; JC = []; VC = []; 
-VD = []; VB = [];  
+VD = []; VB = []; VA = [];
 
-if nargout==4
+if nargout==5
     IL = []; JL = []; VL = []; 
 end
 
@@ -73,22 +75,24 @@ for i=1:n3
     % vector for the i-th spheroid.
     % Note the ordering:
     % [sig_x1, sig_y1, sig_z1, sig_x2, ...]
-    indx =(1:3:3*np)+3*np*(i-1); 
-    indy =(2:3:3*np)+3*np*(i-1); 
-    indz =(3:3:3*np)+3*np*(i-1);
+    indx = (1:3:3*np)+3*np*(i-1); 
+    indy = (2:3:3*np)+3*np*(i-1); 
+    indz = (3:3:3*np)+3*np*(i-1);
 
-    % C*sigma = [int{sigma} ; int{X \times sigma}]    
-    IC = [IC; reshape(repmat(6*(i-1)+(1:6),np,1),[],1) ; reshape(repmat(6*(i-1)+(4:6),np,1),[],1)];
-    JC = [JC;
-          indx'; indy'; indz'; ...
-          indy'; indz'; indx'; ...
-          indz'; indx'; indy'
-    ]; 
-    VC = [VC;
-          W; W; W; ...
+    % C*sigma = [int{sigma} ; int{X \times sigma}]   
+    ICloc = [reshape(repmat(6*(i-1)+(1:6),np,1),[],1) ; reshape(repmat(6*(i-1)+(4:6),np,1),[],1)];
+    IC = [IC ; ICloc];
+    JCloc = [indx'; indy'; indz'; ...
+             indy'; indz'; indx'; ...
+             indz'; indx'; indy'
+    ];
+    JC = [JC ; JCloc];
+
+    VCloc = [W; W; W; ...
           -W.*X(:,3); -W.*X(:,1); -W.*X(:,2); ...
           W.*X(:,2);  W.*X(:,3); W.*X(:,1)
     ];
+    VC = [VC ; VCloc];
 
     % First three vectors are just integrals of f for each coordinate
     VD = [VD;
@@ -101,22 +105,30 @@ for i=1:n3
     tau_yy = sum(W.*X(:,1).^2)+sum(W.*X(:,3).^2); 
     tau_zz = sum(W.*X(:,1).^2)+sum(W.*X(:,2).^2); 
 
-    VB = [VB;
-          oW./sumW; oW./sumW; oW./sumW ; ...
+    
+    VBloc = [oW./sumW; oW./sumW; oW./sumW ; ...
           -X(:,3)./tau_xx; -X(:,1)./tau_yy; -X(:,2)./tau_zz; ...
           X(:,2)./tau_xx;  X(:,3)./tau_yy; X(:,1)./tau_zz
     ];
+    VB = [VB ; VBloc];
+
+    Wav = (1/sum(W))*W; 
+    VA = [VA; Wav; Wav; Wav ; ...
+         -(1/tau_xx)*W.*X(:,3); -(1/tau_yy)*W.*X(:,1); -(1/tau_zz)*W.*X(:,2);...
+         (1/tau_xx)*W.*X(:,2);  (1/tau_yy)*W.*X(:,3); (1/tau_zz)*W.*X(:,1)];
 
     % We divide by the integral of ((X-X_c) (x) 1)^2 over Sc. 
     idxM = (1:3*np)+3*np*(i-1); 
-    C = sparse(IC,JC,VC,6*n3,N);
-    B = sparse(IC,JC,VB,6*n3,N);
+    Cloc = zeros(6,3*np); Bloc = zeros(6,3*np); 
 
-    if nargout==4  
+    Cloc((ICloc-6*(i-1)) + 6*(JCloc-3*np*(i-1)-1)) = VCloc; 
+    Bloc((ICloc-6*(i-1)) + 6*(JCloc-3*np*(i-1)-1)) = VBloc;
+
+    if nargout==5 
         [JJ,II] = meshgrid(idxM,idxM); 
         IL = [IL ; II(:)]; 
         JL = [JL ; JJ(:)]; 
-        Lb = B(6*(i-1)+(1:6),idxM)'*C(6*(i-1)+(1:6),idxM); % B^T*C
+        Lb = Bloc'*Cloc; % B^T*C
         VL = [VL ; Lb(:)];
     end
 end
@@ -124,9 +136,10 @@ end
 C = sparse(IC,JC,VC,6*n3,N); 
 B = sparse(IC,JC,VB,6*n3,N);
 D = sparse(IC,JC,VD,6*n3,N);
+A = sparse(IC,JC,VA,6*n3,N); 
 
-if nargout==4
+if nargout==5
     L = sparse(IL,JL,VL,N,N);
 end
- 
+
 end

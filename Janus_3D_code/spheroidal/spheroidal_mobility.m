@@ -648,8 +648,15 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
             % Rebuild surface (since we need access to geoProp.Grad)
             S = SurfaceSph(vec3d(Xt(indx,:)));
 
-            H_i{j} = Pot2Field(phi(indx).', phi_n_i(indx), S);
-            H_e{j} = Pot2Field(phi(indx).', phi_n_e(indx), S);
+            phi_body = phi(indx);
+            phi_body = phi_body(:);
+            phi_n_i_body = phi_n_i(indx);
+            phi_n_i_body = phi_n_i_body(:);
+            phi_n_e_body = phi_n_e(indx);
+            phi_n_e_body = phi_n_e_body(:);
+
+            H_i{j} = Pot2Field(phi_body, phi_n_i_body, S);
+            H_e{j} = Pot2Field(phi_body, phi_n_e_body, S);
 
             %Maxwell stress . normal (traction)
             traction = maxwell_traction(H_e{j}, S) - maxwell_traction(H_i{j}, S); 
@@ -879,7 +886,7 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fp
     %
 
     TD = Kernels.TD; SD = Kernels.SD; 
-    Bk = Nullsp.B; Ck = Nullsp.C; Lk = Nullsp.L; 
+    Bk = Nullsp.B; Ak = Nullsp.A; Lk = Nullsp.L; 
     numF = length(ip); 
 
 
@@ -974,23 +981,26 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fp
     bkdiag=false;
 
     if ~matfree
-        Bf = (Bk.')*F; 
-        %(3) (-0.5I-K)*rho_c
-        MNS = -Lapp(TD,Bf)+Lk*Bf;
-        %(4) 3x3 MNS=VNS*S(mu_c+rho_c)  
-        MuNS = Lslv(TD,MNS,parslv); 
+        rho_c = (Bk.')*F; % This is rho_c -- the incident field.
+        BIE_RHS = -Lapp(TD,rho_c)+Lk*rho_c; % (-0.5I-T)*rho_c
+        mu_c = Lslv(TD,BIE_RHS,parslv); % \mu_c = (0.5I + T + L)^{-1}(-0.5I - T)*rho_c
 
-        % Setup LCP x perp A*x + b (dense build of Amat = F^T M F)
-        Amat = real(F.'*(Ck*Lapp(SD,MuNS+Bf))); 
+        % Setup LCP: x \perp A*x + b (dense build of Amat = F^T M F)
+        % Lapp(SD, MuNS+Bf) represents the mobility solve, and conversion of density to velocity.
+        % Ak*Lapp(SD,MuNS+Bf)) extracts the rigid body motion from the velocity (i.e. the mobility matrix).
+        % So, Amat = F^T (A S (0.5I + T + L)^{-1}(-0.5 - T)B^T) F, where whatever is in the paranthesis is
+        %   the mobility matrix \mathcal{M} in the equation \mathcal{U} = \mathcal{M}F.
+        Amat = real(F.'*(Ak*Lapp(SD,mu_c+rho_c))); 
     else
         parslv.tol = parslv.coltol; 
-        Bf = @(x) (Bk.')*(F*x);
+        rho_c = @(x) (Bk.')*(F*x);
         if bkdiag
             S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2));
             IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-            Amat = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+            Amat = @(x) real(F.'*(Ak*(S0(-IT0(Lapp(TD,rho_c(x))+Lk*rho_c(x))+rho_c(x)))));
         else 
-            Amat = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,Bf(x))+Lk*Bf(x),parslv)+Bf(x))));
+            % This is a shortened version of the dense code from above.
+            Amat = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,rho_c(x))+Lk*rho_c(x),parslv)+rho_c(x))));
         end
         
         parslv.tol = tol; 

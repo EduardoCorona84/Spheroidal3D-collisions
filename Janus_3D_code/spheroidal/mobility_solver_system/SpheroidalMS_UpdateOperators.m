@@ -88,8 +88,8 @@ end
 % Build Kernels / MatVec info
 
 % Here, Lk is the actual nullspace operator (i.e. its matvec).
-[Ck, Bk, Dk, Lk] = Build_SpheroidalAuxMats(Fparams.parbd.Wg,Xt,[],np,n3); 
-Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.L = Lk;
+[Ck, Bk, Dk, Ak, Lk] = Build_SpheroidalAuxMats(Fparams.parbd.Wg,Xt,[],np,n3); 
+Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.A = Ak; Nullsp.L = Lk;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Set preconditioner
@@ -141,4 +141,3 @@ if i>0
 end
 
 end
-    
