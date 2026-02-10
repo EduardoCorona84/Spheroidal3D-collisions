@@ -7,18 +7,18 @@ function plot_state = plot_init(Fparams, Xt, np, n3)
 
     plot_state.view = [-1 0.5 0.5];
     if isfield(Fparams,'plotView')
-        plot_state.view = Fparams.plotView.';
+        plot_state.view = Fparams.plotView(:).';
     end
 
     plot_state.view_init = [];
     plot_state.view_applied = false;
     if isfield(Fparams,'plotViewInit')
-        plot_state.view_init = Fparams.plotViewInit.';
+        plot_state.view_init = Fparams.plotViewInit(:).';
     end
 
     plot_state.axis = [];
     if isfield(Fparams,'plotAxis')
-        plot_state.axis = Fparams.plotAxis.';
+        plot_state.axis = Fparams.plotAxis(:).';
     end
 
     mins = min(Xt, [], 1);
@@ -37,7 +37,7 @@ function plot_state = plot_init(Fparams, Xt, np, n3)
     if isfield(Fparams,'plotColor')
         plot_state.color_source = Fparams.plotColor;
     end
-    
+
     plot_state.color_mode = 'inf';
     if isfield(Fparams,'plotColorMode')
         plot_state.color_mode = Fparams.plotColorMode;
@@ -45,7 +45,7 @@ function plot_state = plot_init(Fparams, Xt, np, n3)
 
     plot_state.color_limits = [];
     if isfield(Fparams,'plotColorLimits')
-        plot_state.color_limits = Fparams.plotColorLimits.';
+        plot_state.color_limits = Fparams.plotColorLimits(:).';
     end
 
     plot_state.traj_enable = false;
