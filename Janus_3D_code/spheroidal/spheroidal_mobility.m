@@ -622,13 +622,13 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         q_density = Lslv(KLD,rhs,parslv); 
         fprintf('\n Magnetic potential solve res = %1.4g \n', norm(Lapp(KLD,q_density)-rhs)); 
 
-        % Compute Maxwell stress, forces and torques
+        %% Compute Maxwell stress, forces and torques
 
         % phi at Gamma (Continuous)
         phi = -Xt*Fparams.H0 + Lapp(SLD,q_density); 
 
-        % Formulas
-        Pot2Field = @(phi, phi_n,S) -1*S.geoProp.Grad(phi) -1*vec3d([phi_n; phi_n; phi_n]).*S.geoProp.nor;  %  -Grad phi - phi_n n
+        % -1*\nabla \phi = -\nabla_{\Gamma} phi - phi_n n
+        GradientOfPotential = @(phi, phi_n,S) -1*S.geoProp.Grad(phi) -1*vec3d([phi_n; phi_n; phi_n]).*S.geoProp.nor;
         
         % Maxwell stress dotted with normal: n \cdot (E \oprod E - 1/2 |E|^2 I)
         maxwell_traction = @(E,S) times(dot(E, S.geoProp.nor), E) - times(dot(E,E), S.geoProp.nor)/2;
@@ -655,8 +655,8 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
             phi_n_e_body = phi_n_e(indx);
             phi_n_e_body = phi_n_e_body(:);
 
-            H_i{j} = Pot2Field(phi_body, phi_n_i_body, S);
-            H_e{j} = Pot2Field(phi_body, phi_n_e_body, S);
+            H_i{j} = GradientOfPotential(phi_body, phi_n_i_body, S);
+            H_e{j} = GradientOfPotential(phi_body, phi_n_e_body, S);
 
             %Maxwell stress . normal (traction)
             traction = maxwell_traction(H_e{j}, S) - maxwell_traction(H_i{j}, S); 
@@ -665,6 +665,72 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         end
 
         fprintf('\n Magnetic forces and torques \n'); 
+        FT = real(Ck*fM); 
+        display(reshape(FT,6,n3))
+    case 'JanusAmp'
+        error('Need to implement kernels and make a new projection matrix.');
+        SLMODD=Kernels.SLMODD; dSLMODD=Kernels.dSLMODD;
+        DLMODD=Kernels.DLMODD; dDLMODD=Kernels.dDLMODD;
+        flabel=Fparams.SurfaceLabel;
+        % Solves for density, psi & uses them to compute normal derivative
+        if isa(SLMODD,'function_handle')
+            K = @(V) SLMODD(V) + DLMODD(V);
+            P = make_projection(Fparams.parmod.p,1);
+            Proj = @(V) reshape(P*reshape(V,[],n3),[],1);
+
+            % 
+            K_full_rank = @(V) Proj(K(Proj(V))) + V - Proj(V);    
+            [psi,~,~,I]=gmres(K_full_rank, Proj(flabel),100,1e-6);
+            fprintf('\n Janus Amph S+D BIE solve error = %e, %e',norm(K(psi)-Proj(flabel))/norm(flabel), norm(K_full_rank(psi)-Proj(flabel))/norm(flabel)); 
+            
+            phi = K(psi); 
+            phi_n_e=dSLMODD(psi) + dDLMODD(psi);
+        else
+            K=SLMODD+DLMODD;
+            P=make_projection(Fparams.parmod.p,n3);
+            K_full_rank=P*K*P+(eye(np*n3)-P);
+            [psi,~,~,I]=gmres(K_full_rank, P*(flabel),100,1e-6);
+            %display(cond(K_full_rank));
+            Kond = cond(K_full_rank); 
+
+            fprintf('\n Janus Amph S+D BIE solve error = %e, %e',norm(K*psi-P*flabel)/norm(flabel), norm(K_full_rank*psi-P*flabel)/norm(flabel)); 
+            phi = K*psi; 
+            phi_n_e=dSLMODD*psi + dDLMODD*psi;
+        end
+
+        % Computes energy (not necessary for further dynamics)
+        W = repmat(Fparams.parmod.W,n3, 1);
+        Energy = real(-W' * (phi.*phi_n_e));
+        
+        phisquared = phi.*phi;
+
+        % \nabla phi = \nabla_{\Gamma} phi + phi_n n
+        GradientOfPotential = @(phi, phi_n, S) S.geoProp.Grad(phi) + vec3d([phi_n; phi_n; phi_n]).*S.geoProp.nor;
+        
+        % -n \cdot (2 * E \oprod E - |E|^2 I) + lambda*u^2
+        % This is Equation (47) in the paper (there are typos in the paper, so instead refer to the original paper it's referencing).
+        % Recall that \lambda^2 = 1/p^2.
+        % Fparams.gamma is the ratio of the amphiphilic to viscous pressure (denoted eta in the paper).
+        maxwellSnor = @(E,S,phi2) (Fparams.gamma) * ( ...
+                            times(dot(E,E), S.geoProp.nor) - 2*times(dot(E, S.geoProp.nor), E) ...
+                            + (Fparams.lambda)*times(phi2,S.geoProp.nor) ...
+                        );
+        fM = zeros(3*np*n3,1); 
+ 
+        for j=1:n3
+            indx=(1:np)+np*(j-1); 
+            indv=(1:3*np)+3*np*(j-1); 
+
+            S = SurfaceSph(vec3d(Xt(indx,:)));
+            H_e{j} = GradientOfPotential(phi(indx), phi_n_e(indx), S);
+
+            %Maxwell stress . normal (traction)
+            traction = maxwellSnor(H_e{j}, S, phisquared(indx)); 
+            traction = real(reshape(traction.to_array,[],3))'; 
+            fM(indv) = traction(:); 
+        end
+
+        fprintf('\n Forces and torques on amphiphillic Janus particles \n'); 
         FT = real(Ck*fM); 
         display(reshape(FT,6,n3))
     otherwise

@@ -52,21 +52,23 @@ if isempty(X_trg)
         swfc_k = shc_to_swfc(shc(:, :, k), p, oblate(k), gamma_k);
         Snm_k = LOCAL_compute_Snm(p, gamma_k);
         [~, spectra_surf_k, ~] = LOCAL_modDLPspectrum(p, u0(k), a(k), oblate(k), gamma_k);
-        spectra_surf_k = spectra_surf_k(:);
-        modDL(:, :, k) = Snm_k * (spectra_surf_k .* swfc_k);
+        spectra_matrix = repmat(spectra_surf_k(:), 1, nf);
+        modDL(:, :, k) = Snm_k * (spectra_matrix .* swfc_k);
     end
 
     if isReal
         modDL = real(modDL);
     end
 else
-    gamma = 1j * lambda * a;
-    swfc = shc_to_swfc(shc, p, oblate, gamma);
     nt = size(X_trg, 1);
     modDL = zeros(nt, nf, ns);
-    [spectra_int, spectra_surf, spectra_ext] = LOCAL_modDLPspectrum(p, u0, a, oblate);
 
     for k = 1:ns
+        gamma_k = 1j * lambda * a(k);
+        swfc_k = shc_to_swfc(shc(:, :, k), p, oblate(k), gamma_k);
+        [spectra_int_k, spectra_surf_k, spectra_ext_k] = ...
+            LOCAL_modDLPspectrum(p, u0(k), a(k), oblate(k), gamma_k);
+
         Xtk = X_trg(:, :, k);
         ntk = size(Xtk, 1);
         if ntk == 0, continue; end
@@ -79,7 +81,7 @@ else
         indices_exterior = (u_x > u0(k) + 9e-12);
 
         regions = {indices_interior, indices_surface, indices_exterior};
-        spectra_regions = {spectra_int(:, k), spectra_surf(:, k), spectra_ext(:, k)};
+        spectra_regions = {spectra_int_k(:), spectra_surf_k(:), spectra_ext_k(:)};
 
         modDLk = zeros(ntk, nf);
         for r = 1:3
@@ -91,19 +93,19 @@ else
             v_x_r = Sr(:, 2);
             phi_x_r = Sr(:, 3);
 
-            Fr = LOCAL_solid_swf(p, u0(k), u_x_r, oblate(k));
+            Fr = LOCAL_solid_swf(p, u0(k), u_x_r, oblate(k), gamma_k);
             nt_r = length(u_x_r);
             Sr = zeros(nt_r, sp);
             v_row = real(v_x_r);
 
             for n = 0:p
-                An = ASWFnm(n, [], v_row, phi_x_r, gamma);
+                An = ASWFnm(n, [], v_row, phi_x_r, gamma_k, p, 0);
                 Sr(:, n^2+1:(n+1)^2) = An;
             end
 
             SYr = Fr .* Sr;
             spectra_matrix = repmat(spectra_regions{r}, 1, nf);
-            modDLcoefs_r = spectra_matrix .* swfc(:, :, k);
+            modDLcoefs_r = spectra_matrix .* swfc_k;
             modDLk(idx, :) = SYr * modDLcoefs_r;
         end
 
@@ -148,13 +150,17 @@ end
 function F = LOCAL_solid_swf(p, u0, u_x, oblate, c)
     F = ones(size(u_x, 1), (p+1)^2);
     if oblate, error('Not implemented.'); end
-    if abs(u_x) - u0 < -1e-14 % Interior
+    idx_int = abs(u_x) - u0 < -1e-14;
+    idx_ext = abs(u_x) - u0 > 1e-14;
+
+    if any(idx_int)
         for j=1:p
-            F(j^2+1:(j+1)^2) = Rnm1(j, [], u_x, c);
+            F(idx_int, j^2+1:(j+1)^2) = Rnm1(j, [], u_x(idx_int), c);
         end
-    elseif abs(u_x) - u0 > 1e-14 % Exterior
+    end
+    if any(idx_ext)
         for j=1:p
-            F(j^2+1:(j+1)^2) = Rnm3(j, [], u_x, c);
+            F(idx_ext, j^2+1:(j+1)^2) = Rnm3(j, [], u_x(idx_ext), c);
         end
     end
 end
