@@ -2,7 +2,7 @@ function Fr = radial_block_pswf(p, u_region, c, ioprad)
 %{
 For fixed |m| and u, one cprofcn_mex call returns all n >= |m| values.
 We reuse that vector and place it into both +m and -m columns instead
-of calling the scalar wrappers per (n,m).
+of calling the wrappers per (n,m).
 
 Inputs
     p        - truncation order
