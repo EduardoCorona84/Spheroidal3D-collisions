@@ -257,7 +257,7 @@ Tests for angular spheroidal wave function ASWFnm.
         function testOnSurfaceDirectComparisonConvergesWithP(testCase)
             % Examines convergence as p increases.
             lambda = 1;
-            u0 = 500;
+            u0 = 2/sqrt(3);
             n = 5;
             m = 3;
             p_list = [8, 12, 16, 20];
@@ -273,7 +273,7 @@ Tests for angular spheroidal wave function ASWFnm.
             end
 
             T = table(p_list(:), rel_err_analytic, rel_err_RBS, ...
-                'VariableNames', {'p', 'relErrAnalytic', 'relErrDirect'});
+                'VariableNames', {'p', 'analytic error', 'RBS error'});
             disp(T);
 
             testCase.verifyTrue(all(rel_err_analytic < 1e-11), ...

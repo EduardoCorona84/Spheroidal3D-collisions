@@ -154,14 +154,10 @@ function F = LOCAL_solid_swf(p, u0, u_x, oblate, c)
     idx_ext = abs(u_x) - u0 > 1e-14;
 
     if any(idx_int)
-        for j=1:p
-            F(idx_int, j^2+1:(j+1)^2) = Rnm1(j, [], u_x(idx_int), c);
-        end
+        F(idx_int, :) = radial_block_pswf(p, u_x(idx_int), c, 1);
     end
     if any(idx_ext)
-        for j=1:p
-            F(idx_ext, j^2+1:(j+1)^2) = Rnm3(j, [], u_x(idx_ext), c);
-        end
+        F(idx_ext, :) = radial_block_pswf(p, u_x(idx_ext), c, 2);
     end
 end
 
