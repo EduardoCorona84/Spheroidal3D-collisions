@@ -1,4 +1,4 @@
-function [soln, truesoln, sigma_vec, condK, info] = modified_laplace_bie_problem(p, lambda, u0, target_distance, plt, problem_type, rng_seed)
+function [soln, truesoln, sigma_vec, condK, info] = modified_laplace_bie_problem(p, lambda, u0, target_distance, plt, problem_type, rng_seed, eval_backend)
 %{
 Theoretical background on the BIEs for Yukawa's equation can be found
 in Bryan Quaife's PhD thesis.
@@ -26,6 +26,8 @@ Inputs:
     problem_type    - optional:
                       "exterior_dirichlet" (default) or "exterior_neumann".
     rng_seed        - optional scalar seed for random interior charge placement.
+    eval_backend    - optional evaluation backend:
+                      "spectral" (default) or "kernel".
 
 Outputs:
     soln      - reconstructed potential at exterior targets.
@@ -35,11 +37,20 @@ Outputs:
     info      - diagnostic struct.
 %}
 
+if nargin < 6 || isempty(problem_type)
+    problem_type = "exterior_dirichlet";
+end
 if nargin < 7 || isempty(rng_seed)
     rng_seed = 2;
 end
+if nargin < 8 || isempty(eval_backend)
+    eval_backend = "spectral";
+end
+if ~any(eval_backend == ["spectral", "kernel"])
+    error("eval_backend must be 'spectral' or 'kernel'.");
+end
 if ~isscalar(u0)
-    error("This helper only supports a single spheroid (scalar u0).");
+    error("A single spheroid is the only thing supported for now.");
 end
 if any(target_distance <= 0)
     error("target_distance must be positive for exterior target evaluation.");
@@ -63,7 +74,7 @@ Xeval = Y + target_distance * nu;
 
 % Interior point charges/point fluxes are used to generate the data on the surface.
 num_point_charges = 4;
-charge_radius = 0.25 * params.a * sqrt(max(params.u0^2 - 1, eps));
+charge_radius = 0.25 * params.a * sqrt(max(params.u0^2 - 1));
 [ptch, Xptch] = LOCAL_place_interior_point_charges( ...
     params.a, params.u0, params.centers(1, :), num_point_charges, charge_radius, rng_seed);
 truesolnSurf = LOCAL_yukawa_pt_charge(ptch, Xptch, Y, lambda);
@@ -77,32 +88,52 @@ switch problem_type
     case "exterior_dirichlet"
         rhs = truesolnSurf;
 
-        SL = spheroidalModifiedSLP(params_op, lambda, []);
-        DL = spheroidalModifiedDLP(params_op, lambda, []);
+        if eval_backend == "kernel"
+            Ssrc = SurfaceSph(Y);
+            [SL, ~, ~] = kernelModifiedLap(Ssrc, 'SMat', lambda);
+            [~, ~, DL] = kernelModifiedLap(Ssrc, 'DMat', lambda);
+        else
+            SL = spheroidalModifiedSLP(params_op, lambda, []);
+            DL = spheroidalModifiedDLP(params_op, lambda, []);
+        end
         K = 0.5 * eye(np) + SL + DL;
 
         sigma_vec = K \ rhs;
 
-        params_sigma = copy(params);
-        params_sigma.sigma = sigma_vec;
-        params_sigma.get_shc();
+        if eval_backend == "kernel"
+            SL_eval = LOCAL_eval_modified_kernel('SL_LMOD_3D', Xeval, Y, nu, sigma_vec, p, lambda);
+            DL_eval = LOCAL_eval_modified_kernel('DL_LMOD_3D', Xeval, Y, nu, sigma_vec, p, lambda);
+        else
+            params_sigma = copy(params);
+            params_sigma.sigma = sigma_vec;
+            params_sigma.get_shc();
 
-        SL_eval = spheroidalModifiedSLP(params_sigma, lambda, Xeval);
-        DL_eval = spheroidalModifiedDLP(params_sigma, lambda, Xeval);
+            SL_eval = spheroidalModifiedSLP(params_sigma, lambda, Xeval);
+            DL_eval = spheroidalModifiedDLP(params_sigma, lambda, Xeval);
+        end
         soln = SL_eval + DL_eval;
     case "exterior_neumann"
         rhs = truefluxSurf;
 
-        Kp = spheroidalModifiedSP(params_op, lambda, []);
+        if eval_backend == "kernel"
+            Ssrc = SurfaceSph(Y);
+            [~, Kp, ~] = kernelModifiedLap(Ssrc, 'SpMat', lambda);
+        else
+            Kp = spheroidalModifiedSP(params_op, lambda, []);
+        end
         K = -0.5 * eye(np) + Kp;
 
         sigma_vec = K \ rhs;
 
-        params_sigma = copy(params);
-        params_sigma.sigma = sigma_vec;
-        params_sigma.get_shc();
+        if eval_backend == "kernel"
+            soln = LOCAL_eval_modified_kernel('SL_LMOD_3D', Xeval, Y, nu, sigma_vec, p, lambda);
+        else
+            params_sigma = copy(params);
+            params_sigma.sigma = sigma_vec;
+            params_sigma.get_shc();
 
-        soln = spheroidalModifiedSLP(params_sigma, lambda, Xeval);
+            soln = spheroidalModifiedSLP(params_sigma, lambda, Xeval);
+        end
     otherwise
         error('Invalid problem type.');
 end
@@ -117,7 +148,6 @@ rel_soln_abs = norm(soln - truesoln);
 rel_soln_err = rel_soln_abs / norm(truesoln);
 
 info = struct();
-info.problem_type = problem_type;
 info.ptch = ptch;
 info.Xptch = Xptch;
 info.truesolnSurf = truesolnSurf;
@@ -174,8 +204,26 @@ function flux = LOCAL_yukawa_pt_charge_flux(ptch, Xptch, Y, Ny, lambda)
     for i = 1:M
         r_vec = Xptch(i, :) - Y;
         r = sqrt(sum(r_vec.^2, 2));
-        r = max(r, eps);
         edotn = sum(Ny .* (r_vec ./ r), 2);
         flux = flux + ptch(i) * exp(-lambda * r) .* (1 ./ r.^2 + lambda ./ r) .* edotn / (4 * pi);
     end
+end
+
+function val = LOCAL_eval_modified_kernel(pot_name, X_trg, X_src, nu_src, sigma, p, lambda)
+    Ssrc = SurfaceSph(X_src);
+    [~, gwt_gl] = g_grid(p + 1);
+    wt_gl = pi / p * repmat(gwt_gl', 2 * p, 1) ./ sin(gl_grid(p));
+    wt_gl = wt_gl(:);
+    W_src = Ssrc.geoProp.W .* wt_gl;
+
+    KEparams = Kernel_Eval_parameters(pot_name, 0, 1, 1, 1, 1e-12, 2, 400, 1);
+    KEparams.dim = 3;
+    KEparams.X = X_src;
+    KEparams.W2 = W_src.';
+    KEparams.lambda = lambda;
+    if strcmp(char(pot_name), 'DL_LMOD_3D')
+        KEparams.nor = nu_src;
+    end
+
+    val = Kernel_Eval(X_trg, X_src, KEparams) * sigma;
 end
