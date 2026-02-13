@@ -90,28 +90,24 @@ switch problem_type
 
         if eval_backend == "kernel"
             Ssrc = SurfaceSph(Y);
-            [SL, ~, ~] = kernelModifiedLap(Ssrc, 'SMat', lambda);
             [~, ~, DL] = kernelModifiedLap(Ssrc, 'DMat', lambda);
         else
-            SL = spheroidalModifiedSLP(params_op, lambda, []);
             DL = spheroidalModifiedDLP(params_op, lambda, []);
         end
-        K = 0.5 * eye(np) + SL + DL;
+        K = 0.5 * eye(np) + DL;
 
         sigma_vec = K \ rhs;
 
         if eval_backend == "kernel"
-            SL_eval = LOCAL_eval_modified_kernel('SL_LMOD_3D', Xeval, Y, nu, sigma_vec, p, lambda);
             DL_eval = LOCAL_eval_modified_kernel('DL_LMOD_3D', Xeval, Y, nu, sigma_vec, p, lambda);
         else
             params_sigma = copy(params);
             params_sigma.sigma = sigma_vec;
             params_sigma.get_shc();
 
-            SL_eval = spheroidalModifiedSLP(params_sigma, lambda, Xeval);
             DL_eval = spheroidalModifiedDLP(params_sigma, lambda, Xeval);
         end
-        soln = SL_eval + DL_eval;
+        soln = DL_eval;
     case "exterior_neumann"
         rhs = truefluxSurf;
 
