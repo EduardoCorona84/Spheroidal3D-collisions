@@ -1171,8 +1171,8 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
     Ctp - possibly modified centers of bodies at next time
 
     %}
+    np = Fparams.parbd.np;
     n3 = Fparams.parbd.n3; 
-    np2 = 2*(2*Fparams.parbd.p)*(2*Fparams.parbd.p+1); % Discretization order of target body
     eps = Fparams.parbd.eps;  
     
     % Check for collision at the next time step 
@@ -1196,13 +1196,15 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
 
             % We will also need to advance rotation here for spheroids TODO
             % TODO
-            [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt,np2, n3);
+            [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt,np, n3);
     
             [colevent,collist,mindst, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(Ctp, Mtp, Fparams); 
 
-            
+
+            %{ 
+            Gonna comment this out for now, its not clear what this in RBS_Mobility with a cursory inspection
             fprintf('\n bisection = %d: dt = %1.4e, mindst = %1.4e, mindstsh = %1.4e',bis,dt,mindst,mindstsh);
-            
+            %}
             % update condition
             cond = mindst < 0.1*eps;
         end
@@ -1279,6 +1281,10 @@ function [colevent, collist, mindst, distances, closest_points_1, closest_points
     % we are going to implement a not vectorized version for now, just to try and get this to work (and we will assume this is only for spheroids)
 
     [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(C, Mt, Fparams, collist);
+
+    max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
+    max_radii_pairs = max(max_radii(collist(:,1)), max_radii(collist(:,2)));
+    mindst = min(distances./ max_radii_pairs);
 
     %We could add a statement about subselecting some of these collision pairs if they are too far, but the LOCAL_check_collision_sph should have already done that (perhaps a bit conservatively, so this could be improved upon).
 
