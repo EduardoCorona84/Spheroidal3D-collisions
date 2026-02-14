@@ -8,24 +8,23 @@ One spheroid should not induce any rotation, but multiple spheroids might
 addpath(genpath('../../../spheroidal'));
 addpath(genpath('../../../support'));
 addpath(genpath('../../../FMMLIB'));
+clear SSph_MatVec;
 
 %% SETUP
-scenario = '1body';
+scenario = '2body';
 
 % Simulation parameters
 kerd = 1; % Kernel dimension
 out = true; % outside vs inside sphere
-Nt = 100;
+Nt = 25;
 dt = 0.1;
 denseMV = true; % Dense vs FMM off diagonal 
 tdisc = 'euler';
-p = 8;
 mdist = 1e-2; % Collision parameter ?
 
 % MHD parameters
 mur = 2; % mu / mu_0
-eta = 1;
-H0 = 1;
+H0 = [0 15 0];
 
 % Spheroid parameters
 p  = 8; % Spharm degree p
@@ -42,8 +41,8 @@ switch scenario
         equ_radii = [1/2 2/3];
         polar_radii = [1 1];
         C = [...
-            -2 0 0; ...
-            2 0 0; ...
+            0 1 0; ...
+            0 -1 0; ...
         ];
         oblate = [false false];
     otherwise
@@ -52,6 +51,13 @@ end
 
 % Linear solver parameters
 tol = 1e-4;
+
+% Parameters for collision algorithm
+bodydist = struct( ...
+    'algo','moving_balls', ...
+    'max_iter', 100, ...
+    'tol',1e-6 ...
+);
 
 % Parameters for initial setup of bodies
 parbd = struct( ...
@@ -63,7 +69,8 @@ parbd = struct( ...
     'Ct',C, ...
     'mdist',mdist, ...
     'eps',eps, ...
-    'out',out ...
+    'out',out, ...
+    'bodydist',bodydist ...
 );
 
 % Parameters for linear solvers
@@ -92,7 +99,6 @@ Fparams = struct(...
     'typeMV','SSph', ...
     'tdisc',tdisc, ...
     'mur',mur, ...
-    'eta',eta, ...
     'H0',H0, ...
     'plotFlag',true ...
 );
@@ -105,6 +111,7 @@ Fparams.plotSurfaceAlpha = 0.3;
 Fparams.plotGrid = true;
 Fparams.plotColor = 'sigma';
 Fparams.plotColorMode = 'l2';
+Fparams.plotForceVectors = true;
 
 
 spheroidal_mobility('', Fparams, []);

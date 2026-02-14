@@ -8,6 +8,7 @@ One spheroid should not induce any rotation, but multiple spheroids might
 addpath(genpath('../../../spheroidal'));
 addpath(genpath('../../../support'));
 addpath(genpath('../../../FMMLIB'));
+clear SSph_MatVec;
 
 %% SETUP
 scenario = '2body';
@@ -15,7 +16,7 @@ scenario = '2body';
 % Simulation parameters
 kerd = 3; % Kernel dimension
 out = true; % outside vs inside sphere
-Nt = 100;
+Nt = 25;
 dt = 0.1;
 denseMV = true; % Dense vs FMM off diagonal 
 tdisc = 'euler';
@@ -112,6 +113,7 @@ Fparams.plotSurfaceAlpha = 0.2;
 Fparams.plotGrid = true;
 Fparams.plotColor = 'mu';
 Fparams.plotColorMode = 'inf';
+Fparams.plotForceVectors = true;
 Fparams.plotView = [45 0];
 Fparams.plotColorLimits = [0.5 1];
 

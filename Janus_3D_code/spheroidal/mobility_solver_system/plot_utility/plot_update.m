@@ -1,7 +1,31 @@
-function plot_state = plot_update(plot_state, Xt, Ct, t, sigma, mu)
+function plot_state = plot_update(plot_state, Xt, Ct, t, sigma, mu, FT)
     % Below is needed to stop crashing after closing the plot window.
     if ~ishandle(plot_state.fig) || ~ishandle(plot_state.ax)
         return;
+    end
+    if nargin < 5
+        sigma = [];
+    end
+    if nargin < 6
+        mu = [];
+    end
+    if nargin < 7
+        FT = [];
+    end
+    if ~isfield(plot_state,'force_enable')
+        plot_state.force_enable = false;
+    end
+    if ~isfield(plot_state,'force_color')
+        plot_state.force_color = [0.85 0.20 0.20];
+    end
+    if ~isfield(plot_state,'vector_line_width')
+        plot_state.vector_line_width = 1.5;
+    end
+    if ~isfield(plot_state,'diam')
+        plot_state.diam = 1;
+    end
+    if ~isfield(plot_state,'force_max_length')
+        plot_state.force_max_length = 0.8*max(1, plot_state.diam);
     end
 
     Xin = LOCAL_plot_points(Xt, Ct, plot_state.np, plot_state.n3);
@@ -33,6 +57,10 @@ function plot_state = plot_update(plot_state, Xt, Ct, t, sigma, mu)
         plot_state = LOCAL_plot_trajectories(plot_state, Ct);
     end
 
+    if plot_state.force_enable
+        plot_state = LOCAL_plot_force(plot_state, Ct, FT);
+    end
+
     if isempty(plot_state.axis)
         axis(plot_state.ax, LOCAL_plot_axis(Ct, plot_state.diam));
     else
@@ -54,6 +82,56 @@ function plot_state = plot_update(plot_state, Xt, Ct, t, sigma, mu)
         title(plot_state.ax, sprintf('t = %.4f', t));
     end
     drawnow;
+end
+
+function plot_state = LOCAL_plot_force(plot_state, Ct, FT)
+    [force, status] = LOCAL_parse_force_ft(FT, plot_state.n3);
+    if ~status
+        return;
+    end
+
+    force = real(force);
+    fmag = sqrt(sum(abs(force).^2, 1));
+    f_nz = fmag(fmag > 0);
+    if isempty(f_nz), return; end
+    fref = max(f_nz);
+
+    hold(plot_state.ax, 'on');
+    fscale = plot_state.force_max_length / fref;
+    Fdisp = fscale*force;
+    quiver3(plot_state.ax, Ct(:,1), Ct(:,2), Ct(:,3), ...
+        Fdisp(1,:).', Fdisp(2,:).', Fdisp(3,:).', 0, ...
+        'Color', plot_state.force_color, ...
+        'LineWidth', plot_state.vector_line_width);
+    hold(plot_state.ax, 'off');
+end
+
+function [force, status] = LOCAL_parse_force_ft(FT, n3)
+    force = [];
+    status = false;
+    if isempty(FT), return; end
+
+    if isvector(FT)
+        vec = FT(:);
+        if numel(vec) ~= 6*n3
+            return;
+        end
+        FTmat = reshape(vec, 6, n3);
+    else
+        sz = size(FT);
+        if isequal(sz, [6 n3])
+            FTmat = FT;
+        elseif isequal(sz, [n3 6])
+            FTmat = FT.';
+        elseif numel(FT) == 6*n3
+            FTmat = reshape(FT(:), 6, n3);
+        else
+            return;
+        end
+    end
+
+    force = FTmat(1:3,:);
+    status = true;
 end
 
 function Xin = LOCAL_plot_points(Xt, Ct, np, n3)

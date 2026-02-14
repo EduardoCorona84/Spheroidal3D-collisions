@@ -62,6 +62,10 @@ function spheroidal_mobility(fname,Fparams,init)
         plotTrajectories  show center trajectories (bool)
         plotTrajMaxPoints cap trajectory length (int)
         plotTrajLineWidth trajectory line width (scalar)
+        plotForceVectors  show per-body force vectors (bool, default false)
+        plotForceColor    force vector RGB color ([r g b])
+        plotVectorLineWidth overlay line width (default 1.5)
+        plotForceMaxLength max force-vector length (default 0.8*diam)
     ----
 
     %%%
@@ -258,7 +262,7 @@ function spheroidal_mobility(fname,Fparams,init)
         if plot_state.traj_enable
             plot_state = plot_update_trajectory(plot_state, Ct{1});
         end
-        plot_state = plot_update(plot_state, Xt{1}, Ct{1}, t, [], []);
+        plot_state = plot_update(plot_state, Xt{1}, Ct{1}, t, [], [], []);
     end
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -403,7 +407,7 @@ function spheroidal_mobility(fname,Fparams,init)
             if plot_state.traj_enable
                 plot_state = plot_update_trajectory(plot_state, Ct{i+1});
             end
-            plot_state = plot_update(plot_state, Xt{i+1}, Ct{i+1}, t, sigma{i}, mu{i});
+            plot_state = plot_update(plot_state, Xt{i+1}, Ct{i+1}, t, sigma{i}, mu{i}, FT{i});
         end
 
         % Save progress every other step.
@@ -614,7 +618,7 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
 
         %% Magnetic solve for potential \phi.
         % Build RHS (i.e. \eta H_0 \cdot n)
-        H0 = Fparams.H0;
+        H0 = Fparams.H0(:);
         Nr_all = Fparams.parbd.Nrp; % Normals are calculated in set_params
         rhs = Fparams.eta * (Nr_all * H0);  % (np*n3) x 1
         
@@ -625,7 +629,7 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         %% Compute Maxwell stress, forces and torques
 
         % phi at Gamma (Continuous)
-        phi = -Xt*Fparams.H0 + Lapp(SLD,q_density); 
+        phi = -Xt*H0 + Lapp(SLD,q_density); 
 
         % -1*\nabla \phi = -\nabla_{\Gamma} phi - phi_n n
         GradientOfPotential = @(phi, phi_n,S) -1*S.geoProp.Grad(phi) -1*vec3d([phi_n; phi_n; phi_n]).*S.geoProp.nor;
@@ -1172,7 +1176,7 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
 
     %}
     n3 = Fparams.parbd.n3; 
-    np2 = 2*(2*Fparams.parbd.p)*(2*Fparams.parbd.p+1); % Discretization order of target body
+    np = Fparams.parbd.np;
     eps = Fparams.parbd.eps;  
     
     % Check for collision at the next time step 
@@ -1196,12 +1200,12 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
 
             % We will also need to advance rotation here for spheroids TODO
             % TODO
-            [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt,np2, n3);
+            [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, n3);
     
             [colevent,collist,mindst, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(Ctp, Mtp, Fparams); 
 
             
-            fprintf('\n bisection = %d: dt = %1.4e, mindst = %1.4e, mindstsh = %1.4e',bis,dt,mindst,mindstsh);
+            fprintf('\n bisection = %d: dt = %1.4e, mindst = %1.4e',bis,dt,mindst);
             
             % update condition
             cond = mindst < 0.1*eps;

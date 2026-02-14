@@ -1,4 +1,9 @@
 function plot_state = plot_init(Fparams, Xt, np, n3)
+    % Additional overlay options (all optional):
+    %   plotForceVectors
+    %   plotForceColor
+    %   plotVectorLineWidth
+    %   plotForceMaxLength
     plot_state = struct();
     plot_state.fig = figure;
     plot_state.ax = axes('Parent', plot_state.fig);
@@ -73,5 +78,25 @@ function plot_state = plot_init(Fparams, Xt, np, n3)
     plot_state.grid_on = true;
     if isfield(Fparams,'plotGrid')
         plot_state.grid_on = Fparams.plotGrid;
+    end
+
+    plot_state.force_enable = false;
+    if isfield(Fparams,'plotForceVectors')
+        plot_state.force_enable = logical(Fparams.plotForceVectors);
+    end
+
+    plot_state.force_color = [0.85 0.20 0.20];
+    if isfield(Fparams,'plotForceColor')
+        plot_state.force_color = Fparams.plotForceColor(:).';
+    end
+
+    plot_state.vector_line_width = 1.5;
+    if isfield(Fparams,'plotVectorLineWidth')
+        plot_state.vector_line_width = Fparams.plotVectorLineWidth;
+    end
+
+    plot_state.force_max_length = 0.8*plot_state.diam;
+    if isfield(Fparams,'plotForceMaxLength')
+        plot_state.force_max_length = Fparams.plotForceMaxLength;
     end
 end
