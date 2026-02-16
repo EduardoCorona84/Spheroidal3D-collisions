@@ -1,5 +1,5 @@
 function parbd = SpheroidalMS_set_params(opts)
-% function parbd = SpheroidalMS_set_params(equ_radii,polar_radii,p,C,eps,mdist,out,doAna,flag_pot,kerd,dense) 
+% function parbd = SpheroidalMS_set_params(equ_radii,polar_radii,p,C,collision_eps,mdist,out,doAna,flag_pot,kerd,dense) 
 %{
 Construct parbd for Fparams in the mobility solver code.
 Note that this pre-computes points, so this is a place for memory optimization if we're
@@ -10,7 +10,7 @@ Inputs
     polar_radii - (double) n_b x 1 array of polar radii for spheres/spheroids
     p           - (int) spheroidal harmonic order
     C           - (double) n_b x 3 array of centers 
-    eps         - (double) epsilon buffer (collision dist)
+    collision_eps - (double) collision buffer/tolerance
     mdist       - (double) collision buffer for body-body interactions
     out         - (bool) external vs internal evaluation (set to 1) 
     doAna       - (bool) indicates whether density that is passed in needs to be transformed to harmonic space
@@ -27,7 +27,7 @@ arguments
     opts.polar_radii (:,1) double
     opts.p (1,1) double
     opts.C (:,3) double
-    opts.eps (1,1) double
+    opts.collision_eps (1,1) double = NaN
     opts.mdist (1,1) double
     opts.out (1,1) logical
     opts.doAna (1,1) logical
@@ -43,7 +43,7 @@ polar_radii = opts.polar_radii;
 max_radii = max(equ_radii, polar_radii);
 p = opts.p;
 C = opts.C;
-eps = opts.eps;
+collision_eps = opts.collision_eps;
 mdist = opts.mdist;
 out = opts.out;
 doAna = opts.doAna;
@@ -141,7 +141,7 @@ parbd = struct(...
     'C',C, ...
     'out',out, ...
     'mdist',mdist, ...
-    'eps',eps, ...
+    'collision_eps',collision_eps, ...
     'a',0, ...
     'doAna',doAna, ...
     'shape_type',body_shape_types, ...

@@ -8,26 +8,28 @@ One spheroid should not induce any rotation, but multiple spheroids might
 addpath(genpath('../../../spheroidal'));
 addpath(genpath('../../../support'));
 addpath(genpath('../../../FMMLIB'));
+addpath(genpath('../../../LCPsolvers'));
 clear SSph_MatVec;
 
 %% SETUP
-scenario = '2body';
+scenario = '2bodyattract';
 
 % Simulation parameters
 kerd = 1; % Kernel dimension
 out = true; % outside vs inside sphere
-Nt = 25;
+Nt = 50;
 dt = 0.1;
 denseMV = true; % Dense vs FMM off diagonal 
 tdisc = 'euler';
 mdist = 1e-2; % Collision parameter ?
+collision_eps = 1e-2;
 
 % MHD parameters
 mur = 2; % mu / mu_0
-H0 = [0 15 0];
+H0 = [0 25 0];
 
 % Spheroid parameters
-p  = 8; % Spharm degree p
+p  = 12; % Spharm degree p
 
 switch scenario
     case '1body'
@@ -36,15 +38,35 @@ switch scenario
         polar_radii = [1];
         C = [0 0 0]; % object centers
         oblate = false;
-    case '2body'
+    case '2bodyattract'
         n3 = 2;
         equ_radii = [1/2 2/3];
         polar_radii = [1 1];
         C = [...
-            0 1 0; ...
-            0 -1 0; ...
+            0 0.7 0; ...
+            0 -0.7 0; ...
         ];
         oblate = [false false];
+    case '2bodyrepel'
+        n3 = 2;
+        equ_radii = [1/2 2/3];
+        polar_radii = [1 1];
+        C = [...
+            1 0 0; ...
+            -1 0 0; ...
+        ];
+        oblate = [false false];
+    case '3bodystable'
+        n3 = 3;
+        equ_radii = [1/2 1/2 1/2];
+        polar_radii = [1 1 1];
+        % Equilateral triangle
+        C = [...
+            0 2*sqrt(3)/4 0; ...
+            1 -2*sqrt(3)/4 0; ...
+            -1 -2*sqrt(3)/4 0; ...
+        ];
+        oblate = [false false false];
     otherwise
         error('Scenario not supported.');
 end
@@ -68,7 +90,7 @@ parbd = struct( ...
     'p',p, ...
     'Ct',C, ...
     'mdist',mdist, ...
-    'eps',eps, ...
+    'collision_eps',collision_eps, ...
     'out',out, ...
     'bodydist',bodydist ...
 );
@@ -112,20 +134,6 @@ Fparams.plotGrid = true;
 Fparams.plotColor = 'sigma';
 Fparams.plotColorMode = 'l2';
 Fparams.plotForceVectors = true;
-
+Fparams.plotView = [115 30];
 
 spheroidal_mobility('', Fparams, []);
-
-%% Utility functions
-function volumes = LOCAL_calculate_volume(ns, p, u0, a, oblate)
-    volumes = zeros(1, ns);
-    for i=1:ns
-        if oblate(i)
-            pts = oblate_spheroid_shape(p, u0(i), a(i));
-        else
-            pts = prolate_spheroid_shape(p, u0(i), a(i));
-        end
-        s = SurfaceSph(pts);
-        volumes(i) = s.volume;
-    end
-end

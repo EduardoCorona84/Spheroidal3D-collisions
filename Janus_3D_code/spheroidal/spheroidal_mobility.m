@@ -28,7 +28,7 @@ function spheroidal_mobility(fname,Fparams,init)
             Spheres are not implemented for the time being.
         p           - (int) spheroidal harmonic order (bodies) 
         Ct          - (double) n_b x 3 array of centers 
-        eps         - (double) epsilon buffer (collision dist)
+        collision_eps - (double) collision buffer/tolerance
         mdist       - (double) collision buffer for body-body interactions
         out         - (bool) external vs internal evaluation (set to 1) 
     
@@ -103,7 +103,7 @@ function spheroidal_mobility(fname,Fparams,init)
             'Fparams.comp must be true or false.');
 
         % parbd
-        req = {'p','Ct','equ_radii','polar_radii','eps','mdist','out'};
+        req = {'p','Ct','equ_radii','polar_radii','mdist','out'};
         for k = 1:numel(req)
             assert(isfield(Fparams.parbd,req{k}), ...
                 'Missing required field Fparams.parbd.%s', req{k});
@@ -115,8 +115,8 @@ function spheroidal_mobility(fname,Fparams,init)
             'Fparams.parbd.p must be a positive integer greater than 2.');
         assert(numel(Fparams.parbd.equ_radii)==size(Fparams.parbd.Ct,1) && numel(Fparams.parbd.polar_radii)==size(Fparams.parbd.Ct,1), ...
             'Fparams.parbd.equ_radii and Fparams.parbd.polar_radii must have length equal to size(parbd.Ct,1).');
-        assert(isscalar(Fparams.parbd.eps)  && Fparams.parbd.eps > 0, ...
-            'Fparams.parbd.eps must be a strictly positive scalar.');
+        assert(isscalar(Fparams.parbd.collision_eps)  && Fparams.parbd.collision_eps > 0, ...
+            'Fparams.parbd.collision_eps must be a strictly positive scalar.');
         assert(isscalar(Fparams.parbd.mdist) && Fparams.parbd.mdist > 0, ...
             'Fparams.parbd.mdist must be a strictly positive scalar.');
         assert(islogical(Fparams.parbd.out) || ismember(Fparams.parbd.out,[0,1]), ...
@@ -228,26 +228,8 @@ function spheroidal_mobility(fname,Fparams,init)
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % (0.4) Initialize collision info  
-    %%%%%%%% NEED TO UPDATE THIS FOR SPHEROIDS
     [colevent, collist ,mindst, distances, closest_points_1, closest_points_2] = LOCAL_check_collision(C0, Mt0, Fparams);
-
-    
-    %{
-    if ~strcmp(Fparams.parbd.Shape,'') % For non-spherical shapes...
-        % Seems like the purpose of this is to create a point cloud on the surface of each body.
-        Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); % rad (i.e. radius) is undefined...
-
-        % Model surface pts
-        % The dimension of X2 is (np2 * num_body) * 3
-        % Each row contains the Cartesian coordinates of the points on the point clouds
-        X2 = repmat(reshape(Sc2.cart.to_array,[],3),num_body,1);
-        np2 = 2*(2*p)*(2*p+1);    
-    else  
-       X2=[];
-    end
-    %}
     X2 = [];
-    np2 = 2*(2*Fparams.parbd.p)*(2*Fparams.parbd.p+1);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % (0.5) Initial state + plot setup
@@ -275,7 +257,7 @@ function spheroidal_mobility(fname,Fparams,init)
             fprintf('\n ---------------------------------------------------------- \n')
             fprintf('\nExplicit euler step for timestep %d\n', i)
             [Xt{i+1},Mt(i+1,:),Ct{i+1},U{i},FT{i},sigma{i},mu{i},VW{i},Kernels,Nullsp,...
-                Fparams,colevent,closest_points1,closest_points2,collist,dt,psi_Lap{i},Energy(i)] = ...
+                Fparams,colevent,collist,closest_points_1,closest_points_2,dt,psi_Lap{i},Energy(i)] = ...
                 LOCAL_euler_step(Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t, dt,i);
         elseif strcmp(timedisc,'trapz')
             error('Calls need to be updated.')
@@ -421,7 +403,8 @@ function spheroidal_mobility(fname,Fparams,init)
 end
     
 %% Mobility solver system code
-function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,closest_points_1,closest_points_2,dt,psi_Lap,Energy] = LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)
+function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,closest_points_1,closest_points_2,dt,psi_Lap,Energy] = ...
+    LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)
     %{
     Performs a single forward-Euler step of the system of rigid-body particles.
     Uses the BIE operators and boundary information at time t to compute surface
@@ -500,7 +483,7 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,c
     MRot = @(wh,t) RotationMat(wh,t);
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
-    % Get incoming force distribution: 
+    % Get incoming force distribution.
     tic; 
     [FT,sigma,VW,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt); 
     fprintf('\n Time to compute incoming force: %e ',toc)
@@ -513,14 +496,13 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,c
         + timings.velocities.vw(it) + timings.velocities.col(it); 
     fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(it)); 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance center Ct % I don't see why this can't be done in local advance step TODO
+    % Advance center Ct
     tic; 
     Ctp = LOCAL_advance_center(Ct,dt,VW); 
     fprintf('\n Time to advance centers C(t): %e',toc); 
     timings.advance(it) = timings.advance(it) + toc; 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance Rotation Mt TODO TODO
-        % Advance rotation matrix Mt and X (may want to delete this step after we update the rotation matrices)
+    % Advance rotation matrix Mt and X
     tic; 
     [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
     fprintf('\n Time to advance R(t) and X(t): %e',toc)
@@ -532,65 +514,16 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,c
     = LOCAL_collision_info(VW, Ct, Ctp, Mt, Mtp, MRot, Xt, Xtp, X0, dt, normW, Fparams);
     fprintf('\n Time for collision detection: %e',toc);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    %Update Sc and operators
-    fprintf('\n Surface and operator update')
+    %Update operators
+    fprintf('\n Operator update')
     [Kernels,Nullsp,Fparams,timings] = SpheroidalMS_UpdateOperators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it); 
     timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
     fprintf('\n Time to update surface and operators: %e',timings.operator.total(it));
-    % We also need to pass closest_points_1 and closest_points_2 to the next step
-end
-    
-function [Xtp,Mtp,Ctp,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2,dt] = LOCAL_advance_step(VW,mu,sigma,Xt,X0,X2,Mt,Ct,Kernels,Fparams,dt,it)
-    %{
-
-    %}
-    global timings;
-    
-    np = Fparams.parbd.np; 
-    n3 = Fparams.parbd.n3; 
-    
-    MRot = @(wh,t) RotationMat(wh,t);
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance center Ct 
-    tic; 
-    Ctp = LOCAL_advance_center(Ct,dt,VW); 
-    fprintf('\n Time to advance centers C(t): %e',toc); 
-    timings.advance(it) = timings.advance(it) + toc; 
-
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance rotation Mt TODO TODO Need to figure this wout with spheroids
-    tic; 
-    [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3);
-    fprintf('\n Time to advance centers C(t): %e',toc); 
-    timings.advance(it) = timings.advance(it) + toc;
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Check for collision after moving centers
-    tic; 
-    [colevent,collist,dt,Ctp, closest_points_1, closest_points_2] ...
-    = LOCAL_collision_info(Fparams,Ct,Ctp,VW,MRot,Mt, Mtp, dt);
-    fprintf('\n Time for collision detection: %e',toc);
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Advance rotation matrix Mt and X, TODO 
-    tic; 
-    [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
-    fprintf('\n Time to advance R(t) and X(t): %e',toc)
-    timings.advance(it) = timings.advance(it) + toc; 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Update operators
-    fprintf('\n Surface and operator update')
-    [Kernels,Nullsp,Fparams,timings] ...
-    = RBS_Update_Operators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it);
-    timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
-    fprintf('\n Time to update operators: %e',timings.operator.total(it));
 end
     
 function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt)
     %{
-        This function is used to calculate the data on the surfaces for the solve.
+    This function is used to calculate the data on the surfaces for the solve.
     %}
     Energy = 0;
     parslv = Fparams.parslv; 
@@ -685,7 +618,8 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
             % 
             K_full_rank = @(V) Proj(K(Proj(V))) + V - Proj(V);    
             [psi,~,~,I]=gmres(K_full_rank, Proj(flabel),100,1e-6);
-            fprintf('\n Janus Amph S+D BIE solve error = %e, %e',norm(K(psi)-Proj(flabel))/norm(flabel), norm(K_full_rank(psi)-Proj(flabel))/norm(flabel)); 
+            fprintf('\n Janus Amph S+D BIE solve error = %e, %e', ...
+                norm(K(psi)-Proj(flabel))/norm(flabel), norm(K_full_rank(psi)-Proj(flabel))/norm(flabel)); 
             
             phi = K(psi); 
             phi_n_e=dSLMODD(psi) + dDLMODD(psi);
@@ -744,25 +678,29 @@ end
 
 function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,Fparams,col,collist,i,dt, Mt, closest_points_1, closest_points_2)
     %{
-    Computes rigid body velocities and advance centroids and rotation matrices.
+    This does a mobility solve, and then analyzes whether any corrections are needed. If so,
+    it does the correction using the collision resolution algorithm and returns the adjusted
+    densities and velocities.
 
     Inputs
 
     Outputs
-        sigma : density (not at all necessary!)
+        sigma : density
         mu : 
         VW : rigid body velocities (translational/rotational velocities)
     %}
     global timings; 
     parslv = Fparams.parslv;
-    % TO DO: Placeholder values 
-    rd = 1; tau = Fparams.parbd.tau; W = Fparams.parbd.W; 
-    num_body = Fparams.parbd.n3; 
-    rdt = repmat((rd.').^(-4),3,1); 
+    tau = Fparams.parbd.tau;
+    W = Fparams.parbd.W;
+    num_body = Fparams.parbd.n3;
+    rd = ones(num_body,1);
+    rdt = repmat((rd.').^(-4),3,1);
     rdw = repmat((rd.').^(-2),3,1);
     vind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((1:3),1,num_body);
     wind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((4:6),1,num_body);
-    
+
+    % Do a generic fluid solve, and then adjust if collision occurs.
     if isempty(VW) || Fparams.comp
         % Fluid Solve
         % (1) U_inc=S[sigma] (particular solution given forces and torques)
@@ -782,99 +720,83 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         fprintf('\n Time for solve: %e',toc); 
         timings.velocities.solve(i) = toc;  
 
-        % U = U_inc + U_sc
         tic; 
         U = Lapp(Kernels.SD,(mu+sigma)); 
-        fprintf('\n Time for apply (of S) to compute U: %e',toc);  
+        fprintf('\n Time for apply (of S) to compute U: %e',toc);
         timings.velocities.apply(i) = timings.velocities.apply(i) + 0.5*toc;
-        
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Compute (V,W) and advance Ct, Xt and Mt
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
         tic;
-        % The operator C here seems rather mysterious.
-        % We need to rebuild the rigid body motions since we have updated it.
-        CU = Nullsp.C*U;
-        IU = CU(vind); 
-        WxI = CU(wind); 
-            
-        % U(S_k) = V_k + W_k x (X(S_k) - C_k)
-        VW = zeros(6,num_body); 
-        if ~iscell(W)
-            VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,num_body)); 
-            VW(4:6,:) = tau\(rdt.*reshape(WxI,3,num_body)); 
-        else
-            IUv = reshape(IU,3,num_body); WxIv = reshape(WxI,3,num_body); 
-            for j=1:num_body
-                VW(1:3,j) = (1/sum(W{j}))*IUv(:,j); 
-                VW(4:6,j) = tau{j}\WxIv(:,j);
-            end
-        end
+        VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body);
         fprintf('\n Time to compute V and W: %e',toc); 
         timings.velocities.vw(i) = toc; 
-        
+
         errbs = norm(U-Nullsp.D'*VW(:))/norm(U);
         fprintf('\n Rigid body velocity error: %e',errbs)
+    elseif col
+        % If comp=false and we entered with collision info, still compute baseline solve.
+        tic;
+        B = Nullsp.L*sigma - Lapp(Kernels.TD,sigma);
+        timings.velocities.apply(i) = toc;
+
+        tic;
+        mu = Lslv(Kernels.TD,B,parslv);
+        timings.velocities.solve(i) = toc;
+
+        U = Lapp(Kernels.SD,(mu+sigma));
+        VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body);
+    end
+
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Collision event
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    elseif col
-        tic; 
-        B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma);
-        timings.velocities.apply(i) = toc;
-        
-        % Solve Fredholm eq TD*mu = B
-        tic; 
-        mu = Lslv(Kernels.TD,B,parslv); 
-        timings.velocities.solve(i) = toc;
+    if col
+        tic;
 
-        tic;  
         fprintf('\n-------------------------------------------------');
         fprintf('\n Computing contact force at collision sites: \n')
         display(collist(:,1:2)')
         fprintf('-------------------------------------------------\n');
-        
-        % Compute contact force and force distribution updates
-        %we might have to compute distances before the first pass
-        [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt, Mt, closest_points_1, closest_points_2);
-        
+
+        [F_c,mu_c,rho_c] = ...
+            LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2);
+
         F_c = reshape(F_c,6,[]);
         display(F_c(1:3,:));
-        
+
         if ~isempty(mu_c)
-            % Update sigma, mu, U and VW
-            % TODO: maybe check for rotations.
             mu = mu + mu_c; 
             sigma = sigma + rho_c; 
             U = Lapp(Kernels.SD,(mu+sigma)); 
-            
-            % need to figure out whats happening here
-
-            CU  = Nullsp.C*U; 
-            IU  = CU(vind); 
-            WxI = CU(wind); 
-        
-            if ~iscell(W)
-                VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,num_body)); 
-                VW(4:6,:) = tau\(rdt.*reshape(WxI,3,num_body)); 
-            else
-                IUv = reshape(IU,3,num_body); WxIv = reshape(WxI,3,num_body); 
-                for j=1:num_body
-                    VW(1:3,j) = (1/sum(W{j}))*IUv(:,j); 
-                    VW(4:6,j) = tau{j}\WxIv(:,j);
-                end
-            end
+            VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body);
         end
-    
-        fprintf('\n Time for contact force correction: %e',toc);  
+
+        fprintf('\n Time for contact force correction: %e',toc);
         timings.velocities.col(i) = toc;
-            
-        % Check rigid body velocity
+
         errbs = norm(U-Nullsp.D'*VW(:))/norm(U);
         fprintf('\n Rigid body velocity error after collision correction: %e',errbs)
     end
-    
-    VW = real(VW); 
+
+    VW = real(VW);
+end
+
+function VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body)
+    CU = Nullsp.C*U;
+    IU = CU(vind);
+    WxI = CU(wind);
+
+    VW = zeros(6,num_body);
+    if ~iscell(W)
+        VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,num_body));
+        VW(4:6,:) = tau\(rdt.*reshape(WxI,3,num_body));
+    else
+        IUv = reshape(IU,3,num_body);
+        WxIv = reshape(WxI,3,num_body);
+        for j=1:num_body
+            VW(1:3,j) = (1/sum(W{j}))*IUv(:,j);
+            VW(4:6,j) = tau{j}\WxIv(:,j);
+        end
+    end
 end
     
 function Ctp = LOCAL_advance_center(Ct,dt,VW)
@@ -898,7 +820,8 @@ function [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, 
 end
 
 %% Collision resolution
-function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fparams,Ct,VW,dt, Mt, distances, closest_points_1, closest_points_2)
+function [F_c,mu_c,rho_c] = ...
+    LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2)
     %{
     Calculates the force and the resulting densities due to the collision.
     Note that this does not resolve the collision, only calculates the effect of it.
@@ -936,119 +859,75 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fp
     mu_c
     rho_c
     %}
-    parslv = Fparams.parslv; 
-    rd = Fparams.parbd.rd; 
-    n3 = length(rd); 
-    diam = Fparams.parbd.diam; %diam(i,j) = r_i + r_j
-    mxrd = Fparams.parbd.mxrd; %max(r_i,r_j)
-    eps = Fparams.parbd.eps;
-    Nb = Fparams.parbd.Nb; 
-    tol = parslv.tol; 
+    parslv = Fparams.parslv;
+    n3 = Fparams.parbd.n3;
+    tol = parslv.tol;
+    collision_eps = Fparams.parbd.collision_eps;
+    max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Setup
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    %{
-    ip = collist(:,1); jp = collist(:,2); 
-    numFS = 0; 
-    %}
-    %
-
-    TD = Kernels.TD; SD = Kernels.SD; 
-    Bk = Nullsp.B; Ak = Nullsp.A; Lk = Nullsp.L; 
-    numF = length(ip); 
-
-
-
-    % Compute vectors and normal vectors for pairs
-    %this is under the assumption that we have spheres. This will need to be modified for spheroids
-
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Build A
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    F = zeros(6*n3,numF); 
-    %I'm not sure what numFS is for. This looks like its constructing the "D" matrix from my notes. 
-
-    %We also probably need the "quaternion matrix", the matrix that converts the angular velocity to the time derivative of the configuration. In spherical case this is just the identity, but we will have more than this.
-    %NOTE: In this example we will be using rotation matrices, not quaternions.
-
-    %for all the colision pairs, we fill in the normal directions into the F matrix
-    %We also need to do this for torques, which is not done yet
-    %The indexing of F is giving by the indexing of the collision pairs.
-    %F^T is size: the number of collision pairs by 6 times the number of particles (in the collision list/event)
-    %iterate through all collision pairs (order given by collist)
-    for k=1:numF
-        %normal (translational) forces
-        translational_indi = (1:3)+6*(ip(k)-1);
-        translational_indj = (1:3)+6*(jp(k)-1);
-
-        rotational_indi = (4:6)+6*(ip(k)-1);
-        rotational_indj = (4:6)+6*(jp(k)-1);
-        %The normal vector is (by convention) pointing from particle 2 to particle 1 (j to i). The signs need to be consistent with this convention.
-
-        %compute normal vector for collision pairs
-        if distances(k) < separation_tol
-            % if the particles are close enough, we will use the normal of the second particle in the collision pair
-            ellipsoid_mat = Mt{jp(k)}*diag([Fparams.parbd.polar_radii(jp(k)) Fparams.parbd.equi_radii(jp(k)) Fparams.parbd.equi_radii(jp(k))].^(-2))*Mt{jp(k)}';
-            %make sure dimensionality is correct here (this is something for me to do in general)
-
-            % Column Vector
-            normal = ellipsoid_mat*(closest_points_2(:,k)-Ct(: ,jp(k)));
-            
-        else
-            % Column Vector
-            normal = (closest_points_2(:,k)-closest_points_1(:,k))/distances(k);
-        end
-
-        %compute torques for collision pair
-        % Column Vectors
-        local_coordinates_1 = closest_points_1(:,k)-Ct(: ,ip(k));
-        local_coordinates_2 = closest_points_2(:,k)-Ct(: ,jp(k));
-        torque_direction_1 = -cross(local_coordinates_1, normal);
-        torque_direction_2 = cross(local_coordinates_2, normal);
-
-        % These should be column vectors as we are filling in multiple rows and 1 column at a time.
-        F(translational_indi, k) = -normal;
-        F(translational_indj, k) = normal;
-
-        F(rotational_indi, k) = torque_direction_1;
-        F(rotational_indj, k) = torque_direction_2;
+    body_1_idx = collist(:,1);
+    body_2_idx = collist(:,2);
+    num_contact_pairs = length(body_1_idx);
+    if num_contact_pairs == 0
+        mu_c = [];
+        rho_c = [];
+        F_c = [];
+        return;
     end
 
-    % We need some way to store the rotational part of the configuration as a vector. 
-    %By default, things are stored as rotation matrices. Rotation matrices can be stored as a vector, but I'm not sure what the "interfacing" matrix/operator would be from a vectorized rotation matrix to the angular velocity.
-    %Because I have already done all of this with quaternions, I think I am going to just convert to quaternions for now and in the future we can explore alternative approaches.
+    % TODO: get rid of this...
+    [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(Ct, Mt, Fparams, collist);
+    distances = distances(:); % Force into column vector
 
-    %convert to quaternions
-    %{
-    %This is a bit wasteful, but it will work for now.
-    quats = zeros(4*numF, 1);
-    for i = 1:numF
-        quats(4*(i-1)+1) = rotation2quaternion(Mt{i});
+    TD = Kernels.TD;
+    SD = Kernels.SD;
+    Bk = Nullsp.B;
+    Lk = Nullsp.L;
+    Ak = Nullsp.A;
+
+    % f(x) = (x-C)^T A (x-C) - 1 = 0, and \nabla f = 2*A*(x-C).
+    % TODO: cache this.
+    quadratic_forms = zeros(3,3,n3);
+    for body_idx = 1:n3
+        spheroid_params = LOCAL_get_spheroid_params(body_idx, Ct, Mt, Fparams.parbd);
+        D = diag([spheroid_params.a spheroid_params.b spheroid_params.c].^-2);
+        quadratic_forms(:,:,body_idx) = spheroid_params.R*D*(spheroid_params.R.');
     end
 
-    %Now we will construct the G matrix (the composition of all the Psis and Identity)
-    G = zeros(7*(numF + 1), 6*(numF + 1));
-    for i = 1:numF
-        G(7*(i - 1) + 1:7*(i - 1) + 3, 6*(i - 1) + 1:6*(i - 1) + 3) = eye(3);
-        G(7*(i - 1) + 4:7*(i - 1) + 7, 6*(i - 1) + 4:6*(i - 1) + 6) = construct_pglobal_psi(quaternionConfiguration(7*(i - 1) + 4:7*(i - 1) + 7));
-    end
-    %}
-    %I'm not sure what this is doing
-    %{
-    for k=numF+1:numF+numFS
-    indi = (1:3)+6*(ipsh(k-numF)-1);
-    F(indi,k) = -Ct(ipsh(k-numF),:)./norm(Ct(ipsh(k-numF),:));
-    end
-    %}
+    % Build contact-direction matrix F
+    F = zeros(6*n3,num_contact_pairs); 
+    for k = 1:num_contact_pairs
+        translational_indi = (1:3)+6*(body_1_idx(k)-1);
+        translational_indj = (1:3)+6*(body_2_idx(k)-1);
 
-    % A is built using the dense or matfree mobility matrix. Can be accelerated
-    % by employing only self interaction (block-diagonal) for TD and SD. 
-    % Different criteria can be added as needed
-    matfree = ~Fparams.denseMV || numF+numFS > 1; 
-    bkdiag=false;
+        rotational_indi = (4:6)+6*(body_1_idx(k)-1);
+        rotational_indj = (4:6)+6*(body_2_idx(k)-1);
+
+        % Use the analytic spheroid gradient to build the contact normal.
+        cp_i = closest_points_1(:,k);
+        cp_j = closest_points_2(:,k);
+
+        % body_i = body_1_idx(k);
+        body_j = body_2_idx(k);
+
+        % Convention: contact normal vector points from body 2 to body 1, so we 
+        % use the outward normal of body 2 at cp_j.
+        grad_j = quadratic_forms(:,:,body_j)*(cp_j - Ct(body_j,:).');
+        nvec = grad_j/norm(grad_j);
+
+        r_i = cp_i - Ct(body_1_idx(k),:).';
+        r_j = cp_j - Ct(body_2_idx(k),:).';
+
+        F(translational_indi,k) = nvec;
+        F(translational_indj,k) = -nvec;
+        F(rotational_indi,k) = cross(r_i, nvec);
+        F(rotational_indj,k) = -cross(r_j, nvec);
+    end
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%
+    % Build A = F^T * M * F %
+    %%%%%%%%%%%%%%%%%%%%%%%%%
+    matfree = ~Fparams.denseMV || num_contact_pairs > 1;
 
     if ~matfree
         rho_c = (Bk.')*F; % This is rho_c -- the incident field.
@@ -1060,39 +939,29 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fp
         % Ak*Lapp(SD,MuNS+Bf)) extracts the rigid body motion from the velocity (i.e. the mobility matrix).
         % So, Amat = F^T (A S (0.5I + T + L)^{-1}(-0.5 - T)B^T) F, where whatever is in the paranthesis is
         %   the mobility matrix \mathcal{M} in the equation \mathcal{U} = \mathcal{M}F.
-        Amat = real(F.'*(Ak*Lapp(SD,mu_c+rho_c))); 
-    else
-        parslv.tol = parslv.coltol; 
+        Amat = real(F.'*(Ak*Lapp(SD,mu_c+rho_c)));
+    else % What is happening here...?
+        parslv.tol = parslv.coltol;
         rho_c = @(x) (Bk.')*(F*x);
-        if bkdiag
-            S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2));
-            IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-            Amat = @(x) real(F.'*(Ak*(S0(-IT0(Lapp(TD,rho_c(x))+Lk*rho_c(x))+rho_c(x)))));
-        else 
-            % This is a shortened version of the dense code from above.
-            Amat = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,rho_c(x))+Lk*rho_c(x),parslv)+rho_c(x))));
-        end
-        
-        parslv.tol = tol; 
+        Amat = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,rho_c(x))+Lk*rho_c(x),parslv)+rho_c(x))));
+        parslv.tol = tol;
     end
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Build constant vector b
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Compute (1/dt)*phi
-    %we will also need the quanternion part here as well (I think)
-    phib = zeros(numF+numFS,1); 
-    if numF>0
-        phib(1:numF) = (1/dt)*(NR-diam(ip+n3*(jp-1))-eps*mxrd(ip+n3*(jp-1))); 
-    end
-
-    %b_k = (1/dt)*phi_k + F.'V_k
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Build b = (1/dt)*phi + F^T * V %
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Recall that phib is the minimum separation function
+    pair_scale = max(max_radii(body_1_idx), max_radii(body_2_idx));
+    % We subtract by collision_eps*pair_scale here to account for the buffer betweeb spheroids:
+    % that is, if phi > 0, we are outside buffer, and if phi < 0, we are inside the buffer so we
+    % are too close/overlap! This is needed since in the theoretical model \Phi assumes we can measure
+    % distances/account for collisions exactly.
+    phib = (1/dt) * (distances - collision_eps*pair_scale);
     bvec = phib + real((F.')*VW(:));
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %LCP solve
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %LCP params
     max_iter=parslv.colmaxit; 
     tol_rel=parslv.col_tolrel; %1e-6; 
     tol_abs=parslv.col_tolabs; %1e-9; 
@@ -1101,63 +970,62 @@ function [F_c,mu_c,rho_c] = LOCAL_Compute_Contact_LCP(collist, Kernels,Nullsp,Fp
     if matfree
         switch parslv.colsolver
             case 'Newton'
-            % solve LCP using minmap Newton (matfree)
-            [lam ,err ,iter, ~, ~, ~] = ...
-            minmap_newton_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );
+                [lam, err, iter, ~, ~, ~] = ...
+                    minmap_newton_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
             case 'APGD'
-            % solve LCP using Accelerated PGD
-            [lam ,err ,iter, ~, ~, ~] = ...
-            APGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+                [lam, err, iter, ~, ~, ~] = ...
+                    APGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
             case 'BBPGD'
-            % solve LCP using Barzilai Borwein PGD
-            [lam ,err ,iter, ~, ~, ~] = ...
-            BBPGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+                [lam, err, iter, ~, ~, ~] = ...
+                    BBPGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
             otherwise
-            % solve LCP using Barzilai Borwein PGD
-            [lam ,err ,iter, ~, ~, ~] = ...
-            BBPGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+                error('Invalid LCP solver in params.');
         end
     else
         switch parslv.colsolver
             case 'Newton'
-            % solve LCP using minmap Newton  
-            [lam ,err ,iter, ~, ~, ~] = ...
-            minmap_newton(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );
+                [lam, err, iter, ~, ~, ~] = ...
+                    minmap_newton(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
             case 'APGD'
-            % solve LCP using Accelerated PGD
-            [lam ,err ,iter, ~, ~, ~] = ...
-            APGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+                [lam, err, iter, ~, ~, ~] = ...
+                    APGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
             case 'BBPGD'
-            % solve LCP using Barzilai Borwein PGD
-            [lam ,err ,iter, ~, ~, ~] = ...
-            BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+                [lam, err, iter, ~, ~, ~] = ...
+                    BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
             otherwise
-            % solve LCP using Barzilai Borwein PGD
-            [lam ,err ,iter, ~, ~, ~] = ...
-            BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile );    
+                error('Invalid LCP solver in params.');
         end
     end
 
-    fprintf(['\n minmap ' parslv.colsolver ' LCP solution error = %e, iters = %d \n'],err,iter);
-    
+    fprintf(['\n' parslv.colsolver ' LCP solution error = %e, iters = %d \n'],err,iter);
+
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Contact forces and modified densities
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if norm(lam)>0
-        % Contact forces / torques
-        F_c = F*lam; 
-        % Obtain rho and mu densities
-        % Need help here to figure this out
-        [mu_c,rho_c] = Lapp_ctmat(TD,SD,Lk,Bk.',[],F_c,parslv);
-    else
-        mu_c=[]; rho_c=[]; F_c=[];  
+    if norm(lam) > 0 % Is at least one constraint active?
+        % lam is the contact force magnitude, so need to convert back to vector
+        % using the contact-force directions.
+        F_c = F*lam;
+        
+        % Given the new data (i.e. force/torque) on surface, correct the densities
+        % by doing another mobility solve.
+        [mu_c,rho_c] = LOCAL_mobility_solve(TD, SD, Lk, Bk.', [], F_c, parslv);
+    else % Else, there is no collision-related corrections that are needed.
+        mu_c = [];
+        rho_c = [];
+        F_c = [];
     end
 end
 
 function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest_points_2] ...
     = LOCAL_collision_info(VW, Ct, Ctp, Mt, Mtp, MRot, Xt, Xtp, X0, dt, normW, Fparams)
     %{
-    
+    This function ONLY does the following:
+        (1) validate the proposed next state after explicit advancement,
+        (2) and if validation fails, recomputes the proposed state for the next timestep
+            by continually halving the timestep until a suitable spatial state is found.
+        (3) and upon this, returns a valid spatial state (assuming maxbis is never achieved).
+
     Inputs
     Fparams - struct of params
     X2 - I think this is the surface points of the bodies (not clear why this matters for spheroidal collision)
@@ -1175,45 +1043,44 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
     Ctp - possibly modified centers of bodies at next time
 
     %}
-    n3 = Fparams.parbd.n3; 
+    n3 = Fparams.parbd.n3;
     np = Fparams.parbd.np;
-    eps = Fparams.parbd.eps;  
-    
-    % Check for collision at the next time step 
-    [colevent,collist,mindst, distances, closest_points_1, closest_points_2] = LOCAL_check_collision(Ctp, Mtp, Fparams);
-    
-    
+    collision_eps = Fparams.parbd.collision_eps;
+    maxbis = 10; % Conservative bisection guard (mostly to handle strong forces)
+
+    % Note that the following pattern is a do-while loop.
+
+    % Validate the proposed spatial state for the next timestep
+    [colevent,collist,mindst,distances,closest_points_1,closest_points_2] = ...
+        LOCAL_check_collision(Ctp, Mtp, Fparams);
+    cond = colevent && (mindst < 0.1*collision_eps);
+
+    bis = 0;
+    % Recompute candidate state with halved dt, then test if the candidate is too close:
+    % i.e. mindst is less than some tolerance (0.1*collision_eps).
+    while cond && bis < maxbis
+        dt = dt/2;
+        bis = bis + 1;
+        Ctp = LOCAL_advance_center(Ct,dt,VW);
+        [Mtp,Xtp,normW] = ...
+            LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, n3);
+
+        [colevent,collist,mindst,distances,closest_points_1,closest_points_2] = ...
+            LOCAL_check_collision(Ctp, Mtp, Fparams);
+        cond = colevent && (mindst < 0.1*collision_eps);
+
+        fprintf('\n bisection = %d: dt = %1.4e, mindst = %1.4e', ...
+            bis, dt, mindst);
+    end
+
+    if cond
+        fprintf('\n Warning: maximum number of bisections (%d) reached.', maxbis);
+    end
+
     if colevent
-        % If mindst<<eps, or <0, we need to adjust timestep
-        bis=0;
-        maxbis=3;
-        
-        % IF the particles are too close, we will reduce the timestep
-        cond = mindst < 0.1*eps;
-
-        while cond && bis<=maxbis
-        
-            % Recompute dt and Ct{i+1} to avoid collision
-            dt = dt/2;
-            bis=bis+1; 
-            Ctp = LOCAL_advance_center(Ct,dt,VW); 
-
-            % We will also need to advance rotation here for spheroids TODO
-            % TODO
-            [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, n3);
-    
-            [colevent,collist,mindst, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(Ctp, Mtp, Fparams); 
-
-            
-            fprintf('\n bisection = %d: dt = %1.4e, mindst = %1.4e',bis,dt,mindst);
-            
-            % update condition
-            cond = mindst < 0.1*eps;
-        end
-        
         fprintf('\n Min pairwise relative distance after collision detection: %2.4f ',mindst);
     else
-        collist=[]; 
+        collist = [];
         fprintf('\n Min pairwise relative distance: %2.4f',mindst);
     end
 end
@@ -1231,17 +1098,17 @@ function [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams)
     
     max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
     diam = 2 * max_radii; 
-    eps = Fparams.parbd.eps;  
+    collision_eps = Fparams.parbd.collision_eps;  
     
     if n3 > 1
         % Compute center distances
-        distC = LOCAL_CenterDistances(C);
+        distC = get_distances_between_centers(C);
     
-        % Find pairs for which (C_i-C-j) <= (r_i+r_j)+1.1*eps*max(r_i,r_j)
+        % Find pairs for which (C_i-C-j) <= (r_i+r_j)+1.1*collision_eps*max(r_i,r_j)
         [ii,jj]=meshgrid(1:n3); 
         %this creates all combinations of indices (i, j) for i,j=1,...,n3 (all bodies)
-        %finds all the indices whose distance is less than diam (r_i + r_j) + buffer which is relative as its in terms of 1.1*eps*max(r_i, r_j)
-        id = distC<=diam+1.1*eps*max_radii & ii<jj; 
+        %finds all the indices whose distance is less than diam (r_i + r_j) + buffer which is relative as its in terms of 1.1*collision_eps*max(r_i, r_j)
+        id = distC<=diam+1.1*collision_eps*max_radii & ii<jj; 
         %This selects the indices where the 
         ip = ii(id); 
         jp = jj(id); 
@@ -1254,26 +1121,20 @@ function [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams)
         mindst=Inf; 
     end
 
-    colevent = mindst < 1.1*eps; 
-    %mindstsh = Inf; Not really sure what this does, it did return it, will ignore for now
+    colevent = mindst < 1.1*collision_eps; 
     collist = [ip jp]; 
 end
 
-function [colevent, collist, mindst, distances, closest_points_1, closest_points_2]=LOCAL_check_collision(C, Mt, Fparams)
-    %collist - list of potential colliding pairs assuming they are spheres (for this we would use the largest radii?, assuming spheroids)
-    % eps - an epsilon buffer for collision detection
+function [colevent, collist, mindst, distances, closest_points_1, closest_points_2] = ...
+    LOCAL_check_collision(C, Mt, Fparams)
     % C - centers of bodies (This is an double array, n_b x 3)
-    % X - surface points of bodies (don't think this is relevant for spheroids)
-    % MRot - function handle for rotation matrix takes in a timestep, and angular velocity vector (why do we need a timestep?)
     % Mt - rotation matrices of bodies at current time
-    % VW translational/rotational velocities
-    % dt - timestep size
-    % np - number of surface points per body (don't think is relevant for spheroids)
 
-    
-    % If this is the first pass, we will do a quick check using the spheroid's bounding spheres
-    [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams);
+    % Do a quick check using the spheroids' circumscribed spheres.
+    [colevent,collist,~] = LOCAL_check_collision_sph(C,Fparams);
     if ~colevent
+        colevent = false;
+        mindst = Inf; % Minimum distance
         distances = [];
         closest_points_1 = [];
         closest_points_2 = [];
@@ -1284,12 +1145,35 @@ function [colevent, collist, mindst, distances, closest_points_1, closest_points
 
     [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(C, Mt, Fparams, collist);
 
-    %We could add a statement about subselecting some of these collision pairs if they are too far, but the LOCAL_check_collision_sph should have already done that (perhaps a bit conservatively, so this could be improved upon).
+    % Compute refined distances per collision candidate pair.
+    collision_eps = Fparams.parbd.collision_eps;
+    dist = distances(:);
 
-    
+    % Set the new collision state using the finer scale.
+    mindst = min(dist);
+    active = dist < 1.1*collision_eps; % Match the 1.1 factor from above.
+    collist = collist(active,:);
+    distances = distances(active).';
+    closest_points_1 = closest_points_1(:,active);
+    closest_points_2 = closest_points_2(:,active);
+    colevent = ~isempty(collist);
 end
 
 %% Utility functions
+function [Mf,rho_c] = LOCAL_mobility_solve(TD, SD, Lk, BMR, VNS, f, parslv)
+    % The VNS parameter remains baffling to me, so we shall keep it for now...
+    % Apply contact-force map and recover correction densities.
+    rho_c = BMR*f;
+    BIE_RHS = -Lapp(TD,rho_c) + Lk*rho_c;
+    mu_c = Lslv(TD,BIE_RHS,parslv);
+
+    if ~isempty(VNS)
+        Mf = VNS*Lapp(SD,mu_c+rho_c);
+    else
+        Mf = mu_c;
+    end
+end
+
 function y = Lapp(A,x)
     % Left-apply the matrix A to the vector x.
     if isnumeric(A)
@@ -1327,28 +1211,6 @@ function x = Lslv(A,b,parslv)
         end
     end
 end
-    
-function den = LOCAL_CenterDistances(C)
-    %{
-    Calculates pairwise Euclidean distance between points in R^3.
-
-    Inputs
-    C - (double) n_b x 1 centers of bodies
-
-    Outputs
-    den - distances between bodies
-    %}
-    [Y_g1,  X_g1] = meshgrid(C(:,1), C(:,1));
-    [Y_g2,  X_g2] = meshgrid(C(:,2), C(:,2));
-    [Y_g3,  X_g3] = meshgrid(C(:,3), C(:,3));
-    d1 = (X_g1 - Y_g1); d2 = (X_g2 - Y_g2); d3 = (X_g3 - Y_g3); 
-    den = sqrt(d1.^2 + d2.^2 + d3.^2);
-
-    % Use a logical mask to ignore the diagonal (distance from particle to itself)
-    if any(den(~eye(size(den))) == 0)
-        error('Zero distance between distinct particles in LOCAL_CenterDistance; handling of this is not implemented.');
-    end
-end
 
 function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(C, Mt, Fparams, collist)
 
@@ -1379,40 +1241,32 @@ function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_dist
         curr_index_1 = collist(collision_pair, 1);
         curr_index_2 = collist(collision_pair, 2);
 
-        %spheroid 1spheroid_1_params.b = spheroid_1_params.a;
-        spheroid_1_params.C = C(curr_index_1, :);
-        spheroid_1_params.R = Mt{curr_index_1};
-        switch(lower(Fparams.parbd.shape_type(curr_index_1)))
-            case 'oblate' 
-            spheroid_1_params.a = Fparams.parbd.polar_radii(curr_index_1);
-            spheroid_1_params.c = Fparams.parbd.equ_radii(curr_index_1);
-
-            case 'prolate'
-            spheroid_1_params.a = Fparams.parbd.equ_radii(curr_index_1); 
-            spheroid_1_params.c = Fparams.parbd.polar_radii(curr_index_1);
-
-        end
-        spheroid_1_params.b = spheroid_1_params.a;
-
-        %spheroid 2
-        spheroid_2_params.C = C(curr_index_2, :);
-        spheroid_2_params.R = Mt{curr_index_2};
-        switch(lower(Fparams.parbd.shape_type(curr_index_2)))
-            case 'oblate' 
-            spheroid_2_params.a = Fparams.parbd.polar_radii(curr_index_2);
-            spheroid_2_params.c = Fparams.parbd.equ_radii(curr_index_2);
-
-        case 'prolate'
-            spheroid_2_params.a = Fparams.parbd.equ_radii(curr_index_2);
-            spheroid_2_params.c = Fparams.parbd.polar_radii(curr_index_2);
-
-        end
-        spheroid_2_params.b = spheroid_2_params.a;
+        spheroid_1_params = LOCAL_get_spheroid_params(curr_index_1, C, Mt, Fparams.parbd);
+        spheroid_2_params = LOCAL_get_spheroid_params(curr_index_2, C, Mt, Fparams.parbd);
         
 
         [closest_points_1(:, collision_pair), closest_points_2(:, collision_pair), distances(collision_pair)] = distance_algo(spheroid_1_params, spheroid_2_params, Fparams.parbd.bodydist.tol, Fparams.parbd.bodydist.max_iter);
     end
 
+end
+
+function spheroid_params = LOCAL_get_spheroid_params(body_idx, C, Mt, parbd)
+    spheroid_params.C = C(body_idx, :);
+    spheroid_params.R = Mt{body_idx};
+    switch parbd.shape_type(body_idx)
+        case "oblate"
+            spheroid_params.a = parbd.polar_radii(body_idx);
+            spheroid_params.c = parbd.equ_radii(body_idx);
+        case "prolate"
+            spheroid_params.a = parbd.equ_radii(body_idx);
+            spheroid_params.c = parbd.polar_radii(body_idx);
+        case "sphere"
+            spheroid_params.a = parbd.equ_radii(body_idx);
+            spheroid_params.c = parbd.equ_radii(body_idx);
+        otherwise
+            error('Unknown shape type.');
+    end
+    spheroid_params.b = spheroid_params.a;
 end
 
 
