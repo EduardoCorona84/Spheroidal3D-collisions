@@ -333,10 +333,10 @@ for i=lid:Nt
     fprintf('\n dt: %2.2f ',dt)
 
     disp('Saving intermediate results to file')
-    timings.fullRunTime = timings.setup_kernel + timeings.setup_surf + sum(timings.total(:));
+    timings.fullRunTime = timings.setup_kernel + timings.setup_surf + sum(timings.total(:));
     save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
     save(timingsFile,'timings');
-    
+
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % (1.3) Optionally, plot the current config
     if Fparams.plotFlag
@@ -371,50 +371,50 @@ MRot = @(wh,t) RotationMat(wh,t);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
 % Get incoming force distribution: 
-tic; 
+incomingTic = tic; 
 % A lot of memory used here
 [FT,sigma,VW,psi_Lap,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt,Sc); 
-fprintf('\n Time to compute incoming force: %e ',toc)
-timings.incoming(it) = timings.incoming(it) + toc; 
+timings.incoming(it) = toc(incomingTic); 
+fprintf('\n Time to compute incoming force: %e ',timings.incoming(it))
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fprintf('\n Fluid Solve at time %.2f ',t)
-tic; 
+velocityTotalTic = tic; 
 [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,Fparams,colevent,collist,it,dt); 
-timings.velocities.total(it) = timings.velocities.total(it) + timings.velocities.solve(it) + timings.velocities.apply(it) ...
-    + timings.velocities.vw(it) + timings.velocities.col(it); 
+timings.velocities.total(it) = toc(velocityTotalTic); 
 fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(it)); 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Advance center Ct 
-tic; 
+advanceCenterTic = tic; 
 Ctp = LOCAL_advance_center(Ct,dt,VW,Fparams); 
-fprintf('\n Time to advance centers C(t): %e',toc); 
-timings.advance(it) = timings.advance(it) + toc; 
+timings.advance(it) = toc(advanceCenterTic); 
+fprintf('\n Time to advance centers C(t): %e', timings.advance(it)); 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Check for collision after moving centers
-tic; 
+colCheckTic = tic; 
 [colevent,collist,dt,Ctp] ...
 = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt);
-fprintf('\n Time for collision detection: %e',toc);
+colCheckToc = toc(colCheckTic)
+fprintf('\n Time for collision detection: %e',colCheckToc);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Advance rotation matrix Mt and X
-tic; 
+advanceRotTic = tic; 
 [Mtp,Xtp,nrmW] = LOCAL_advance_rotation(MRot,VW,Mt,Xt,X0,dt,np,n3); 
-fprintf('\n Time to advance R(t) and X(t): %e',toc)
-timings.advance(it) = timings.advance(it) + toc; 
+timings.advance(it) = toc(advanceRotTic); 
+fprintf('\n Time to advance R(t) and X(t): %e',timings.advance(it) )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %Update Sc and operators
 fprintf('\n Surface and operator update')
+surfOpTic = tic 
 if isfield(Fparams,'parsh')
-tic; 
-Fparams = LOCAL_compute_shell_velocity(mu+sigma,Fparams);
-fprintf('\n Time to compute boundary correction: %e',toc)
-timings.velocities.shell(it) = toc;
-timings.velocities.total(it) = timings.velocities.total(it) + timings.velocities.shell(it); 
+    shellTic = tic; 
+    Fparams = LOCAL_compute_shell_velocity(mu+sigma,Fparams);
+    timings.velocities.shell(it) = toc(shellTic);
+    fprintf('\n Time to compute boundary correction: %e',timings.velocities.shell(it))
 end
 
 [Kernels,Nullsp,Fparams,timings] ...
    = RBS_Update_Operators(Xtp,Ctp,Mtp,nrmW,Kernels,Fparams,timings,it);
-timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
+timings.operator.total(it) = toc(surfOpTic);
 fprintf('\n Time to update surface and operators: %e',timings.operator.total(it));  
 
 end
@@ -1131,66 +1131,66 @@ if shflg
 end
 
 if isempty(VW) || Fparams.comp
-% Fluid Solve
-% (1) U_inc=S[sigma] (particular solution given forces and torques)
-% Sigma is the incoming traction distribution 
+    % Fluid Solve
+    % (1) U_inc=S[sigma] (particular solution given forces and torques)
+    % Sigma is the incoming traction distribution 
 
-% (2) U_sc=S[mu] ("scattered" field with zero forces and torques)
-% RHS -(aI+K)*sigma
-tic; 
-B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma);
-fprintf('\n Time for to apply B = (L - TD)[sigma]: %e',toc);
-timings.velocities.apply(i) = 0.5*toc;
+    % (2) U_sc=S[mu] ("scattered" field with zero forces and torques)
+    % RHS -(aI+K)*sigma
+    applyTic = tic; 
+    B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma);
+    timings.velocities.apply(i) = toc(applyTic);
+    fprintf('\n Time for to apply B = (L - TD)[sigma]: %e',timings.velocities.apply(i));
 
-if ~isempty(Fparams.Tshell)
-B = B - Fparams.Tshell; 
-end
-
-% Solve Fredholm eq TD*mu = B
-tic; 
-verboseMVP = @(x) Lapp(Kernels.TD, x, true);
-mu = Lslv(verboseMVP,B,parslv);
-fprintf('\n Time for solve TD[mu] = B: %e',toc); 
-timings.velocities.solve(i) = toc;  
-% U = U_inc + U_sc
-tic; 
-U = Lapp(Kernels.SD,(mu+sigma)); 
-fprintf('\n Time for apply (of S) to compute U: %e',toc);  
-timings.velocities.apply(i) = timings.velocities.apply(i) + 0.5*toc;
-
-if ~isempty(Fparams.Tshell)
-   U = U + Ush; 
-end
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Compute (V,W) and advance Ct, Xt and Mt
-tic; 
-CU = Nullsp.C*U; 
-IU = CU(vind); 
-WxI = CU(wind); 
-    
-% U(S_k) = V_k + W_k x (X(S_k) - C_k)
-VW = zeros(6,n3); 
-if ~iscell(W)
-    VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,n3)); 
-    VW(4:6,:) = tau\(rdt.*reshape(WxI,3,n3)); 
-else
-    IUv = reshape(IU,3,n3); WxIv = reshape(WxI,3,n3); 
-    for j=1:n3
-        VW(1:3,j) = (1/sum(W{j}))*IUv(:,j); 
-        VW(4:6,j) = tau{j}\WxIv(:,j);
+    if ~isempty(Fparams.Tshell)
+    B = B - Fparams.Tshell; 
     end
-end
-fprintf('\n Time to compute V and W: %e',toc); 
-timings.velocities.vw(i) = toc; 
 
-errbs = norm(U-Nullsp.D'*VW(:))/norm(U);
-fprintf('\n Rigid body velocity error: %e',errbs)
+    % Solve Fredholm eq TD*mu = B
+    FredholmSolveTic = tic; 
+    verboseMVP = @(x) Lapp(Kernels.TD, x, true);
+    mu = Lslv(verboseMVP,B,parslv);
+    timings.velocities.solve(i) = toc(FredholmSolveTic);  
+    fprintf('\n Time for solve TD[mu] = B: %e',timings.velocities.solve(i)); 
+    % U = U_inc + U_sc
+    applyTicPrt2 = tic; 
+    U = Lapp(Kernels.SD,(mu+sigma)); 
+    timings.velocities.apply(i) = timings.velocities.apply(i) + toc(applyTicPrt2);
+    fprintf('\n Time for apply (of S) to compute U: %e',toc(applyTicPrt2));  
+
+    if ~isempty(Fparams.Tshell)
+    U = U + Ush; 
+    end
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Compute (V,W) and advance Ct, Xt and Mt
+    VWTic = tic; 
+    CU = Nullsp.C*U; 
+    IU = CU(vind); 
+    WxI = CU(wind); 
+        
+    % U(S_k) = V_k + W_k x (X(S_k) - C_k)
+    VW = zeros(6,n3); 
+    if ~iscell(W)
+        VW(1:3,:) = (1/sum(W))*(rdw.*reshape(IU,3,n3)); 
+        VW(4:6,:) = tau\(rdt.*reshape(WxI,3,n3)); 
+    else
+        IUv = reshape(IU,3,n3); WxIv = reshape(WxI,3,n3); 
+        for j=1:n3
+            VW(1:3,j) = (1/sum(W{j}))*IUv(:,j); 
+            VW(4:6,j) = tau{j}\WxIv(:,j);
+        end
+    end
+    timings.velocities.vw(i) = toc(VWTic); 
+    fprintf('\n Time to compute V and W: %e',timings.velocities.vw(i)); 
+
+    errbs = norm(U-Nullsp.D'*VW(:))/norm(U);
+    fprintf('\n Rigid body velocity error: %e',errbs)
 
 elseif col || ~isempty(Fparams.Tshell) 
-    tic; 
+    applyTic = tic; 
     B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma);
-    timings.velocities.apply(i) = toc;
+    timings.velocities.apply(i) = toc(applyTic);
     
     % If inside shell, add traction from boundary correction to rhs
     if ~isempty(Fparams.Tshell)
@@ -1198,9 +1198,9 @@ elseif col || ~isempty(Fparams.Tshell)
     end
     
     % Solve Fredholm eq TD*mu = B
-    tic; 
+    FredholmSolveTic = tic; 
     mu = Lslv(Kernels.TD,B,parslv); 
-    timings.velocities.solve(i) = toc;
+    timings.velocities.solve(i) = toc(FredholmSolveTic);
     
     if ~col
        U   = Lapp(Kernels.SD,(mu+sigma)) + Ush; 
@@ -1225,7 +1225,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Collision event
 if col
-   tic; 
+   collisionTic = tic; 
     
    fprintf('\n-------------------------------------------------');
    fprintf('\n Computing contact force at collision sites: \n')
@@ -1264,8 +1264,8 @@ if col
        end
    end
    
-   fprintf('\n Time for contact force correction: %e',toc);  
-   timings.velocities.col(i) = toc;
+   timings.velocities.col(i) = toc(collisionTic);
+   fprintf('\n Time for contact force correction: %e',timings.velocities.col(i));  
       
    % Check rigid body velocity
    errbs = norm(U-Nullsp.D'*VW(:))/norm(U);

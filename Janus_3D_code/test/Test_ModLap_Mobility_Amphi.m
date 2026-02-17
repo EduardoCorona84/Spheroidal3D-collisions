@@ -49,7 +49,7 @@ function [Fparams]=Test_ModLap_Mobility_Amphi(...
     saveLCPs,initMode,loadIntermediate,plotFlag,seed)
 %% Body default parameters
 if ~exist('p','var') || isempty(p)
-    p=8; 
+    p=2; 
 end
 if ~exist('meanRadius','var') || isempty(meanRadius)
     meanRadius=1;
@@ -68,7 +68,7 @@ if ~exist('polydisperseRatio','var') || isempty(polydisperseRatio)
 end
 %% LCP default params
 if ~exist('lcpSlvr','var') || isempty(lcpSlvr)
-    lcpSlvr='bifi'; 
+    lcpSlvr='bbpgd'; 
 end
 if ~exist('lcpTol','var') || isempty(lcpTol)
     lcpTol=1e-6; 
