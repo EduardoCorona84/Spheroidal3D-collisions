@@ -368,6 +368,8 @@ np = Fparams.parbd.np;
 n3 = Fparams.parbd.n3; 
 
 MRot = @(wh,t) RotationMat(wh,t);
+fprintf('\n ============================')
+fprintf('\n || Fluid Solve at time %.2f ',t)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
 % Get incoming force distribution: 
@@ -377,7 +379,6 @@ incomingTic = tic;
 timings.incoming(it) = toc(incomingTic); 
 fprintf('\n Time to compute incoming force: %e ',timings.incoming(it))
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-fprintf('\n Fluid Solve at time %.2f ',t)
 velocityTotalTic = tic; 
 [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,Fparams,colevent,collist,it,dt); 
 timings.velocities.total(it) = toc(velocityTotalTic); 
@@ -393,7 +394,7 @@ fprintf('\n Time to advance centers C(t): %e', timings.advance(it));
 colCheckTic = tic; 
 [colevent,collist,dt,Ctp] ...
 = LOCAL_collision_info(Fparams,X2,Ct,Ctp,VW,MRot,Mt,dt);
-colCheckToc = toc(colCheckTic)
+colCheckToc = toc(colCheckTic);
 fprintf('\n Time for collision detection: %e',colCheckToc);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Advance rotation matrix Mt and X
@@ -404,7 +405,7 @@ fprintf('\n Time to advance R(t) and X(t): %e',timings.advance(it) )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %Update Sc and operators
 fprintf('\n Surface and operator update')
-surfOpTic = tic 
+surfOpTic = tic;
 if isfield(Fparams,'parsh')
     shellTic = tic; 
     Fparams = LOCAL_compute_shell_velocity(mu+sigma,Fparams);
@@ -972,7 +973,6 @@ end
 %% Build A 
 A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
 if Fparams.denseMV
-
     A = @(x) A*x;
 end
 %% Build constant vector b: 
@@ -1006,7 +1006,7 @@ contactPairs{ixTime} = theseContactPairs;
 if contains('bifi', lower(Fparams.lcpOpts.solver))
     pLo = Fparams.lcpOpts.low.p;
     tolLo = Fparams.lcpOpts.low.gmresTol;
-    Ahat = getLCPMatVec(Fparams, F, [], [], pLo, tolLo);
+    Ahat = getLCPMatVec(Fparams, F, [], [], 'Ahat', pLo, tolLo);
     if Fparams.denseMV
         Ahat = @(x)Ahat*x;
     end
@@ -1148,7 +1148,7 @@ if isempty(VW) || Fparams.comp
 
     % Solve Fredholm eq TD*mu = B
     FredholmSolveTic = tic; 
-    verboseMVP = @(x) Lapp(Kernels.TD, x, true);
+    verboseMVP = @(x) Lapp(Kernels.TD, x);
     mu = Lslv(verboseMVP,B,parslv);
     timings.velocities.solve(i) = toc(FredholmSolveTic);  
     fprintf('\n Time for solve TD[mu] = B: %e',timings.velocities.solve(i)); 

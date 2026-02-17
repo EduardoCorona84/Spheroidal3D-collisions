@@ -49,13 +49,13 @@ function [Fparams]=Test_ModLap_Mobility_Amphi(...
     saveLCPs,initMode,loadIntermediate,plotFlag,seed)
 %% Body default parameters
 if ~exist('p','var') || isempty(p)
-    p=2; 
+    p=6; 
 end
 if ~exist('meanRadius','var') || isempty(meanRadius)
     meanRadius=1;
 end
 if ~exist('n','var') || isempty(n)
-    n=2;
+    n=4;
 end
 if ~exist('Cdst','var') || isempty(Cdst)
     Cdst=3; 
@@ -68,7 +68,7 @@ if ~exist('polydisperseRatio','var') || isempty(polydisperseRatio)
 end
 %% LCP default params
 if ~exist('lcpSlvr','var') || isempty(lcpSlvr)
-    lcpSlvr='bbpgd'; 
+    lcpSlvr='bifi'; 
 end
 if ~exist('lcpTol','var') || isempty(lcpTol)
     lcpTol=1e-6; 
@@ -80,7 +80,7 @@ if ~exist('lcpWarmStart','var') || isempty(lcpWarmStart)
     lcpWarmStart=true; 
 end
 if ~exist('lcpPLo','var') || isempty(lcpPLo)
-    lcpPLo=6; 
+    lcpPLo=4; 
 end
 if ~exist('lcpTolLo','var') || isempty(lcpTolLo)
     lcpTolLo=1e-6; 
@@ -106,7 +106,7 @@ if ~exist('mdist','var') || isempty(mdist)
     mdist=3; 
 end
 if ~exist('denseMV','var') || isempty(denseMV)
-    denseMV=true; 
+    denseMV=false; 
 end
 if ~exist('denseforce','var') || isempty(denseforce)
     denseforce=true;
@@ -212,12 +212,35 @@ Fparams.lcpOpts.low.gmresTol=lcpTolLo;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
 disp('=======================================')
-disp('Hyper Parameters')
-fprintf('- n         = %d\n', n)
-fprintf('- p         = %d\n', p)
-fprintf('- gmresTol  = %.2g\n', gmresTol)
-fprintf('- denseMV   = %d\n', denseMV)
-fprintf('- polyRatio = %.2f\n', polydisperseRatio)
+disp('Important Hyper Parameters')
+fprintf('- n            = %d \n', n)
+fprintf('- p            = %d \n', p)
+fprintf('- gmresTol     = %.2g \n', gmresTol)
+fprintf('- denseMV      = %d \n', denseMV)
+fprintf('- polyRatio    = %.2g \n', polydisperseRatio)
+fprintf('- lcpSlvr      = %s \n', lcpSlvr)
+fprintf('- lcpWarmStart = %d \n', lcpSlvr)
+disp('----------------------------------')
+disp('(Less) Important Hyper Parameters')
+fprintf('- meanRadius       = %f \n', meanRadius);
+fprintf('- Cdst             = %f \n', Cdst);
+fprintf('- ep               = %f \n', ep);
+fprintf('- lcpTol           = %f \n', lcpTol);
+fprintf('- lcpMaxIter       = %f \n', lcpMaxIter);
+fprintf('- lcpPLo           = %f \n', lcpPLo);
+fprintf('- lcpTolLo         = %f \n', lcpTolLo);
+fprintf('- Nt               = %f \n', Nt);
+fprintf('- dt               = %f \n', dt);
+fprintf('- tdisc            = %s \n', tdisc);
+fprintf('- gamma            = %f \n', gamma);
+fprintf('- lambda           = %f \n', lambda);
+fprintf('- mdist            = %f \n', mdist);
+fprintf('- denseforce       = %f \n', denseforce);
+fprintf('- saveLCPs         = %f \n', saveLCPs);
+fprintf('- initMode         = %s \n', initMode);
+fprintf('- loadIntermediate = %f \n', loadIntermediate);
+fprintf('- plotFlag         = %f \n', plotFlag);
+fprintf('- seed             = %f \n', seed);
 disp('=======================================')
 RBS_mobility(fname,Fparams);
 end

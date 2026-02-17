@@ -1,4 +1,8 @@
-function [A,Abad] = getLCPMatVec(Fparams, F, Kernels, Nullsp, p, gmresTol, Ct, denseMV, debug)
+function [A,Abad] = getLCPMatVec(Fparams, F, Kernels, Nullsp, label, p, gmresTol, Ct, denseMV, debug)
+% Label for the verbose output
+if ~exist("label","var") || isempty(label)
+    label = 'A';
+end
 % override p
 if exist('p','var') && ~isempty(p)
     Fparams.parbd.p = p;
@@ -57,7 +61,7 @@ else
 end
 
 if Fparams.denseMV
-    A = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
+    A_basic = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
     if nargout >1
         Abad = real((F'*Ck)*SD*(TD\((Bk'*(Ck*(Bk'*F))))));
     end
@@ -66,14 +70,14 @@ else
         warning('Not tested')
         S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
         IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-        A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+        A_basic = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
     else
         % TODO implement preconditioner
         parslv = Fparams.parslv;
         parslv.prec = []; 
         BkF = @(x) (Bk.')*(F*x);
-        verboseTD = @(x) Lapp(TD, x, true);
-        A = @(x) real(F.'*(Ak*Lapp(SD,Lslv(verboseTD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
+        TD = @(x) Lapp(TD, x);
+        A_basic = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
     end
     if debug 
         typeMV = 'Vsh'; flag_pot ='SL_Stk_3D'; a=0; kerd = Fparams.parbd.kerd; DMV =[];
@@ -84,11 +88,20 @@ else
         Amat = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
         AA = eye(n);
         for i = 1:n
-            AA(:,i) = A(AA(:,i));
+            AA(:,i) = A_basic(AA(:,i));
         end
         fprintf('relErr in MVP %.4g\n',norm(Amat-AA) / norm(Amat))
     end
     if nargout >1
         Abad = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
     end
+    A = @(x) A_verbose(x, A_basic, label);
+end
+end
+
+function y = A_verbose(x, A_basic, label)
+    start = tic;
+    y = A_basic(x);
+    stop = toc(start);
+    fprintf('-- %s[x] MVP time %.3g sec \n', label, stop)
 end
