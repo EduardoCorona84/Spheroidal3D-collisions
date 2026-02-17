@@ -952,10 +952,10 @@ function [F_c,mu_c,rho_c] = ...
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Recall that phib is the minimum separation function
     pair_scale = max(max_radii(body_1_idx), max_radii(body_2_idx));
-    % We subtract by collision_eps*pair_scale here to account for the buffer betweeb spheroids:
-    % that is, if phi > 0, we are outside buffer, and if phi < 0, we are inside the buffer so we
+    % We subtract by collision_eps*pair_scale here to account for the buffer between spheroids:
+    % that is, if phi > 0, we are outside the buffer, and if phi < 0, we are inside the buffer, so we
     % are too close/overlap! This is needed since in the theoretical model \Phi assumes we can measure
-    % distances/account for collisions exactly.
+    % distances and account for collisions exactly.
     phib = (1/dt) * (distances - collision_eps*pair_scale);
     bvec = phib + real((F.')*VW(:));
 
@@ -1003,7 +1003,7 @@ function [F_c,mu_c,rho_c] = ...
     % Contact forces and modified densities
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     if norm(lam) > 0 % Is at least one constraint active?
-        % lam is the contact force magnitude, so need to convert back to vector
+        % lam is the contact force magnitudes, so need to convert back to vector form
         % using the contact-force directions.
         F_c = F*lam;
         
@@ -1126,7 +1126,7 @@ function [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams)
 end
 
 function [colevent, collist, mindst, distances, closest_points_1, closest_points_2] = ...
-    LOCAL_check_collision(C, Mt, Fparams)
+        LOCAL_check_collision(C, Mt, Fparams)
     % C - centers of bodies (This is an double array, n_b x 3)
     % Mt - rotation matrices of bodies at current time
 
@@ -1234,18 +1234,14 @@ function [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_dist
     % These are column vectors
 
     for collision_pair = 1:size(distances, 2)
-        %this depends on how I implement the distance algorithms, which params are passed, the params are just placeholders for now, but we really just need the centers, the shapes (and rotation matrices), tolerance and iters
-
-        %create temporary structs to hold the spheroid params for the 2 spheroids in the collision pair
-
         curr_index_1 = collist(collision_pair, 1);
         curr_index_2 = collist(collision_pair, 2);
 
         spheroid_1_params = LOCAL_get_spheroid_params(curr_index_1, C, Mt, Fparams.parbd);
         spheroid_2_params = LOCAL_get_spheroid_params(curr_index_2, C, Mt, Fparams.parbd);
         
-
-        [closest_points_1(:, collision_pair), closest_points_2(:, collision_pair), distances(collision_pair)] = distance_algo(spheroid_1_params, spheroid_2_params, Fparams.parbd.bodydist.tol, Fparams.parbd.bodydist.max_iter);
+        [closest_points_1(:, collision_pair), closest_points_2(:, collision_pair), distances(collision_pair)] = ...
+            distance_algo(spheroid_1_params, spheroid_2_params, Fparams.parbd.bodydist.tol, Fparams.parbd.bodydist.max_iter);
     end
 
 end
