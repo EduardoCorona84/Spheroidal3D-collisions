@@ -55,11 +55,14 @@ if ~exist(DATA_DIR, 'dir')
 end
 diaryFile = [fname '.diary.log'];
 diary(diaryFile);
-%(0.1) (optional) Load data in init, initialize output arrays
 Nt = Fparams.Nt; n3=Fparams.parbd.n3; 
+%%----------------------------------------------------------------------%%%
+% START OF THE ALGO
+%%----------------------------------------------------------------------%%%
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%(0.2) Initialize timings and Fparams struct before simulation
-tic
+% (0.1) Initialize timings and Fparams struct before simulation
+setUpSurfTic = tic;
 Fparams = RBS_Initialize_params(Fparams);
 % Force the preconditioners to empty 
 Fparams.parslv.prec=[]; 
@@ -83,6 +86,9 @@ timings = struct('setup_surf',0,'setup_kernel',0,'incoming',zN,...
     'velocities',struct('solve',zN,'apply',zN,'vw',zN,'col',zN,'shell',zN,'total',zN),...
     'advance',zN,...
     'operator',struct('surf',zN,'diag',zN,'offd',zN,'total',zN),'total',zN);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%(0.2) (optional) Load data in init, initialize output arrays
 if Fparams.loadIntermediate && exist(saveFile, 'file')
     disp('Loading intermediate results from file')
     % Load previous file 
@@ -132,13 +138,13 @@ if Fparams.loadIntermediate && exist(timingsFile,'file')
     timings.total(1:lid) = res_.timings.total(1:lid);
 end
 Fparams.lid = lid;
-timings.setup_surf = toc;
+timings.setup_surf = toc(setUpSurfTic);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %(0.3) Initialize Kernels (MatVecs) and Nullspace info
-tic; 
+setUpTic = tic; 
 [Kernels,Nullsp,Fparams,timings] = RBS_Update_Operators(Xt{lid},Ct{lid},Mt(lid,:),nrmW,[],Fparams,timings,0); 
-timings.setup_kernel=toc;
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % (0.4) Initialize collision info  
 [colevent,collist,~,~] = LOCAL_check_collision_sph(Ct{lid},Fparams);
@@ -186,12 +192,15 @@ if Fparams.plotFlag
     end
     drawnow
 end
+timings.setup_kernel=toc(setUpTic);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % (1) Start the time evolution of the system
 for i=lid:Nt
     Fparams.ixTime = i;
     Fparams.endFlag = i == Nt;
     dt=dt0;
+    startTic = tic;
+    % (1.1) Take time step
     if strcmp(timedisc,'euler')
         fprintf('\n ---------------------------------------------------------- \n')
         fprintf('\n (1) Explicit euler step \n')
@@ -313,19 +322,23 @@ for i=lid:Nt
             LOCAL_advance_step(VW{i},mu{i},sigma{i},Xt{i},Xt{1},X2,Mt(i,:),Ct{i},Kernels,Fparams,dt,i);
 
     end
-
-    timings.total(i) = timings.velocities.total(i) + timings.operator.total(i) + ...
-        timings.advance(i) + timings.incoming(i);
+    timings.total(i) = toc(startTic);
     fprintf('\n Total computing time for timestep %d : %e ',i,timings.total(i))
     fprintf('\n -------------------------------------------------------------\n');
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % (1.2) Start the time evolution of the system
     t = t+dt;
     tt(i+1)=t;
     fprintf('\n dt: %2.2f ',dt)
+
     disp('Saving intermediate results to file')
+    timings.fullRunTime = timings.setup_kernel + timeings.setup_surf + sum(timings.total(:));
     save(saveFile,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');
     save(timingsFile,'timings');
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % (1.3) Optionally, plot the current config
     if Fparams.plotFlag
         C = Ct{i+1};
         r = Fparams.parbd.rd;
@@ -342,7 +355,6 @@ for i=lid:Nt
         drawnow
     end
 end
-
 diary off;
 end
 
@@ -1023,6 +1035,7 @@ lcpOpts = defaultLCPOpts(Fparams.lcpOpts,x0,resetQN);
 lcpOpts.A = A; 
 lcpOpts.b = bvec; 
 fg = @(x, Ax) quadraticLoss(x, A, bvec, Ax);
+tic()
 switch lower(lcpOpts.solver)  
     case 'bbpgd'
         [lam, info] = projectedGradientDescent(fg, x0, lcpOpts);    
@@ -1055,7 +1068,9 @@ if saveLCPs
     save(saveFile, '-v7.3', ...
         'lcp_list', 'Fparams');
 end
+dt_LCPSolver = toc();
 fprintf(['\n' lcpOpts.solver ' LCP solution error = %e, iters = %d \n'], info.kkt, info.iter);
+fprintf('\n\tSolveTime = %.6g \n', dt_LCPSolver);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Contact forces and modified densities
 if norm(lam)>0
