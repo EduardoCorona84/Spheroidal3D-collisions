@@ -183,9 +183,11 @@ for ii = 1:numel(mcGood)
             ALoCnt = @(x) Acounter(x, ALo, 1);
             dtLo = res.dt{i,jLo,kLo};
             fctr = mean(dtLo) / mean(dt);
-            opts.errFcn{3} = @(x) Acnt('cnt') + fctr * ALoCnt('cnt');
+            this_opts.errFcn{3} = @(x) Acnt('cnt') + fctr * ALoCnt('cnt');
             this_opts.sub.solver = 'proxquasinewton';
             this_opts.low.A = @(x) ALoCnt(x);
+            this_opts.low.kkt_abs = 1e-8;
+            this_opts.low.kkt_rel = 1e-8;
             this_opts.low.b = b;
             this_opts.low.initWithLofi = ~warmStart;
         end

@@ -39,7 +39,7 @@ function [x, info, opts] = bifidelityProxQuasiNewton(fg, x0, opts)
         % The implementation for prox quasi-Newton will not work. Need something here.
         opts = updateBk(s, y, Ahats, opts);
         % This solves the subproblem and saves the new low fidelity memory. 
-        [xhat_k, Ahatxhat_k, opts, ~] = solveSubProblem(x_km1, grad_km1, opts);
+        [xhat_k, Ahatxhat_k, Ahatx_km1, opts, ~] = solveSubProblem(x_km1, grad_km1, opts);
         
         % Use the optimal step size 
         p = xhat_k - x_km1;
@@ -83,10 +83,11 @@ function opts = updateBk(s, y, Ahats, opts)
             % Find the first empty (zeros) column.
             r = find(all(U == 0, 1), 1, 'first');
             % Compute the B^{(k)}(s) = (\hat{A} + UU^\top - VV^\top)s 
+            % In the iterative updating case, we only need to apply the last update.
             if r == 1
                 Bs = Ahats;
             else
-                Bs = Ahats + U(:, 1:r - 1)*(U(:, 1:r - 1)'*s) - V(:, 1:r - 1)*(V(:, 1:r - 1)'*s);
+                Bs = Ahats + U(:, r - 1)*(U(:,r - 1)'*s) - V(:,r - 1)*(V(:, r - 1)'*s);
             end
 
             % Form and store the BFGS update 
@@ -101,7 +102,7 @@ function opts = updateBk(s, y, Ahats, opts)
             else
                 r = r-1;
             end
-            B = @(x) opts.low.A(x) + U(:,1:r)*(U(:,1:r)'*x) - V(:,1:r)*(V(:,1:r)'*x);
+            %B = @(x) opts.low.A(x) + U(:,1:r)*(U(:,1:r)'*x) - V(:,1:r)*(V(:,1:r)'*x);
             opts.qn.S = S;
             opts.qn.Y = Y; 
             opts.qn.U = U;
@@ -113,7 +114,7 @@ function opts = updateBk(s, y, Ahats, opts)
 
 end
 
-function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opts, debug)
+function [xhat_k, Ahatxhat_k, Ahatx_km1, opts, info] = solveSubProblem(x_km1, grad_km1, opts, debug)
     if ~exist('debug','var') || isempty(debug)
         debug = false;
     end
@@ -129,24 +130,28 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     r = opts.qn.r;
     U = U(:, 1:r);
     V = V(:, 1:r);
+    u = U(:, r);
+    v = V(:, r);
     
     % Using proxQuasiNewton to solve the subproblem benefits from passing 
     % secant conditions from one problem to the next.
     % \argmin_{x>0} 1/2 x^\top B^{(k)}x + x^\top c
-    % The memory stored is secant conditions for \hat{A} : Y = \hat{A} S 
+    % The memory stored is secant conditions for \hat{A} + UU^\top - VV^\top : Y = (\hat{A} + UU^\top - VV^\top) S from one iteration ago so we need a rank 2 update.
     % We want secant conditions for B : Y = B S
     S = opts.low.qn.S;
     AhatS = opts.low.qn.Y;
     r2 = find(~all(S == 0, 1), 1, 'last');     
     S = S(:,1:r2);
     AhatS = AhatS(:,1:r2);
-    BS = AhatS + U * (U' * S) - V * (V' * S);
+    BS = AhatS + u * (u' * S) - v * (v' * S);
     rho = reshape(sum(S.*BS, 1).^-1, [], 1);
     
     % Fill the opts struct for the subproblem
+    tempLowA = opts.low.A;
+    % Still use the full updates for the function call, but iterative for cached values.
     B = @(x) opts.low.A(x) + U*(U'*x) - V*(V'*x);
-    Ahatx_km1 = opts.low.Ax_k;
-    Bx_km1 = Ahatx_km1 + U*(U'*x_km1) - V*(V'*x_km1);
+    Ahatx_km1 = opts.low.Ax_k + u*(u'*x_km1) - v*(v'*x_km1);
+    Bx_km1 = Ahatx_km1;
     c = grad_km1 - Bx_km1;
     opts.low.A = B;
     opts.low.b = c;
@@ -163,18 +168,9 @@ function [xhat_k, Ahatxhat_k, opts, info] = solveSubProblem(x_km1, grad_km1, opt
     opts.low.Ax_k = Bx_km1;
     [xhat_k, info, opts.low] = proxQuasiNewton(fg_sub, x_km1, opts.low);
     
-    Bx_k = opts.low.Ax_k;
-    % After solving the subproblem, in order for bookkeeping to be simplified,
-    % we need to store the secant conditions for \hat{A} (not B).
-    % \hat{A}S = BS - U*U^\topS + V*V^\top*S
-    S = opts.low.qn.S;
-    BS = opts.low.qn.Y;
-    r2 = find(~all(S == 0, 1), 1, 'last');
-    S = S(:,1:r2);
-    BS = BS(:,1:r2);
-    AhatS = BS - U * (U' * S) + V * (V' * S);
-    opts.low.qn.Y(:, 1:r2) = AhatS;
-    Ahatxhat_k = Bx_k - U * (U' * xhat_k) + V * (V' * xhat_k);
+    opts.low.A = tempLowA;
+    % Because we are iteratively updateing, we don't need to change how the low fidelity secant conditions are stored.
+    Ahatxhat_k = opts.low.Ax_k;
 
     if debug 
     %% idiot checks

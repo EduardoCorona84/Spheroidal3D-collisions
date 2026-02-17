@@ -8,8 +8,8 @@ if cache.isKey(resFile)
     disp('- Loading from precomputed cache')
     mcGood = cache(resFile);
     return 
-elseif isfile([resFile '.mcGood.mat'])
-    load([resFile '.mcGood.mat'], 'mcGood')
+elseif isfile(resFile + '.mcGood.mat')
+    load(resFile + '.mcGood.mat', 'mcGood')
     cache(resFile) = mcGood;
     return 
 end
@@ -43,5 +43,5 @@ for i = 1:Nt
     end
 end
 mcGood = find(mcGood);
-save([resFile '.mcGood.mat'], 'mcGood')
+save(resFile + '.mcGood.mat', 'mcGood')
 cache(resFile) = mcGood;
