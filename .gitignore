@@ -17,8 +17,9 @@ docs_old/*
 Janus_3D_code/FMMLIB/mwrap
 *.mex*
 *.a
-Janus_3D_code/results
-Janus_3D_code/data
+Janus_3D_code/slurm/old
+Janus_3D_code/results*
+Janus_3D_code/data*
 Janus_3D_code/LCPsolvers/inexact-or-multifidelity/multifidelity-quasi-newton-correction/data/
 Janus_3D_code/FMMLIB/
 docs

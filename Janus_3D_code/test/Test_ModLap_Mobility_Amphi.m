@@ -49,7 +49,7 @@ function [Fparams]=Test_ModLap_Mobility_Amphi(...
     saveLCPs,initMode,loadIntermediate,plotFlag,seed)
 %% Body default parameters
 if ~exist('p','var') || isempty(p)
-    p=4; 
+    p=8; 
 end
 if ~exist('meanRadius','var') || isempty(meanRadius)
     meanRadius=1;
@@ -211,5 +211,13 @@ Fparams.lcpOpts.low.gmresTol=lcpTolLo;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run Rigid Body Stokes 
+disp('=======================================')
+disp('Hyper Parameters')
+fprintf('- n         = %d\n', n)
+fprintf('- p         = %d\n', p)
+fprintf('- gmresTol  = %.2g\n', gmresTol)
+fprintf('- denseMV   = %d\n', denseMV)
+fprintf('- polyRatio = %.2f\n', polydisperseRatio)
+disp('=======================================')
 RBS_mobility(fname,Fparams);
 end

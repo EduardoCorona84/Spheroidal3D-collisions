@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=50
 #SBATCH --mem=200G
-#SBATCH --time=7-00:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --account=blanca-becker
 #SBATCH --qos=blanca-becker
 #SBATCH --partition=blanca-becker

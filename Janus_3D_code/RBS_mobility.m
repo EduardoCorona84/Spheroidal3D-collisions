@@ -146,7 +146,6 @@ fprintf('\n-------------------------------------------------');
 fprintf('\n Initial (potential) Collisions: \n')
 display(collist(:,1:2)')
 fprintf('-------------------------------------------------\n');
-
 % Model of the surface of the sphere or other geometry. 
 if ~strcmp(Fparams.parbd.Shape,'') % unit sphere
    Sc2 = SurfaceSph(rad*shape_gallery(2*p,Fparams.parbd.Shape)); 
@@ -904,11 +903,14 @@ if saveLCPs
         LCP_file_path = Fparams.LCP_file_path;
     end
     if isempty(lcp_list) || ixTime == Fparams.lid
+        fprintf('ixTime=%d, lid=%d\n',ixTime, Fparams.lid)
         % Initialize structure or load intermediate results
         if Fparams.loadIntermediate && exist(LCP_file_path,'file')
+            disp(' -- Loading Intermediate LCP results from file')
             load(LCP_file_path, 'lcp_list');
             contactPairs = {lcp_list.contactPairs};
         else
+            disp(' -- Initializing lcp_list with blank struct')
             lcp_list = repmat( ...
                 struct( ...
                     'A', [], ...

@@ -4,19 +4,19 @@ global DATA_DIR
 [dirname, ~] = setPaths();
 %% set defaults
 if ~exist('srcFile', 'var') || isempty(srcFile)
-    srcFile = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5.mat');
+    srcFile = '/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/test/../resultsForRecord/amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2.mat';
 end
 if ~exist('dstDir', 'var') || isempty(dstDir)
-    dstDir = fullfile(dirname, '../data/amphi.lattice.n_5.p_8.cDist_2.5');
+    dstDir = '/projects/niru8088/Spheroidal3D-collisions/Janus_3D_code/test/../resultsForRecord/amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2.denseMats';
 end
 if ~exist('ix', 'var') || isempty(ix)
-    ix = 236;
+    ix = 50;
 end
 if ~exist('p', 'var') || isempty(p)
-    p = 8;
+    p = 4;
 end
 if ~exist('gmresTol', 'var') || isempty(gmresTol)
-    gmresTol = 1e-8;
+    gmresTol = 1e-6;
 end
 %% Set DATA_DIR 
 DATA_DIR = fullfile(getenv('SLURM_SCRATCH'), ...
@@ -45,14 +45,13 @@ if nc ==0
     save(dstFile, 'A', 'p', 'gmresTol')
     return
 end
+IX = 1:nc;
 A = zeros(nc,nc);
 dt = zeros(nc,1);
 if exist(dstFile, 'file')
     res_ = load(dstFile);
     disp(['Loaded precomputed result from ' dstFile])
-    if isempty(res_.A)
-        IX = 1:nc;
-    else
+    if ~isempty(res_.A)
         IX = [];
         for i = 1:nc
             if all(res_.A(:,i) == 0) || norm(res_.A(:,i)) > 4
