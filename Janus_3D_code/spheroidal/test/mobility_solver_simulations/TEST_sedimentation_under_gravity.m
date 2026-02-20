@@ -16,7 +16,7 @@ scenario = '2body';
 % Simulation parameters
 kerd = 3; % Kernel dimension
 out = true; % outside vs inside sphere
-Nt = 25;
+Nt = 200;
 dt = 0.1;
 denseMV = true; % Dense vs FMM off diagonal 
 tdisc = 'euler';
@@ -35,11 +35,11 @@ switch scenario
         oblate = false;
     case '2body'
         n3 = 2;
-        equ_radii = [1/2 2/3];
+        equ_radii = [1/2 1];
         polar_radii = [1 1];
         C = [...
             -1 0 0; ...
-            1 0 0; ...
+            1.5 0 0; ...
         ];
         oblate = [false false];
     otherwise
@@ -50,8 +50,8 @@ end
 tol = 1e-4;
 
 % Force and torque functions (let gravity be proportional to volume)
-[u0, a] = calculate_u0_and_a_from_radii([], equ_radii, polar_radii);
-body_volumes = LOCAL_calculate_volume(n3, p, u0, a, oblate);
+body_shape_types = calculate_shape_type(equ_radii, polar_radii);
+body_volumes = LOCAL_calculate_volume(n3, p, equ_radii, polar_radii, body_shape_types);
 % Tfun = @(t,C,varargin) [20*(body_volumes).^3; zeros(2,n3) ];
 % Ffun = @(t,C,q) zeros(3,n3);
 Tfun = @(t,C,q) zeros(3,n3);
@@ -122,15 +122,25 @@ Fparams.plotColorLimits = [0.5 1];
 spheroidal_mobility('', Fparams, []);
 
 %% Utility functions
-function volumes = LOCAL_calculate_volume(ns, p, u0, a, oblate)
+function volumes = LOCAL_calculate_volume(ns, p, equ_radii, polar_radii, shape_types)
     volumes = zeros(1, ns);
     for i=1:ns
-        if oblate(i)
-            pts = oblate_spheroid_shape(p, u0(i), a(i));
-        else
-            pts = prolate_spheroid_shape(p, u0(i), a(i));
+        shape_type = shape_types(i);
+        switch shape_type
+            case "sphere"
+                volumes(i) = (4/3)*pi*equ_radii(i)^3;
+            case "oblate"
+                [u0_i, a_i] = calculate_u0_and_a_from_radii(shape_type, equ_radii(i), polar_radii(i));
+                pts = oblate_spheroid_shape(p, u0_i, a_i);
+                s = SurfaceSph(pts);
+                volumes(i) = s.volume;
+            case "prolate"
+                [u0_i, a_i] = calculate_u0_and_a_from_radii(shape_type, equ_radii(i), polar_radii(i));
+                pts = prolate_spheroid_shape(p, u0_i, a_i);
+                s = SurfaceSph(pts);
+                volumes(i) = s.volume;
+            otherwise
+                error('Unsupported shape type at index %d.', i);
         end
-        s = SurfaceSph(pts);
-        volumes(i) = s.volume;
     end
 end

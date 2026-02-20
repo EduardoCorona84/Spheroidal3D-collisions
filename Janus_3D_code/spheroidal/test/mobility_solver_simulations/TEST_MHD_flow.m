@@ -12,13 +12,13 @@ addpath(genpath('../../../LCPsolvers'));
 clear SSph_MatVec;
 
 %% SETUP
-scenario = '2bodyattract';
+scenario = '3bodypaper';
 
 % Simulation parameters
 kerd = 1; % Kernel dimension
 out = true; % outside vs inside sphere
-Nt = 50;
-dt = 0.1;
+Nt = 400;
+dt = 0.05;
 denseMV = true; % Dense vs FMM off diagonal 
 tdisc = 'euler';
 mdist = 1e-2; % Collision parameter ?
@@ -26,7 +26,7 @@ collision_eps = 1e-2;
 
 % MHD parameters
 mur = 2; % mu / mu_0
-H0 = [0 25 0];
+H0 = [0 10 0];
 
 % Spheroid parameters
 p  = 12; % Spharm degree p
@@ -65,6 +65,17 @@ switch scenario
             0 2*sqrt(3)/4 0; ...
             1 -2*sqrt(3)/4 0; ...
             -1 -2*sqrt(3)/4 0; ...
+        ];
+        oblate = [false false false];
+    case '3bodypaper'
+        n3 = 3;
+        equ_radii = [1/2 1/2 1/2];
+        polar_radii = [1 1 1];
+        % Equilateral triangle
+        C = [...
+            0 0 0; ...
+            0 3 0; ...
+            1.5 1.5 0; ...
         ];
         oblate = [false false false];
     otherwise
