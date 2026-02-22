@@ -4,6 +4,7 @@ function plot_state = plot_init(Fparams, Xt, np, n3)
     %   plotForceColor
     %   plotVectorLineWidth
     %   plotForceMaxLength
+    %   plotColormap (e.g. 'parula', 'turbo', 'jet', 'hot')
     plot_state = struct();
     plot_state.fig = figure;
     plot_state.ax = axes('Parent', plot_state.fig);
@@ -52,6 +53,12 @@ function plot_state = plot_init(Fparams, Xt, np, n3)
     if isfield(Fparams,'plotColorLimits')
         plot_state.color_limits = Fparams.plotColorLimits(:).';
     end
+
+    plot_state.colormap_name = 'parula';
+    if isfield(Fparams,'plotColormap') && ~isempty(Fparams.plotColormap)
+        plot_state.colormap_name = char(string(Fparams.plotColormap));
+    end
+    colormap(plot_state.ax, plot_state.colormap_name);
 
     plot_state.traj_enable = false;
     if isfield(Fparams,'plotTrajectories')

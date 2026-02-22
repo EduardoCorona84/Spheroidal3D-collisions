@@ -27,11 +27,15 @@ function plot_state = plot_update(plot_state, Xt, Ct, t, sigma, mu, FT)
     if ~isfield(plot_state,'force_max_length')
         plot_state.force_max_length = 0.8*max(1, plot_state.diam);
     end
+    if ~isfield(plot_state,'colormap_name') || isempty(plot_state.colormap_name)
+        plot_state.colormap_name = 'parula';
+    end
 
     Xin = LOCAL_plot_points(Xt, Ct, plot_state.np, plot_state.n3);
     axes(plot_state.ax);
     hold(plot_state.ax, 'off');
     C = [];
+    colormap(plot_state.ax, plot_state.colormap_name);
 
     switch plot_state.color_source
         case 'sigma'
