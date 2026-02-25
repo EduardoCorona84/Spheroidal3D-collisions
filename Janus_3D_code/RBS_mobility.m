@@ -850,15 +850,17 @@ display(vxy)
 VW = zeros(6,n3); 
 VW(1:2,:) = vxy; VW(6,:) = wz;  
 
-   case 'FTfun' 
-   Ffun = Fparams.Ffun; 
-   Tfun = Fparams.Tfun; 
-   Ct = Fparams.parbd.C; 
-   
-   Force = Ffun(t,Ct);  
-   Torque = Tfun(t,Ct);
-   FT = [Force;Torque]; FT = FT(:); 
-   fM = Bk'*FT;   
+case 'FTfun'
+    
+    psi_Lap = [];
+    Ffun = Fparams.Ffun; 
+    Tfun = Fparams.Tfun; 
+    Ct = Fparams.parbd.C; 
+    
+    Force = Ffun(t,Ct);  
+    Torque = Tfun(t,Ct);
+    FT = [Force;Torque]; FT = FT(:); 
+    fM = Bk'*FT;   
    
    fprintf('\n Prescribed forces and torques \n'); 
    %display(reshape(FT,6,n3))
@@ -938,6 +940,7 @@ if saveLCPs
 end
 %% Setup F matrix which marginalizes to the contact pairs for this time
 shflg = isfield(Fparams,'parsh');
+wlflg = isfield(Fparams,'wall');
 ip = collist(:,1); jp = collist(:,2); 
 if shflg
     sheps = Fparams.parsh.eps;
@@ -949,6 +952,16 @@ else
     numFS = 0; 
 end
 
+if wlflg
+    weps = Fparams.wall.eps;
+    idWall = jp > n3; 
+    ipWall = ip(idWall); 
+    ip = ip(~idWall); jp = jp(~idWall); 
+    numFW = length(ipWall); 
+else
+    numFW = 0; 
+end
+
 TD = Kernels.TD; SD = Kernels.SD; 
 Bk = Nullsp.B; Ck = Nullsp.C; Lk = Nullsp.L; 
 numF = length(ip); 
@@ -957,7 +970,7 @@ numF = length(ip);
 R = Ct(ip,:)-Ct(jp,:);       %Ci - Cj numF x 3 (NIC: vector between particle pair centers)
 NR = sqrt(sum(R.*R,2));      %|Ci-Cj| numF x 1 (NIC: distance between particle pairs centers)
 Rhat = repmat(1./NR,1,3).*R; %eij = (Ci - Cj)/|Ci-Cj| (NIC: unit vectors between particle pairs)
-F = zeros(6*n3,numF+numFS); % NIC: F maps contact to direction of force applied to a particular particle
+F = zeros(6*n3,numF+numFS + numFW); % NIC: F maps contact to direction of force applied to a particular particle
 for k=1:numF
     indi = (1:3)+6*(ip(k)-1);
     indj = (1:3)+6*(jp(k)-1);
@@ -965,7 +978,13 @@ for k=1:numF
     F(indj,k) = -Rhat(k,:); 
 end
 
-for k=numF+1:numF+numFS
+for k = numF+1:numF + numFW
+    % The particle-wall contact normal is the normal of the wall, pointing into the fluid domain.
+    indi = (1:3)+6*(ipWall(k-numF)-1);
+    F(indi,k) = Fparams.wall.normal;
+end
+
+for k=numF+numFW+1:numF+numFW+numFS
    indi = (1:3)+6*(ipsh(k-numF)-1);
    F(indi,k) = -Ct(ipsh(k-numF),:)./norm(Ct(ipsh(k-numF),:));
 end
@@ -977,29 +996,38 @@ if Fparams.denseMV
 end
 %% Build constant vector b: 
 % Compute (1/dt)*phi
-phib = zeros(numF+numFS,1); 
+phib = zeros(numF+numFS+numFW,1); 
 if numF>0
     % phi(i,j) = |C_i-C_j|-(r_i+r_i)-eps*max(r_i,r_j)
     phib(1:numF) = (1/dt)*(NR-diam(ip+n3*(jp-1))-eps*mxrd(ip+n3*(jp-1))); 
 end
+
+if numFW>0
+    distWall = (Ct(ipWall,:)-Fparams.wall.point)*Fparams.wall.normal' - rd(ipWall) - weps*rd(ipWall);
+    phib(numF+1:numF+numFW) = (1/dt)*distWall;
+end
+
 if numFS>0
     NC = sqrt(sum(Ct(ipsh,:).*Ct(ipsh,:),2)); 
     % phi(i,shell) = (R-r_i) - sheps*rdsh - |C_i|
     distSh = (Fparams.parsh.rd - rd(ipsh) - sheps*Fparams.parsh.rd) - NC; 
-    phib(numF+1:numF+numFS) = (1/dt)*distSh;  
+    phib(numF+numFW+1:numF+numFW+numFS) = (1/dt)*distSh;  
 end
+
+
+
 
 %b_k = (1/dt)*phi_k + F.'V_k
 bvec = phib + real((F.')*VW(:));
 %TODO: add options for restitution / elastic collisions
 %% Save these contact pairs to Persistent Variable
-theseContactPairs = zeros(numF+numFS,1);
-for ii = 1:numF+numFS
+theseContactPairs = zeros(numF+numFW + numFS,1);
+for ii = 1:numF+numFW+numFS
     l0 = (find(F(:,ii), 1,'first')-1) / 6;
     l1 = (find(F(:,ii), 1,'last')-3) / 6;
     % linear indexing from 0 to N = numF+numFS
     % pair 0,1 -> 1, N,0 -> N(N-1), and so on
-    theseContactPairs(ii) = l0*(numF+numFS) + l1; 
+    theseContactPairs(ii) = l0*(numF+numFW + numFS) + l1; 
 end
 contactPairs{ixTime} = theseContactPairs;
 %% Bifidelity 
@@ -1342,7 +1370,7 @@ n3 = size(Ct,1); Shape=Fparams.parbd.Shape;
 eps = Fparams.parbd.eps;  
 
 %Check for collision between spheres (or sphere envelopes)
-[colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(Ctp,Fparams);
+[colevent,collist,mindst,mindstsh, mindstWall] = LOCAL_check_collision_sph(Ctp,Fparams);
 
 % Finer collision detection for non-spheres
 if ~strcmp(Shape,'')
@@ -1353,12 +1381,16 @@ end
 if colevent
     
     % If mindst<<eps, or <0, we need to adjust timestep
-    bis=0; maxbis=3; shell = isfield(Fparams,'parsh');
+    bis=0; maxbis=3; shell = isfield(Fparams,'parsh'); wall = isfield(Fparams,'wall');
     
     cond = mindst < 0.1*eps;
     if shell
         sheps = Fparams.parsh.eps;
         cond = cond || mindstsh < 0.1*sheps;
+    end
+    if wall
+        weps = Fparams.wall.eps;
+        cond = cond || mindstWall < 0.1*weps;
     end
     
     while cond && bis<=maxbis
@@ -1369,7 +1401,7 @@ if colevent
         Ctp = LOCAL_advance_center(Ct,dt,VW,Fparams); 
     
         %Check for collision between spheres (or sphere envelopes)
-        [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(Ctp,Fparams);
+        [colevent,collist,mindst,mindstsh, mindstWall] = LOCAL_check_collision_sph(Ctp,Fparams);
 
         % Finer collision detection for non-spheres
         if ~strcmp(Shape,'')
@@ -1383,6 +1415,10 @@ if colevent
         if shell
             sheps = Fparams.parsh.eps;
             cond = cond || mindstsh < 0.1*sheps;
+        end
+        if wall
+            weps = Fparams.wall.eps;
+            cond = cond || mindstWall < 0.1*weps;
         end
     end
     

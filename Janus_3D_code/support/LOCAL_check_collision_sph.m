@@ -1,4 +1,4 @@
-function [colevent,collist,mindst,mindstsh] = LOCAL_check_collision_sph(C,Fparams)
+function [colevent,collist,mindst,mindstsh, mindstWall] = LOCAL_check_collision_sph(C,Fparams)
 
 n3 = size(C,1); 
 
@@ -41,6 +41,27 @@ else
    colevent = mindst < 1.1*eps; 
    mindstsh = Inf;
    collist = [ip jp]; 
+end
+
+% This computes distance to a wall, if there is one. 
+% Fparams.parsh.eps, tolerance for collisions
+% Fparams.wall.point, a point on the wall
+% Fparams.wall.normal, the normal vector of the wall
+if isfield(Fparams, 'wall')
+    weps = Fparams.wall.eps;
+    distWall = (C - Fparams.wall.point) * Fparams.wall.normal' - rd;
+    mindstWall = min(distWall./rd);
+    iiWall = find(distWall <= 1.1*weps*rd);
+    jjWall = (n3+1)*ones(size(iiWall)); % j=n3
+
+    colevent = mindst < 1.1*eps ||  mindstWall < 1.1*weps;
+    collist = [[ip ; iiWall] [jp ; jjWall]];
+else
+    colevent = mindst < 1.1*eps;
+    mindstWall = Inf;
+    collist = [ip jp];
+
+
 end
 
 end
