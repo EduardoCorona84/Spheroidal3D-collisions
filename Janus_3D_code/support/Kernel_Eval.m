@@ -425,7 +425,7 @@ else
         N2 = repmat(params.nor(:,2).',size(X1,1),1);
         N3 = repmat(params.nor(:,3).',size(X1,1),1);
         NdotR = d1.*N1+d2.*N2+d3.*N3;
-        A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den)).*(1./den + lambda./sqrt(den)) - (den==0);
+        A = a*(den==0) + (wh.*NdotR.*exp(-lambda*sqrt(den))./sqrt(den + (den==0))).*(1./(den + (den==0)) + lambda./sqrt(den + (den==0))) - (den==0);
      case 'dSL_LMOD_3D'
          lambda=params.lambda;
         a = params.a;

@@ -647,7 +647,7 @@ function Y = LOCAL_FMM_Eval(Q, W, kerd, pot, Xtrg, Xsrc, Nr)
     %}
 
     % source and target points variables
-    target = Xtrg.';     
+    target = Xtrg.';
     ntarget = size(Xtrg,1);
     if nargin<7
         Xsrc=Xtrg; 
