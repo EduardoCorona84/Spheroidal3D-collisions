@@ -22,6 +22,11 @@ params - parameter struct with fields such as:
         'SL_L_3D'     single layer, Laplace
         'dSL_L_3D'    normal derivative of single layer, Laplace
         'DL_L_3D'     double layer, Laplace
+        'dDL_L_3D'    normal derivative of double layer, Laplace
+        'SL_LMOD_3D'  single layer, modified Laplace (Yukawa)
+        'dSL_LMOD_3D' normal derivative of single layer, modified Laplace
+        'DL_LMOD_3D'  double layer, modified Laplace
+        'dDL_LMOD_3D' normal derivative of double layer, modified Laplace
         'SL_Stk_3D'   single layer, Stokes
         'DL_Stk_3D'   double layer, Stokes
         'dSL_Stk_3D'  normal derivative of single layer, Stokes
@@ -55,6 +60,16 @@ equ_radii = params.equ_radii;
 polar_radii = params.polar_radii;
 
 pot = params.flag_pot;
+is_modified_laplace = contains(pot, 'LMOD');
+if is_modified_laplace
+    lambda = params.lambda;
+end
+
+if is_modified_laplace && ~dense
+    error('Modified Laplace currently requires params.dense = true.');
+end
+
+modlap_opts = struct();
 
 if isempty(Gmatrix_cache)
     body_shape_types = params.shape_type;
@@ -123,6 +138,9 @@ if strcmp(V, 'Mat')
     params_KE = params; % Copy it to handle this for kerd = 1 (maybe not so efficient)
     params_KE.W2 = W2;
     params_KE.nor = Nor;
+    if strncmp(pot, 'dDL', 3)
+        params_KE.targnor = Nor;
+    end
     Y = Kernel_Eval(Xv,Xv,params_KE);
 
     if kerd == 3
@@ -180,11 +198,15 @@ if strcmp(V, 'Mat')
                 if ~isempty(ind_off)
                     target_pts_off = target_pts(ind_off,:);
                     target_normals_off = target_normals(ind_off,:);
-                    Ynear(indv_off,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts_off, target_normals_off, np, iprm, source_Gmatrix);
+                    Ynear(indv_off,:) = LOCAL_spheroid_near_matrix( ...
+                        pot, u0, a, oblate, target_pts_off, target_normals_off, ...
+                        np, iprm, source_Gmatrix, lambda, modlap_opts);
                 end
-                Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
+                Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix( ...
+                    pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix, lambda, modlap_opts);
             else
-                Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix);
+                Ynear = LOCAL_spheroid_near_matrix( ...
+                    pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix, lambda, modlap_opts);
             end
         elseif strcmp(body_shape_type, 'sphere')
             switch pot(1:3)
@@ -215,7 +237,11 @@ if strcmp(V, 'Mat')
 
             if kerd == 1
                 Nrtrg = target_normals;
-                Ynear = Sh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
+                if is_modified_laplace
+                    Ynear = Sh_Mod_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg, lambda);
+                else
+                    Ynear = Sh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
+                end
             else
                 Nrtrg = Nor(I_nghv,:);
                 if rot
@@ -344,24 +370,16 @@ elseif ~isempty(V) && isnumeric(V)
                     if ~isempty(ind_off)
                         target_pts_off = target_pts(ind_off,:);
                         target_normals_off = target_normals(ind_off,:);
-                        if strcmp(pot,'SL_L_3D')
-                            Ynear(indv_off,:) = LOCAL_eval_lslp(params_i, target_pts_off, sigma, source_Gmatrix);
-                        else
-                            Ynear(indv_off,:) = LOCAL_eval_ldslp(params_i, target_pts_off, target_normals_off, sigma, source_Gmatrix);
-                        end
+                        Ynear(indv_off,:) = LOCAL_eval_scalar_spheroidal_potential( ...
+                            pot, params_i, target_pts_off, target_normals_off, ...
+                            sigma, source_Gmatrix, lambda, modlap_opts);
                     end
 
-                    if strcmp(pot,'SL_L_3D')
-                        Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_eval_lslp(params_i, [], sigma, source_Gmatrix);
-                    else
-                        Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_eval_ldslp(params_i, [], [], sigma, source_Gmatrix);
-                    end
+                    Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_eval_scalar_spheroidal_potential( ...
+                        pot, params_i, [], [], sigma, source_Gmatrix, lambda, modlap_opts);
                 else
-                    if strcmp(pot,'SL_L_3D')
-                        Ynear = LOCAL_eval_lslp(params_i, [], sigma, source_Gmatrix);
-                    else
-                        Ynear = LOCAL_eval_ldslp(params_i, [], [], sigma, source_Gmatrix);
-                    end
+                    Ynear = LOCAL_eval_scalar_spheroidal_potential( ...
+                        pot, params_i, [], [], sigma, source_Gmatrix, lambda, modlap_opts);
                 end
             else
                 % Grab density on source particle
@@ -469,13 +487,27 @@ elseif ~isempty(V) && isnumeric(V)
                     Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
 
                     % Self term (evaluate at unit radius)
-                    Ynear(Nb*(slf-1)+1:Nb*slf, :) = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                    if is_modified_laplace
+                        Ynear(Nb*(slf-1)+1:Nb*slf, :) = Sh_Mod_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], [], lambda);
+                    else
+                        Ynear(Nb*(slf-1)+1:Nb*slf, :) = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                    end
                     % Off-diagonal neighbor terms at specified spherical coordinates and normals
                     if ~isempty(ind_off)
-                        Ynear(indv_off, :) = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(ind_off,:));
+                        if is_modified_laplace
+                            Ynear(indv_off, :) = Sh_Mod_Kernel_Eval_off( ...
+                                Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(ind_off,:), lambda);
+                        else
+                            Ynear(indv_off, :) = Sh_Kernel_Eval_off( ...
+                                Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(ind_off,:));
+                        end
                     end
                 else
-                    Ynear = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                    if is_modified_laplace
+                        Ynear = Sh_Mod_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], [], lambda);
+                    else
+                        Ynear = Sh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+                    end
                 end
             else
                 % Target normals in the local frame, duplicated per component
@@ -587,7 +619,7 @@ elseif ~isempty(V) && isnumeric(V)
     if ~dense
         Nr = Nor(1:kerd:end,:);
         W = W2.';
-        Y = Y + LOCAL_FMM_Eval(V, W, kerd, pot, X, X, Nr);
+        Y = Y + SSph_FMM_Eval(V, W, kerd, pot, X, X, Nr);
     end
 
     if out
@@ -596,8 +628,7 @@ elseif ~isempty(V) && isnumeric(V)
         ct = -0.5;
     end
 
-    % For non-continuous potentials (i.e. everything except single-layer and normal derivative of double-layer), 
-    % need to add contribution from jump relation--if requested by user (i.e. set params.a to be non-zero).
+    % Add jump-relation (i.e. params.a)
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
         if isfield(params,'a')
             if strcmp(pot(2:3),'SL') 
@@ -627,141 +658,21 @@ end
 
 end %% END SSph_MatVec
 
-function Y = LOCAL_FMM_Eval(Q, W, kerd, pot, Xtrg, Xsrc, Nr)
-    %{
-    Wrapper function to call the external FMM library. Note that FMM evaluates the operator
-    with the jump relation instead of just the principal-valued component. Thus, we automatically negate
-    the effect of the jump in this function.
-    Inputs
-    Q - (double) kerd*N_src × 1 column vector 
-        source densities per DOF, ordered as follows:
-        [q1(p1); q2(p1); ...; q3(p1); q1(p2); ...].
-    W - (double)  kerd*N_src × 1 column vector 
-        quadrature weights aligned with Q (typically W2 from params)
-    kerd - (int) dimension of kernel (should be 1 or 3 for now)
-    pot - (string) list of potentials; see main function for description
-    Xtrg - (double)
-    Xsrc - (double)
-    Nr - (double) N_trg x 3 array
-        target normals; required for certain potentials
-    %}
-
-    % source and target points variables
-    target = Xtrg.';
-    ntarget = size(Xtrg,1);
-    if nargin<7
-        Xsrc=Xtrg; 
-    end
-    source  = Xsrc.'; 
-    nsource = size(Xsrc,1);  
-
-    % Determine SL/DL and whether gradient (target normals) is needed
-    if strcmp(pot(1:2),'SL') || strcmp(pot(2:3),'SL')
-        % SL and dSL/TSL
-        sigma_sl = reshape(W.*Q,kerd,nsource); 
-        ifsingle=1; 
-        ifdouble=0; 
-        sigma_dl=zeros(kerd,nsource); 
-        sigma_dv=zeros(3,nsource); 
-        ifpot=1;  ifpottarg=0;
-        ifgradtarg=0;
-    else
-        % DL and dDL/TDL
-        sigma_dl = reshape(W.*Q,kerd,nsource); 
-        ifsingle=0; 
-        ifdouble=1; 
-        sigma_sl=zeros(kerd,nsource); 
-        sigma_dv=Nr.'; 
-        ifpot=1;  ifpottarg=0;
-        ifgradtarg=0;
-    end
-
-    if ~strcmp(pot(1:2),'SL') && ~strcmp(pot(1:2),'DL') 
-        ifgrad=1;
-    else
-        ifgrad=0; 
-    end
-
-    % precision for FMM, roughly 3*iprec digits of acc
-    iprec=2; 
-
-    if kerd==1
-        % Laplace particle FMM 
-        U=lfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
-            sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);  
-    else
-        % Stokes particle FMM 
-        U=stfmm3dpart(iprec,nsource,source,ifsingle,sigma_sl,ifdouble,sigma_dl,...
-            sigma_dv,ifpot,ifgrad,ntarget,target,ifpottarg,ifgradtarg);
-    end
-
-    % Evaluate depending on pot
-    switch pot
-        case 'SL_L_3D'
-            % Single layer potential at targets
-            Y    = (1/4/pi)*U.pot.'; 
-        case 'dSL_L_3D'
-            % compute du/dNrtrg
-            GSF = -(1/4/pi)*U.fld; % Gradient, size 3 x ntarget
-            Y = sum(GSF.*Nr.'); Y=Y(:); 
-        case 'DL_L_3D'
-            % Double layer potential at targets
-            Y    = (1/4/pi)*U.pot.'; 
-        case 'SL_Stk_3D'
-            % Single layer potential at targets
-            Y    = (1/4/pi)*U.pot.'; 
-            Y = real(reshape(Y.',[],1));
-        case 'DL_Stk_3D'
-            % Double layer potential at targets (check ct 1/4/pi)
-            Y    = (1/4/pi)*U.pot.'; 
-            Y = real(reshape(Y.',[],1));
-        case 'TSL_Stk_3D'
-            % Pressure
-            SFpre = (1/4/pi)*U.pre; 
-            % Gradient and Gradient transposed
-            GSF   = (1/4/pi)*U.grad; 
-            GTSF  = permute(GSF,[2 1 3]);  
-
-            % Compute -pNr+Gu*Nr+Gut*Nr
-            PNF = repmat(SFpre.',1,3).*Nr; 
-            NrT = zeros(3,3,ntarget); NrT(:,1,:)=Nr.'; NrT(:,2,:)=Nr.'; NrT(:,3,:)=Nr.';
-            GuN = reshape(sum(GSF.*NrT),[3 ntarget])+reshape(sum(GTSF.*NrT),[3 ntarget]); 
-
-            Y  = -PNF.'+GuN; 
-            Y = reshape(Y,[],1);   
-        case 'TDL_Stk_3D'
-            % Pressure
-            SFpre = (1/4/pi)*U.pre; 
-            % Gradient and Gradient transposed
-            GSF   = (1/4/pi)*U.grad; 
-            GTSF  = permute(GSF,[2 1 3]);  
-
-            % Compute -pNr+Gu*Nr+Gut*Nr
-            PNF = repmat(SFpre.',1,3).*Nr; 
-            NrT = zeros(3,3,ntarget); NrT(:,1,:)=Nr.'; NrT(:,2,:)=Nr.'; NrT(:,3,:)=Nr.';
-            GuN = reshape(sum(GSF.*NrT),[3 ntarget])+reshape(sum(GTSF.*NrT),[3 ntarget]); 
-
-            Y  = -PNF.'+GuN; 
-            Y = reshape(Y,[],1); 
-        otherwise
-            Y = zeros(ntarget,size(Q,2)); 
-    end
-end
-
-function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, target_normals, np, iprm, source_Gmatrix)
+function Ynear = LOCAL_spheroid_near_matrix( ...
+    pot, u0, a, oblate, target_pts, target_normals, np, iprm, source_Gmatrix, lambda, modlap_opts)
     %{
     Builds the dense block for near-field interaction from one source spheroid by applying
     the near matvec to unit-basis densities.
 
     Inputs
-    pot - (string) Stokes potential
+    pot - (string) potential name
     u0 - (double)
     a - (double)
     oblate - (bool)
     target_pts - (double ntrg x 3) target points in the local frame
         if empty, implies self-evaluation on the source surface
     target_normals - (double ntrg x 3) target normals in the local frame
-        required for the TSL
+        required for traction and normal-derivative evaluations
     np - (int) number of discretization points
     iprm - (int 1 x 3*np) permutation from blocked to interleaved
 
@@ -792,10 +703,9 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
     end
 
     switch pot
-        case 'SL_L_3D'
-            Ynear = LOCAL_eval_lslp(params_i, X_eval, I, source_Gmatrix);
-        case 'dSL_L_3D'
-            Ynear = LOCAL_eval_ldslp(params_i, X_eval, Nu_eval, I, source_Gmatrix);
+        case {'SL_L_3D', 'dSL_L_3D', 'DL_L_3D', 'dDL_L_3D', ...
+                'SL_LMOD_3D', 'dSL_LMOD_3D', 'DL_LMOD_3D', 'dDL_LMOD_3D'}
+            Ynear = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, I, source_Gmatrix, lambda);
         case 'SL_Stk_3D'
             Yx = LOCAL_eval_l2stk_slp(params_i, X_eval, I, Z, Z, source_Gmatrix);
             Yy = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, I, Z, source_Gmatrix);
@@ -816,7 +726,7 @@ function Ynear = LOCAL_spheroid_near_matrix(pot, u0, a, oblate, target_pts, targ
         ntrg = size(target_pts,1);
     end
 
-    if strcmp(pot,'SL_L_3D') || strcmp(pot,'dSL_L_3D')
+    if LOCAL_is_scalar_laplace_potential(pot)
         Ynear = reshape(Ynear, ntrg, np);
         Ynear = Ynear(:, iprm);
         return;
@@ -843,6 +753,107 @@ function eval = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, sigma_x, sigma_y, si
 
     % Interleave result
     eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
+end
+
+function eval = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, sigma, source_Gmatrix, lambda)
+    switch pot
+        case 'SL_L_3D'
+            eval = LOCAL_eval_lslp(params_i, X_eval, sigma, source_Gmatrix);
+        case 'dSL_L_3D'
+            eval = LOCAL_eval_ldslp(params_i, X_eval, Nu_eval, sigma, source_Gmatrix);
+        case 'SL_LMOD_3D'
+            eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda);
+        case 'dSL_LMOD_3D'
+            eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda);
+        case 'DL_LMOD_3D'
+            eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda);
+        case 'dDL_LMOD_3D'
+            eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda);
+        otherwise
+            error('Incorrect scalar Laplace potential passed in.');
+    end
+end
+
+function eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda)
+    if isempty(lambda)
+        error('Missing lambda for SL_LMOD_3D.');
+    end
+
+    params_eval = copy(params_i);
+    params_eval.sigma = sigma;
+    params_eval.get_shc();
+
+    if isempty(X_eval)
+        modSL = spheroidalModifiedSLP(params_eval, lambda, []);
+    else
+        X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
+        modSL = spheroidalModifiedSLP(params_eval, lambda, X_trg);
+    end
+
+    eval = reshape(modSL, size(modSL,1), size(modSL,2));
+end
+
+function eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda)
+    if isempty(lambda)
+        error('Missing lambda for DL_LMOD_3D.');
+    end
+
+    params_eval = copy(params_i);
+    params_eval.sigma = sigma;
+    params_eval.get_shc();
+
+    if isempty(X_eval)
+        modDL = spheroidalModifiedDLP(params_eval, lambda, []);
+    else
+        X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
+        modDL = spheroidalModifiedDLP(params_eval, lambda, X_trg);
+    end
+
+    eval = reshape(modDL, size(modDL,1), size(modDL,2));
+end
+
+function eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda)
+    if isempty(lambda)
+        error('Missing lambda for dSL_LMOD_3D.');
+    end
+
+    params_eval = copy(params_i);
+    params_eval.sigma = sigma;
+    params_eval.get_shc();
+
+    if isempty(X_eval)
+        modSP = spheroidalModifiedSP(params_eval, lambda, []);
+    else
+        X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
+        modSP = spheroidalModifiedSP(params_eval, lambda, X_trg);
+    end
+
+    eval = reshape(modSP, size(modSP,1), size(modSP,2));
+end
+
+function eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda)
+    if isempty(lambda)
+        error('Missing lambda for dDL_LMOD_3D.');
+    end
+
+    params_eval = copy(params_i);
+    params_eval.sigma = sigma;
+    params_eval.get_shc();
+
+    if isempty(X_eval)
+        modDP = spheroidalModifiedDP(params_eval, lambda, []);
+    else
+        X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
+        modDP = spheroidalModifiedDP(params_eval, lambda, X_trg);
+    end
+
+    eval = reshape(modDP, size(modDP,1), size(modDP,2));
+end
+
+function tf = LOCAL_is_scalar_laplace_potential(pot)
+    tf = any(strcmp(pot, { ...
+        'SL_L_3D', 'dSL_L_3D', 'DL_L_3D', 'dDL_L_3D', ...
+        'SL_LMOD_3D', 'dSL_LMOD_3D', 'DL_LMOD_3D', 'dDL_LMOD_3D'}));
 end
 
 function eval = LOCAL_eval_lslp(params_i, X_eval, sigma, source_Gmatrix)

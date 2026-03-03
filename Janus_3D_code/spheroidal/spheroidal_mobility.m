@@ -35,7 +35,7 @@ function spheroidal_mobility(fname,Fparams,init)
     parslv - (struct) linear solver parameters such as 
          prec     - (string) preconditioner type, '' for unprec, 'bkdiag'
                     (block diagonal), 'TT' (tensor train)
-         prtype   - (string) 'bkdiag' or 'TT'
+         precond_type - (string) 'bkdiag' or 'TT'
          solver   - gmres, pcg, bicg, etc. 
          tol (tolerance), maxit (maximum iterations), rst (restart), etc.
     
@@ -134,6 +134,7 @@ function spheroidal_mobility(fname,Fparams,init)
     tt = zeros(num_timesteps+1, 1); 
     sigma = cell(num_timesteps+1, 1); mu=sigma; U=sigma; VW=U; Xt=U; Ct=Xt; FT=mu; psi_Lap = mu; 
     Mt = cell(num_timesteps+1,num_body);
+    Energy = zeros(1,num_timesteps);
     dt0 = Fparams.dt; 
     
     if isempty(init)
@@ -159,15 +160,16 @@ function spheroidal_mobility(fname,Fparams,init)
         % Recover initial data at time t0 = tt(lid): 
         T0 = tt(prev_timesteps); Xt0 = Xt{prev_timesteps}; Ct0 = Ct{prev_timesteps}; Mt0 = Mt(prev_timesteps,:);
         VW0 = VW{prev_timesteps}; 
-        
+
         Fparams.parslv.prec = []; 
         Fparams.parslv.prev = []; 
 
         % Re-initialize arrays (after load)
         tt = zeros(num_timesteps+1,1); 
-        sigma = cell(num_timesteps+1,1); mu=sigma; U=sigma; VW=U; Xt=U; Ct=Xt; FT=mu;
+        sigma = cell(num_timesteps+1,1); mu=sigma; U=sigma; VW=U; Xt=U; Ct=Xt; FT=mu; psi_Lap = mu;
         Mt = cell(num_timesteps+1,num_body);
-            
+        Energy = zeros(1,num_timesteps);
+
         t=T0; tt(1)=T0; 
         Xt{1}=Xt0; Ct{1}=Ct0; Mt(1,:) = Mt0; 
     end
@@ -383,7 +385,7 @@ function spheroidal_mobility(fname,Fparams,init)
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         t = t+dt;
         tt(i+1)=t;
-        fprintf('\n dt: %2.2f ',dt)
+        fprintf('\n dt: %2.2f\n',dt)
 
         if plot_enabled
             if plot_state.traj_enable
@@ -393,15 +395,31 @@ function spheroidal_mobility(fname,Fparams,init)
         end
 
         % Save progress every other step.
+        save_data = LOCAL_save_data(tt, Xt, Mt, Ct, FT, sigma, mu, U, VW, psi_Lap, Energy);
         if mod(i,2)==1                                                                                                                                              
-            save(fname,'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                         
+            save(fname,'-v7.3','-struct','save_data');
         else                                                                                                                                                        
-            save([fname '2'],'-v7.3','tt','Xt','Mt','Ct','FT','sigma','mu','U','VW','psi_Lap','Energy');                                                                                   
+            save([fname '2'],'-v7.3','-struct','save_data');
         end  
         save([fname '_profile'],'timings'); 
     end %% END for linearization
 end
     
+function data = LOCAL_save_data(tt, Xt, Mt, Ct, FT, sigma, mu, U, VW, psi_Lap, Energy)
+    data = struct();
+    data.tt = tt;
+    data.Xt = Xt;
+    data.Mt = Mt;
+    data.Ct = Ct;
+    data.FT = FT;
+    data.sigma = sigma;
+    data.mu = mu;
+    data.U = U;
+    data.VW = VW;
+    data.psi_Lap = psi_Lap;
+    data.Energy = Energy;
+end
+
 %% Mobility solver system code
 function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,closest_points_1,closest_points_2,dt,psi_Lap,Energy] = ...
     LOCAL_euler_step(Xt,X0,X2,Mt,Ct,Kernels,Nullsp,Fparams,colevent,collist, closest_points_1, closest_points_2, t,dt,it)

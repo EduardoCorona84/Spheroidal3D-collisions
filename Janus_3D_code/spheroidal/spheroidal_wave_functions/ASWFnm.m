@@ -4,6 +4,8 @@ Angular spheroidal wave function S_n^m(v) e^{i m phi}, v in (-1,1).
 Computed via Legendre series using coefficients from leg_to_pswf_mtx,
 but evaluated using Ynm to avoid manual Legendre summation.
 
+Oblate angular SWFs are obtained by passing a purely imaginary gamma.
+
 Inputs:
     n, m    - degree/order (|m| <= n). If m = [], returns all orders m=-n:n.
     v       - evaluation points in (-1,1)
@@ -12,7 +14,7 @@ Inputs:
                 v = cos(theta);
                 ASWFnm(n, m, v, phi, gamma);
     phi     - azimuth
-    c       - spheroidal parameter
+    gamma   - spheroidal parameter
     p       - max Legendre degree for truncation (optional)
     iopnorm - normalization flag (optional):
               0 -> associated-Legendre (Meixner-Schafke) normalization

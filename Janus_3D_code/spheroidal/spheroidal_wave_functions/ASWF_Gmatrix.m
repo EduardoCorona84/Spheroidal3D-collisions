@@ -3,16 +3,16 @@ function G = ASWF_Gmatrix(p, u0, gamma, fig, oblate, vnp, iopnorm)
 Construct the SWF basis-change matrix analogous to Gmatrix.
 
 This matrix maps coefficients in the weighted basis
-    S_n^m(v)e^{im phi} / sqrt(u0^2 - v^2)
+    S_n^m(v)e^{im phi} / w(v)
 to coefficients in the unweighted basis
     S_n^m(v)e^{im phi}.
 
 Inputs
     p       - truncation order (integer >= 0)
-    u0      - prolate spheroidal parameter (real scalar > 1)
+    u0      - spheroidal shape parameter:
     gamma   - spheroidal parameter (scalar)
     fig     - optional plotting flag (default 0)
-    oblate  - optional shape flag (default false). Oblate is not implemented for now.
+    oblate  - optional shape flag (default false)
     vnp     - optional number of Gauss-Legendre nodes (default 50)
     iopnorm - optional ASWFnm normalization flag (default 0; must be 0 or 1)
 
@@ -21,7 +21,10 @@ Output
 
 For each m, we define matrices
     A_m(i,j) = <S_i^m, S_j^m>
-    B_m(i,j) = <S_i^m, S_j^m / sqrt(u0^2 - v^2)>
+    B_m(i,j) = <S_i^m, S_j^m / w(v)>
+where
+    w(v) = sqrt(u0^2 - v^2)  (prolate)
+    w(v) = sqrt(u0^2 + v^2)  (oblate)
 where <.,.> is approximated with GL quadrature in v and exact 2*pi in phi (due to the integral in phi).
 Then A_m * G_m = B_m, so G_m maps weighted-basis coefficients to
 unweighted-basis coefficients:
@@ -36,10 +39,6 @@ if nargin < 4, fig = 0; end
 if nargin < 5, oblate = false; end
 if nargin < 6, vnp = 50; end
 if nargin < 7, iopnorm = 0; end
-
-if oblate
-    error('Oblate case is not implemented in ASWF_Gmatrix.');
-end
 
 [vp, vw] = g_grid(vnp);
 vp = vp(:);
@@ -59,7 +58,11 @@ end
 geti = @(n, m) m + n.^2 + n + 1;
 % Quadrature weights for the inner products.
 qw_unweighted = vw;
-qw_weighted = vw ./ sqrt(u0.^2 - vp.^2);
+if oblate
+    qw_weighted = vw ./ sqrt(u0.^2 + vp.^2);
+else
+    qw_weighted = vw ./ sqrt(u0.^2 - vp.^2);
+end
 
 % The basis is block-diagonal in m, so each m can be assembled independently.
 for m = -p:p
