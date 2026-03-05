@@ -1,4 +1,4 @@
-function Y = SSph_MatVec(V, L, params)
+function Y = SSph_MatVec(V, L, params, modlap_opts)
 %{
 Matvec handler for the mobility solver. The main purpose of this is to decode
 the inputs so that we can pass it to the correct functions.
@@ -40,6 +40,8 @@ V - (double n_c*N_deg x 1) array of density or densities
     should (probably) be formatted like
     [sig_x(p_1) ; sig_y(p_1) ; sig_z(p_1) ; sig_x(p_2) ; ...]
 L - (sparse array) Extra matrix for completion flow / nullspace correction
+modlap_opts - (struct)
+    optional struct to pass in for the MEX calls used in modified Laplace
 
 Outputs
 Y - (double) 3*N_trg x 1 array
@@ -63,13 +65,15 @@ pot = params.flag_pot;
 is_modified_laplace = contains(pot, 'LMOD');
 if is_modified_laplace
     lambda = params.lambda;
+    if nargin < 4 || isempty(modlap_opts)
+        modlap_opts = params.sphwv_mex_opts;
+    end
 end
 
 if is_modified_laplace && ~dense
     error('Modified Laplace currently requires params.dense = true.');
 end
 
-modlap_opts = struct();
 
 if isempty(Gmatrix_cache)
     body_shape_types = params.shape_type;
@@ -651,7 +655,7 @@ elseif ~isempty(V) && isnumeric(V)
 elseif isempty(V)
     fprintf('\nGoing matrix free...\n')
     % Matrix-free
-    Y = @(V) SSph_MatVec(V,L,params);
+    Y = @(V) SSph_MatVec(V,L,params,modlap_opts);
 else
     error('Invalid input passed into SSph_MatVec. Supposed to be a string "Mat" or empty or a numeric matrix.');
 end
@@ -705,7 +709,7 @@ function Ynear = LOCAL_spheroid_near_matrix( ...
     switch pot
         case {'SL_L_3D', 'dSL_L_3D', 'DL_L_3D', 'dDL_L_3D', ...
                 'SL_LMOD_3D', 'dSL_LMOD_3D', 'DL_LMOD_3D', 'dDL_LMOD_3D'}
-            Ynear = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, I, source_Gmatrix, lambda);
+            Ynear = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, I, source_Gmatrix, lambda, modlap_opts);
         case 'SL_Stk_3D'
             Yx = LOCAL_eval_l2stk_slp(params_i, X_eval, I, Z, Z, source_Gmatrix);
             Yy = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, I, Z, source_Gmatrix);
@@ -755,26 +759,26 @@ function eval = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, sigma_x, sigma_y, si
     eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
 end
 
-function eval = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, sigma, source_Gmatrix, lambda)
+function eval = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, sigma, source_Gmatrix, lambda, modlap_opts)
     switch pot
         case 'SL_L_3D'
             eval = LOCAL_eval_lslp(params_i, X_eval, sigma, source_Gmatrix);
         case 'dSL_L_3D'
             eval = LOCAL_eval_ldslp(params_i, X_eval, Nu_eval, sigma, source_Gmatrix);
         case 'SL_LMOD_3D'
-            eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda);
+            eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda, modlap_opts);
         case 'dSL_LMOD_3D'
-            eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda);
+            eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda, modlap_opts);
         case 'DL_LMOD_3D'
-            eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda);
+            eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda, modlap_opts);
         case 'dDL_LMOD_3D'
-            eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda);
+            eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda, modlap_opts);
         otherwise
             error('Incorrect scalar Laplace potential passed in.');
     end
 end
 
-function eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda)
+function eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda, modlap_opts)
     if isempty(lambda)
         error('Missing lambda for SL_LMOD_3D.');
     end
@@ -784,16 +788,16 @@ function eval = LOCAL_eval_lmod_slp(params_i, X_eval, sigma, lambda)
     params_eval.get_shc();
 
     if isempty(X_eval)
-        modSL = spheroidalModifiedSLP(params_eval, lambda, []);
+        modSL = spheroidalModifiedSLP(params_eval, lambda, [], modlap_opts);
     else
         X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
-        modSL = spheroidalModifiedSLP(params_eval, lambda, X_trg);
+        modSL = spheroidalModifiedSLP(params_eval, lambda, X_trg, modlap_opts);
     end
 
     eval = reshape(modSL, size(modSL,1), size(modSL,2));
 end
 
-function eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda)
+function eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda, modlap_opts)
     if isempty(lambda)
         error('Missing lambda for DL_LMOD_3D.');
     end
@@ -803,16 +807,16 @@ function eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda)
     params_eval.get_shc();
 
     if isempty(X_eval)
-        modDL = spheroidalModifiedDLP(params_eval, lambda, []);
+        modDL = spheroidalModifiedDLP(params_eval, lambda, [], modlap_opts);
     else
         X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
-        modDL = spheroidalModifiedDLP(params_eval, lambda, X_trg);
+        modDL = spheroidalModifiedDLP(params_eval, lambda, X_trg, modlap_opts);
     end
 
     eval = reshape(modDL, size(modDL,1), size(modDL,2));
 end
 
-function eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda)
+function eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda, modlap_opts)
     if isempty(lambda)
         error('Missing lambda for dSL_LMOD_3D.');
     end
@@ -822,16 +826,16 @@ function eval = LOCAL_eval_lmod_sp(params_i, X_eval, sigma, lambda)
     params_eval.get_shc();
 
     if isempty(X_eval)
-        modSP = spheroidalModifiedSP(params_eval, lambda, []);
+        modSP = spheroidalModifiedSP(params_eval, lambda, [], modlap_opts);
     else
         X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
-        modSP = spheroidalModifiedSP(params_eval, lambda, X_trg);
+        modSP = spheroidalModifiedSP(params_eval, lambda, X_trg, modlap_opts);
     end
 
     eval = reshape(modSP, size(modSP,1), size(modSP,2));
 end
 
-function eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda)
+function eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda, modlap_opts)
     if isempty(lambda)
         error('Missing lambda for dDL_LMOD_3D.');
     end
@@ -841,10 +845,10 @@ function eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda)
     params_eval.get_shc();
 
     if isempty(X_eval)
-        modDP = spheroidalModifiedDP(params_eval, lambda, []);
+        modDP = spheroidalModifiedDP(params_eval, lambda, [], modlap_opts);
     else
         X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
-        modDP = spheroidalModifiedDP(params_eval, lambda, X_trg);
+        modDP = spheroidalModifiedDP(params_eval, lambda, X_trg, modlap_opts);
     end
 
     eval = reshape(modDP, size(modDP,1), size(modDP,2));
@@ -853,7 +857,8 @@ end
 function tf = LOCAL_is_scalar_laplace_potential(pot)
     tf = any(strcmp(pot, { ...
         'SL_L_3D', 'dSL_L_3D', 'DL_L_3D', 'dDL_L_3D', ...
-        'SL_LMOD_3D', 'dSL_LMOD_3D', 'DL_LMOD_3D', 'dDL_LMOD_3D'}));
+        'SL_LMOD_3D', 'dSL_LMOD_3D', 'DL_LMOD_3D', 'dDL_LMOD_3D' ...
+    }));
 end
 
 function eval = LOCAL_eval_lslp(params_i, X_eval, sigma, source_Gmatrix)
@@ -911,4 +916,3 @@ function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_
     [u0, a] = calculate_u0_and_a_from_radii(shape_type, equ_radius, polar_radius);
     oblate = strcmp(shape_type,'oblate');
 end
-

@@ -24,7 +24,12 @@ if isempty(V) && Fparams.dense==1
 end
 
 if strcmp(typeMV,'SSph')
-    Y = SSph_MatVec(V,L,Fparams);
+    if isfield(Fparams, 'sphwv_mex_opts') && ~isempty(Fparams.sphwv_mex_opts)
+        modlap_opts = Fparams.sphwv_mex_opts;
+    else
+        modlap_opts = struct();
+    end
+    Y = SSph_MatVec(V, L, Fparams, modlap_opts);
 elseif strcmp(typeMV, 'vectorSSph')
     error('Not implemented.');
 else
