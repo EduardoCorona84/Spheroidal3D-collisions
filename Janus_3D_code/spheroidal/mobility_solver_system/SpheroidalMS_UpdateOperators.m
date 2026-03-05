@@ -54,6 +54,16 @@ out = Fparams.parbd.out;
 doAna = Fparams.parbd.doAna;
 kerd = Fparams.parbd.kerd;
 bodydist = Fparams.parbd.bodydist;
+if isfield(Fparams.parbd, 'tsl_dealiasing')
+    tsl_dealiasing = Fparams.parbd.tsl_dealiasing;
+else
+    tsl_dealiasing = false;
+end
+if isfield(Fparams.parbd, 'tsl_dealiasing_pad')
+    tsl_dealiasing_pad = Fparams.parbd.tsl_dealiasing_pad;
+else
+    tsl_dealiasing_pad = 4;
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Need to update the point clouds of each body after applying rotations/translations
@@ -71,7 +81,9 @@ Fparams.parbd = SpheroidalMS_set_params( ...
     flag_pot    = "TSL_Stk_3D", ...
     kerd        = kerd, ...
     dense       = denseMV, ...
-    bodydist    = bodydist ...
+    bodydist    = bodydist, ...
+    tsl_dealiasing = tsl_dealiasing, ...
+    tsl_dealiasing_pad = tsl_dealiasing_pad ...
     );
 
 Xt = Fparams.parbd.Xrp; % X rotated points
@@ -196,6 +208,16 @@ function ITSSDd = LOCAL_build_td_inverse_blocks(parbd, Lk, Nb, n3)
         ct = -0.5;
     end
     jump_coeff = 0.5 + ct; % a + ct with a = 0.5 for TD
+    if isfield(parbd, 'tsl_dealiasing')
+        tsl_dealiasing_flag = parbd.tsl_dealiasing;
+    else
+        tsl_dealiasing_flag = false;
+    end
+    if isfield(parbd, 'tsl_dealiasing_pad')
+        tsl_dealiasing_pad = parbd.tsl_dealiasing_pad;
+    else
+        tsl_dealiasing_pad = 4;
+    end
 
     % Block format to interleaved layout
     prm = zeros(1,Nb);
@@ -229,9 +251,9 @@ function ITSSDd = LOCAL_build_td_inverse_blocks(parbd, Lk, Nb, n3)
         Z = zeros(np);
         source_Gmatrix = sparse(Gmatrix(params_i.p, u0, 0, oblate));
 
-        Yx = LOCAL_eval_l2stk_dense_self(params_i, I, Z, Z, source_Gmatrix, np);
-        Yy = LOCAL_eval_l2stk_dense_self(params_i, Z, I, Z, source_Gmatrix, np);
-        Yz = LOCAL_eval_l2stk_dense_self(params_i, Z, Z, I, source_Gmatrix, np);
+        Yx = LOCAL_eval_l2stk_dense_self(params_i, I, Z, Z, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad);
+        Yy = LOCAL_eval_l2stk_dense_self(params_i, Z, I, Z, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad);
+        Yz = LOCAL_eval_l2stk_dense_self(params_i, Z, Z, I, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad);
 
         Tself = [Yx, Yy, Yz];
         Tself = Tself(:,iprm);
@@ -242,8 +264,10 @@ function ITSSDd = LOCAL_build_td_inverse_blocks(parbd, Lk, Nb, n3)
     end
 end
 
-function Yblk = LOCAL_eval_l2stk_dense_self(params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, np)
-    [vx, vy, vz] = L2StkTLPOptimized([], [], params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false);
+function Yblk = LOCAL_eval_l2stk_dense_self(params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad)
+    [vx, vy, vz] = ...
+        L2StkTLPOptimized([], [], params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false, tsl_dealiasing_flag, tsl_dealiasing_pad);
     y = reshape([vx(:), vy(:), vz(:)].', [], 1);
     Yblk = reshape(y, 3*np, np);
 end
+

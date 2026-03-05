@@ -1,10 +1,16 @@
-function [res_x, res_y, res_z] = L2StkTLPOptimized(X_trg, nu_trg, params, sigma_x, sigma_y, sigma_z, source_Gmatrix, alternate_spp_flag)
+function [res_x, res_y, res_z] = L2StkTLPOptimized(X_trg, nu_trg, params, sigma_x, sigma_y, sigma_z, source_Gmatrix, alternate_spp_flag, dealiasing_flag, dealiasing_pad)
 %{
 Optimized version of L2StkTLP for the Stokes traction layer potential.
 %}
 
 if nargin < 8
     alternate_spp_flag = false;
+end
+if nargin < 9 || isempty(dealiasing_flag)
+    dealiasing_flag = false;
+end
+if nargin < 10 || isempty(dealiasing_pad)
+    dealiasing_pad = 4;
 end
 
 [np, nf, ns] = size(sigma_x);
@@ -47,6 +53,14 @@ u0 = params.u0;
 a = params.a;
 isReal = params.isReal;
 oblate = params.oblate;
+if dealiasing_flag
+    if ~isscalar(dealiasing_pad) || dealiasing_pad < 1 || fix(dealiasing_pad) ~= dealiasing_pad
+        error("dealiasing_pad must be a positive integer.");
+    end
+    fine_p = p + dealiasing_pad;
+else
+    fine_p = p;
+end
 
 if isempty(X_trg)
     if ~isempty(nu_trg)
@@ -81,19 +95,44 @@ for i = 1:ns
     else
         Xloc_i = prolate_spheroid_shape(p, params.u0(i), params.a(i));
     end
+
     Xloc_all(:,:,i) = Xloc_i;
 
-    y1x(:,:,i) = sigma_x(:,:,i) .* Xloc_i(:, 1);
-    y1y(:,:,i) = sigma_y(:,:,i) .* Xloc_i(:, 1);
-    y1z(:,:,i) = sigma_z(:,:,i) .* Xloc_i(:, 1);
+    if dealiasing_flag
+        if params.oblate(i)
+            Xloc_fine_i = oblate_spheroid_shape(fine_p, params.u0(i), params.a(i));
+        else
+            Xloc_fine_i = prolate_spheroid_shape(fine_p, params.u0(i), params.a(i));
+        end
 
-    y2x(:,:,i) = sigma_x(:,:,i) .* Xloc_i(:, 2);
-    y2y(:,:,i) = sigma_y(:,:,i) .* Xloc_i(:, 2);
-    y2z(:,:,i) = sigma_z(:,:,i) .* Xloc_i(:, 2);
+        sigma_x_fine = LOCAL_transfer_to_finer_grid(fine_p, p, sigma_x(:,:,i));
+        sigma_y_fine = LOCAL_transfer_to_finer_grid(fine_p, p, sigma_y(:,:,i));
+        sigma_z_fine = LOCAL_transfer_to_finer_grid(fine_p, p, sigma_z(:,:,i));
 
-    y3x(:,:,i) = sigma_x(:,:,i) .* Xloc_i(:, 3);
-    y3y(:,:,i) = sigma_y(:,:,i) .* Xloc_i(:, 3);
-    y3z(:,:,i) = sigma_z(:,:,i) .* Xloc_i(:, 3);
+        y1x(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_x_fine .* Xloc_fine_i(:, 1));
+        y1y(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_y_fine .* Xloc_fine_i(:, 1));
+        y1z(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_z_fine .* Xloc_fine_i(:, 1));
+
+        y2x(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_x_fine .* Xloc_fine_i(:, 2));
+        y2y(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_y_fine .* Xloc_fine_i(:, 2));
+        y2z(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_z_fine .* Xloc_fine_i(:, 2));
+
+        y3x(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_x_fine .* Xloc_fine_i(:, 3));
+        y3y(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_y_fine .* Xloc_fine_i(:, 3));
+        y3z(:,:,i) = LOCAL_transfer_to_coarser_grid(p, fine_p, sigma_z_fine .* Xloc_fine_i(:, 3));
+    else
+        y1x(:,:,i) = sigma_x(:,:,i) .* Xloc_i(:, 1);
+        y1y(:,:,i) = sigma_y(:,:,i) .* Xloc_i(:, 1);
+        y1z(:,:,i) = sigma_z(:,:,i) .* Xloc_i(:, 1);
+
+        y2x(:,:,i) = sigma_x(:,:,i) .* Xloc_i(:, 2);
+        y2y(:,:,i) = sigma_y(:,:,i) .* Xloc_i(:, 2);
+        y2z(:,:,i) = sigma_z(:,:,i) .* Xloc_i(:, 2);
+
+        y3x(:,:,i) = sigma_x(:,:,i) .* Xloc_i(:, 3);
+        y3y(:,:,i) = sigma_y(:,:,i) .* Xloc_i(:, 3);
+        y3z(:,:,i) = sigma_z(:,:,i) .* Xloc_i(:, 3);
+    end
 end
 
 % Build normals if not provided
@@ -238,3 +277,18 @@ if isReal
     res_z = real(res_z);
 end
 end %% END MAIN FUNCTION
+
+function fine_grid_vec = LOCAL_transfer_to_finer_grid(fine_p, coarse_p, coarse_vec)
+    coarse_sp = (coarse_p + 1)^2;
+    fine_sp = (fine_p + 1)^2;
+    coarse_shc = shAna(coarse_vec);
+    padded_shc = [coarse_shc; zeros(fine_sp - coarse_sp, size(coarse_vec, 2))];
+    fine_grid_vec = shSyn(padded_shc, isreal(coarse_vec));
+end
+
+function coarse_grid_vec = LOCAL_transfer_to_coarser_grid(coarse_p, fine_p, fine_vec)
+    coarse_sp = (coarse_p + 1)^2;
+    fine_shc = shAna(fine_vec);
+    truncated_shc = fine_shc(1:coarse_sp, :);
+    coarse_grid_vec = shSyn(truncated_shc, isreal(fine_vec));
+end

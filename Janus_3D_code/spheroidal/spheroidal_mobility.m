@@ -533,7 +533,7 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,c
     fprintf('\n Time for collision detection: %e',toc);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %Update operators
-    fprintf('\n Operator update')
+    fprintf('\nOperator update\n')
     [Kernels,Nullsp,Fparams,timings] = SpheroidalMS_UpdateOperators(Xtp,Ctp,Mtp,normW,Kernels,Fparams,timings,it); 
     timings.operator.total(it) = timings.operator.total(it) + timings.operator.surf(it) + timings.operator.diag(it) + timings.operator.offd(it);
     fprintf('\n Time to update surface and operators: %e',timings.operator.total(it));
