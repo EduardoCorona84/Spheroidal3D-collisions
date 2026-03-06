@@ -15,7 +15,6 @@ params - parameter struct with fields such as:
     n3 - (int) - number of objects 
     kerd - (int) - kernel dimension 
     dense - (bool) - Dense vs FMM far interactions
-    out - (bool) exterior or interior problem
     C - (double n_c x 3) - centers in original box [a,b]^3
     rd -  (double n_c x 1) - sphere radii
     flag_pot - (string) - the following cases are supported: 
@@ -58,7 +57,7 @@ n3 = params.n3;     % Number of objects
 kerd = params.kerd; % Kernel dimension
 dense = params.dense; % Dense vs FMM off diagonal 
 C = params.C;       % object centers
-out = params.out;   % outside vs inside sphere
+out = true; % only needed for spheres
 
 equ_radii = params.equ_radii;
 polar_radii = params.polar_radii;
@@ -105,8 +104,8 @@ else
 end
 
 % Handle neighbors
-if isfield(params,'neigh')
-    neigh=params.neigh; % Neighbor list (cell(n3,1)) 
+if isfield(params,'neigh') && iscell(params.neigh) && numel(params.neigh)==n3
+    neigh = params.neigh; % Neighbor list (cell(n3,1))
 else
     distC = get_distances_between_centers(C);  
     neigh = cell(n3,1);
@@ -116,8 +115,24 @@ else
         max_radius_i = max(equ_radii(i), polar_radii(i));
         neigh{i} = find(distC(i,:)<max_radius_i*params.mdist); 
     end
-    params.neigh=neigh;  
 end
+
+% Ensure each body includes itself to avoid empty neighbor blocks.
+for i=1:n3
+    ngh_i = neigh{i};
+    if isempty(ngh_i)
+        ngh_i = i;
+    end
+    ngh_i = reshape(ngh_i, 1, []);
+    ngh_i = ngh_i(isfinite(ngh_i));
+    ngh_i = round(ngh_i);
+    ngh_i = ngh_i(ngh_i>=1 & ngh_i<=n3);
+    if ~any(ngh_i==i)
+        ngh_i = [i ngh_i];
+    end
+    neigh{i} = unique(ngh_i, 'stable');
+end
+params.neigh = neigh;
 
 % Determine whether Kernel_Eval needs target normals
 nortrg = true;
@@ -290,23 +305,19 @@ if strcmp(V, 'Mat')
         Y(I_nghv, I_box) = Ynear;
     end
 
-    if out
-        ct = 0.5;
-    else
-        ct = -0.5;
-    end
-
-    % Add jump relation on the diagonal
+    % Add jump relation on the diagonal.
+    % Exterior-only convention: params.a is the explicit coefficient in
+    % front of the identity.
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
         if isfield(params,'a')
             if strcmp(pot(2:3),'SL') 
                 if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
-                    Y = params.eta*Y + (params.a+ct)*eye(N); 
+                    Y = params.eta*Y + params.a*eye(N); 
                 else
-                    Y = Y + (params.a+ct)*eye(N); 
+                    Y = Y + params.a*eye(N); 
                 end
             else
-                Y = Y + (params.a-ct)*eye(N); 
+                Y = Y + params.a*eye(N); 
             end
         end
     end
@@ -640,23 +651,17 @@ elseif ~isempty(V) && isnumeric(V)
         Y = Y + SSph_FMM_Eval(V, W, kerd, pot, X, X, Nr);
     end
 
-    if out
-        ct = 0.5;
-    else
-        ct = -0.5;
-    end
-
-    % Add jump-relation (i.e. params.a)
+    % Add jump-relation (i.e. params.a).
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
         if isfield(params,'a')
             if strcmp(pot(2:3),'SL') 
                 if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
-                    Y = params.eta*Y + (params.a+ct)*V; 
+                    Y = params.eta*Y + params.a*V; 
                 else
-                    Y = Y + (params.a+ct)*V; 
+                    Y = Y + params.a*V; 
                 end
             else
-                Y = Y + (params.a-ct)*V; 
+                Y = Y + params.a*V; 
             end
         end
     end
@@ -946,4 +951,3 @@ function [tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_tsl_dealiasing_op
         tsl_dealiasing_pad = 4;
     end
 end
-

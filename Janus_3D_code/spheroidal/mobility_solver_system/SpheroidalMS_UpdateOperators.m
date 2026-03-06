@@ -50,7 +50,6 @@ collision_eps = Fparams.parbd.collision_eps;
 np = Fparams.parbd.np; n3 = size(Ct,1); p = Fparams.parbd.p;
 Nb = Fparams.parbd.Nb; 
 mdist = Fparams.parbd.mdist;
-out = Fparams.parbd.out;
 doAna = Fparams.parbd.doAna;
 kerd = Fparams.parbd.kerd;
 bodydist = Fparams.parbd.bodydist;
@@ -76,7 +75,6 @@ Fparams.parbd = SpheroidalMS_set_params( ...
     C           = Ct, ...
     collision_eps = collision_eps, ...
     mdist       = mdist, ...
-    out         = out, ...
     doAna       = doAna, ...
     flag_pot    = "TSL_Stk_3D", ...
     kerd        = kerd, ...
@@ -103,6 +101,7 @@ Nullsp.C = Ck; Nullsp.B = Bk; Nullsp.D = Dk; Nullsp.A = Ak; Nullsp.L = Lk;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Update Stokes kernels
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 kernel_timer = tic;
 tic
 Kernels.SD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,sdim,0,'SL_Stk_3D'); 
@@ -116,15 +115,60 @@ if strcmp(Fparams.type,'MHD')
     % Laplace kernels
     Kernels.SLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0,'SL_L_3D'); 
     Kernels.KLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0.5,'dSL_L_3D');
+elseif strcmp(Fparams.type, 'JanusAmp')
+    if ~denseMV
+        error('JanusAmp currently requires Fparams.denseMV = true in the spheroidal solver.');
+    end
+    if ~isfield(Fparams,'lambda')
+        error('Fparams.lambda is required for JanusAmp.');
+    end
+    if ~isfield(Fparams,'boundary_label') || ~isa(Fparams.boundary_label,'function_handle')
+        error('Fparams.boundary_label must be a function handle for JanusAmp.');
+    end
+    if ~isfield(Fparams,'init_dir') || ~isequal(size(Fparams.init_dir), [n3, 3])
+        error('Fparams.init_dir must be an n3-by-3 array for JanusAmp.');
+    end
+
+    lap_params = Fparams.parbd;
+    lap_params.lambda = Fparams.lambda;
+    lap_params.dense = true;
+    if isfield(Fparams, 'sphwv_mex_opts')
+        lap_params.sphwv_mex_opts = Fparams.sphwv_mex_opts;
+    end
+
+    Kernels.SLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'SL_LMOD_3D');
+    % In exterior-only mode, params.a is the explicit identity coefficient.
+    % Use a=0.5 so DLMODD represents (0.5I + DL), matching the Janus BIE.
+    Kernels.DLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0.5,'DL_LMOD_3D');
+    Kernels.dSLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'dSL_LMOD_3D');
+    Kernels.dDLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'dDL_LMOD_3D');
+
+    % Compute hydrophilic label at each point in the local body frame.
+    flabel = Fparams.boundary_label;
+    surfacelabel = zeros(np,n3);
+    init_dir = Fparams.init_dir;
+    for body_idx=1:n3
+       xind = (1:np) + np*(body_idx-1);
+       Xbody = Fparams.parbd.Xrp(xind,:);
+       Xbackrot = Xbody*Mt{body_idx};
+       body_meta = struct( ...
+           'shape_type', char(string(Fparams.parbd.shape_type(body_idx))), ...
+           'equ_radius', Fparams.parbd.equ_radii(body_idx), ...
+           'polar_radius', Fparams.parbd.polar_radii(body_idx) ...
+           );
+       surfacelabel(:,body_idx) = LOCAL_eval_boundary_label(flabel, Xbackrot, init_dir(body_idx,:), body_meta);
+    end
+    Fparams.SurfaceLabel = reshape(surfacelabel,[],1);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Set/update preconditioner
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 tic
 if n3>1 && ~denseMV && strcmp(precond_type,'bkdiag')
     if i==0 || ~isfield(Kernels,'ITSSD0')
         fprintf('Building reference block diagonal preconditioner.\n');
-        ITSSD0 = LOCAL_build_td_inverse_blocks(Fparams.parbd, Lk, Nb, n3); % cell of size n3
+        ITSSD0 = LOCAL_build_td_inverse_blocks(Fparams.parbd, Lk, Nb, n3, 0.5); % cell of size n3
     else
         ITSSD0 = Kernels.ITSSD0;
     end
@@ -166,6 +210,19 @@ end
 
 end %% END MAIN FUNCTION
 
+function vals = LOCAL_eval_boundary_label(flabel, X_body, init_dir, body_meta)
+    label_arity = nargin(flabel);
+    if label_arity == 2
+        vals = flabel(X_body, init_dir);
+    elseif label_arity == 3 || label_arity < 0
+        vals = flabel(X_body, init_dir, body_meta);
+    else
+        error('Fparams.boundary_label must accept 2 args (X,init_dir) or 3 args (X,init_dir,meta).');
+    end
+
+    vals = vals(:);
+end
+
 function ITSSDd = LOCAL_rotate_inverse_blocks(ITSSD0, Mt, np, n3, nrmW, prev_rot)
     ROT_TOL = 1e-10;
     ITSSDd = cell(n3,1);
@@ -202,12 +259,7 @@ function ITSSDd = LOCAL_build_td_inverse_blocks(parbd, Lk, Nb, n3)
     ITSSDd = cell(n3,1);
     np = parbd.np;
 
-    if parbd.out
-        ct = 0.5;
-    else
-        ct = -0.5;
-    end
-    jump_coeff = 0.5 + ct; % a + ct with a = 0.5 for TD
+    jump_coeff = 0.5;
     if isfield(parbd, 'tsl_dealiasing')
         tsl_dealiasing_flag = parbd.tsl_dealiasing;
     else
@@ -270,4 +322,3 @@ function Yblk = LOCAL_eval_l2stk_dense_self(params_i, sigma_x, sigma_y, sigma_z,
     y = reshape([vx(:), vy(:), vz(:)].', [], 1);
     Yblk = reshape(y, 3*np, np);
 end
-

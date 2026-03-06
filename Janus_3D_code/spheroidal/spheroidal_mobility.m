@@ -30,7 +30,6 @@ function spheroidal_mobility(fname,Fparams,init)
         Ct          - (double) n_b x 3 array of centers 
         collision_eps - (double) collision buffer/tolerance
         mdist       - (double) collision buffer for body-body interactions
-        out         - (bool) external vs internal evaluation (set to 1) 
     
     parslv - (struct) linear solver parameters such as 
          prec     - (string) preconditioner type, '' for unprec, 'bkdiag'
@@ -103,7 +102,7 @@ function spheroidal_mobility(fname,Fparams,init)
             'Fparams.comp must be true or false.');
 
         % parbd
-        req = {'p','Ct','equ_radii','polar_radii','mdist','out'};
+        req = {'p','Ct','equ_radii','polar_radii','mdist'};
         for k = 1:numel(req)
             assert(isfield(Fparams.parbd,req{k}), ...
                 'Missing required field Fparams.parbd.%s', req{k});
@@ -119,8 +118,6 @@ function spheroidal_mobility(fname,Fparams,init)
             'Fparams.parbd.collision_eps must be a strictly positive scalar.');
         assert(isscalar(Fparams.parbd.mdist) && Fparams.parbd.mdist > 0, ...
             'Fparams.parbd.mdist must be a strictly positive scalar.');
-        assert(islogical(Fparams.parbd.out) || ismember(Fparams.parbd.out,[0,1]), ...
-            'Fparams.parbd.out must be true or false.');
     end
 
     if isfield(Fparams, 'plotFlag')
@@ -623,39 +620,29 @@ function [FT, fM, VW, Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nulls
         FT = real(Ck*fM); 
         display(reshape(FT,6,n3))
     case 'JanusAmp'
-        error('Need to implement kernels and make a new projection matrix.');
         SLMODD=Kernels.SLMODD; dSLMODD=Kernels.dSLMODD;
         DLMODD=Kernels.DLMODD; dDLMODD=Kernels.dDLMODD;
         flabel=Fparams.SurfaceLabel;
         % Solves for density, psi & uses them to compute normal derivative
         if isa(SLMODD,'function_handle')
             K = @(V) SLMODD(V) + DLMODD(V);
-            P = make_projection(Fparams.parmod.p,1);
-            Proj = @(V) reshape(P*reshape(V,[],n3),[],1);
-
-            % 
-            K_full_rank = @(V) Proj(K(Proj(V))) + V - Proj(V);    
-            [psi,~,~,I]=gmres(K_full_rank, Proj(flabel),100,1e-6);
-            fprintf('\n Janus Amph S+D BIE solve error = %e, %e', ...
-                norm(K(psi)-Proj(flabel))/norm(flabel), norm(K_full_rank(psi)-Proj(flabel))/norm(flabel)); 
+            [psi,~,rel_residual,I]=gmres(K, flabel,100,1e-6);
+            fprintf('\n Janus Amph S+D BIE solve error = %e', rel_residual); 
             
             phi = K(psi); 
             phi_n_e=dSLMODD(psi) + dDLMODD(psi);
         else
             K=SLMODD+DLMODD;
-            P=make_projection(Fparams.parmod.p,n3);
-            K_full_rank=P*K*P+(eye(np*n3)-P);
-            [psi,~,~,I]=gmres(K_full_rank, P*(flabel),100,1e-6);
-            %display(cond(K_full_rank));
-            Kond = cond(K_full_rank); 
+            [psi,~,rel_residual,I]=gmres(K, flabel,100,1e-6);
+            condK = cond(K); 
 
-            fprintf('\n Janus Amph S+D BIE solve error = %e, %e',norm(K*psi-P*flabel)/norm(flabel), norm(K_full_rank*psi-P*flabel)/norm(flabel)); 
+            fprintf('\n Janus Amph S+D BIE solve error = %e, with condK = %e',rel_residual, condK); 
             phi = K*psi; 
             phi_n_e=dSLMODD*psi + dDLMODD*psi;
         end
 
         % Computes energy (not necessary for further dynamics)
-        W = repmat(Fparams.parmod.W,n3, 1);
+        W = Fparams.parbd.Wg(:);
         Energy = real(-W' * (phi.*phi_n_e));
         
         phisquared = phi.*phi;

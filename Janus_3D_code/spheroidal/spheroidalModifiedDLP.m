@@ -170,7 +170,7 @@ function F = LOCAL_solid_swf(p, u0, u_x, oblate, c, mex_opts)
     idx_ext = abs(u_x) - u0 > 1e-14;
 
     if any(idx_int)
-        [R1, ~, ~, ~] = modifiedLaplaceEvalRadialSphwv(, u_x(idx_int), c, oblate, mex_opts);
+        [R1, ~, ~, ~] = modifiedLaplaceEvalRadialSphwv(p, u_x(idx_int), c, oblate, mex_opts);
         F(idx_int, :) = R1;
     end
     if any(idx_ext)

@@ -1,5 +1,5 @@
 function parbd = SpheroidalMS_set_params(opts)
-% function parbd = SpheroidalMS_set_params(equ_radii,polar_radii,p,C,collision_eps,mdist,out,doAna,flag_pot,kerd,dense) 
+% function parbd = SpheroidalMS_set_params(equ_radii,polar_radii,p,C,collision_eps,mdist,doAna,flag_pot,kerd,dense) 
 %{
 Construct parbd for Fparams in the mobility solver code.
 Note that this pre-computes points, so this is a place for memory optimization if we're
@@ -12,7 +12,6 @@ Inputs
     C           - (double) n_b x 3 array of centers 
     collision_eps - (double) collision buffer/tolerance
     mdist       - (double) collision buffer for body-body interactions
-    out         - (bool) external vs internal evaluation (set to 1) 
     doAna       - (bool) indicates whether density that is passed in needs to be transformed to harmonic space
     flag_pot    - (string) type of Stokes potential to be used for problem in mobility oslver
     kerd        - (int) dimension of kernel (should be 1 for Laplace potentials, 3 for Stokes potentials)
@@ -31,7 +30,6 @@ arguments
     opts.C (:,3) double
     opts.collision_eps (1,1) double = NaN
     opts.mdist (1,1) double
-    opts.out (1,1) logical
     opts.doAna (1,1) logical
     opts.flag_pot (1,1) string {mustBeMember(opts.flag_pot,["SL_Stk_3D", "TSL_Stk_3D"])}
     opts.kerd (1,1) double
@@ -49,7 +47,6 @@ p = opts.p;
 C = opts.C;
 collision_eps = opts.collision_eps;
 mdist = opts.mdist;
-out = opts.out;
 doAna = opts.doAna;
 flag_pot = opts.flag_pot;
 kerd = opts.kerd;
@@ -145,7 +142,6 @@ parbd = struct(...
     'polar_radii',polar_radii, ...
     'dense',dense, ...
     'C',C, ...
-    'out',out, ...
     'mdist',mdist, ...
     'collision_eps',collision_eps, ...
     'a',0, ...
