@@ -1,4 +1,5 @@
-function [soln, truesoln, sigma_vec, condK, info] = modified_laplace_bie_problem(p, lambda, u0, target_distance, plt, problem_type, rng_seed, eval_backend)
+function [soln, truesoln, sigma_vec, condK, info] = modified_laplace_bie_problem( ...
+    p, lambda, u0, target_distance, plt, problem_type, rng_seed, eval_backend, oblate, sphwv_mex_opts)
 %{
 Theoretical background on the BIEs for Yukawa's equation can be found
 in Bryan Quaife's PhD thesis.
@@ -28,6 +29,11 @@ Inputs:
     rng_seed        - optional scalar seed for random interior charge placement.
     eval_backend    - optional evaluation backend:
                       "spectral" (default) or "kernel".
+    oblate          - optional logical flag. false (default) uses prolate
+                      geometry. true uses oblate geometry/operators.
+    sphwv_mex_opts  - optional struct of sphwv MEX controls, fields:
+                      precision_bits, output_digits, max_memory,
+                      n_dr_cap, n_dr_neg_cap, n_c2k_cap, n_B2r_cap.
 
 Outputs:
     soln      - reconstructed potential at exterior targets.
@@ -46,23 +52,22 @@ end
 if nargin < 8 || isempty(eval_backend)
     eval_backend = "spectral";
 end
-if ~any(eval_backend == ["spectral", "kernel"])
-    error("eval_backend must be 'spectral' or 'kernel'.");
+if nargin < 9 || isempty(oblate)
+    oblate = false;
+end
+if nargin < 10 || isempty(sphwv_mex_opts)
+    sphwv_mex_opts = struct();
 end
 if ~isscalar(u0)
     error("A single spheroid is the only thing supported for now.");
 end
-if any(target_distance <= 0)
-    error("target_distance must be positive for exterior target evaluation.");
-end
-
 np = 2*p*(p + 1);
 
 params = SpheroidalParameters;
 params.isReal = false;
 params.u0 = u0;
 params.a = 1 / u0;
-params.oblate = false;
+params.oblate = oblate;
 params.centers = [0 0 0];
 params.thetas = 0;
 params.phis = 0;
@@ -74,9 +79,14 @@ Xeval = Y + target_distance * nu;
 
 % Interior point charges/point fluxes are used to generate the data on the surface.
 num_point_charges = 4;
-charge_radius = 0.25 * params.a * sqrt(max(params.u0^2 - 1));
-[ptch, Xptch] = LOCAL_place_interior_point_charges( ...
-    params.a, params.u0, params.centers(1, :), num_point_charges, charge_radius, rng_seed);
+if oblate
+    minor_axis = params.a * params.u0;
+else
+    minor_axis = params.a * sqrt(max(params.u0^2 - 1));
+end
+charge_radius = 0.25 * minor_axis;
+[ptch, Xptch] = ...
+    LOCAL_place_interior_point_charges(params.a, params.u0, params.centers(1, :), num_point_charges, charge_radius, rng_seed);
 truesolnSurf = LOCAL_yukawa_pt_charge(ptch, Xptch, Y, lambda);
 truefluxSurf = LOCAL_yukawa_pt_charge_flux(ptch, Xptch, Y, nu, lambda);
 
@@ -92,7 +102,7 @@ switch problem_type
             Ssrc = SurfaceSph(Y);
             [~, ~, DL] = kernelModifiedLap(Ssrc, 'DMat', lambda);
         else
-            DL = spheroidalModifiedDLP(params_op, lambda, []);
+            DL = spheroidalModifiedDLP(params_op, lambda, [], sphwv_mex_opts);
         end
         K = 0.5 * eye(np) + DL;
 
@@ -105,7 +115,7 @@ switch problem_type
             params_sigma.sigma = sigma_vec;
             params_sigma.get_shc();
 
-            DL_eval = spheroidalModifiedDLP(params_sigma, lambda, Xeval);
+            DL_eval = spheroidalModifiedDLP(params_sigma, lambda, Xeval, sphwv_mex_opts);
         end
         soln = DL_eval;
     case "exterior_neumann"
@@ -115,7 +125,7 @@ switch problem_type
             Ssrc = SurfaceSph(Y);
             [~, Kp, ~] = kernelModifiedLap(Ssrc, 'SpMat', lambda);
         else
-            Kp = spheroidalModifiedSP(params_op, lambda, []);
+            Kp = spheroidalModifiedSP(params_op, lambda, [], sphwv_mex_opts);
         end
         K = -0.5 * eye(np) + Kp;
 
@@ -128,7 +138,7 @@ switch problem_type
             params_sigma.sigma = sigma_vec;
             params_sigma.get_shc();
 
-            soln = spheroidalModifiedSLP(params_sigma, lambda, Xeval);
+            soln = spheroidalModifiedSLP(params_sigma, lambda, Xeval, sphwv_mex_opts);
         end
     otherwise
         error('Invalid problem type.');
@@ -151,6 +161,9 @@ info.truefluxSurf = truefluxSurf;
 info.Xeval = Xeval;
 info.rel_soln_abs = rel_soln_abs;
 info.rel_soln_err = rel_soln_err;
+info.eval_backend = eval_backend;
+info.oblate = oblate;
+info.sphwv_mex_opts = sphwv_mex_opts;
 
 if plt
     figure;
@@ -164,6 +177,7 @@ if plt
     title('log10 pointwise error');
     colorbar;
 end
+
 end %% END MAIN FUNCTION
 
 function [ptch, Xptch] = LOCAL_place_interior_point_charges(a, u0, center, n_charges, charge_radius, rng_seed)

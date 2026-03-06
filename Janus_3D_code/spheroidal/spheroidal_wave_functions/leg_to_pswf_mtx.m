@@ -45,8 +45,7 @@ end
 % Preserve complex phase in the symmetrized off-diagonal.
 t = sqrt(A(2:end).*C(1:end-1));
 
-% For imaginary gamma, the opposite square-root branch matches cprofcn's convention.
-% If one wants to remove this, then one must also deal with the convention in Rnm1 and Rnm3.
+% For imaginary gamma, the opposite square-root branch matches convention.
 if real(gamma^2) < 0
     t = -t;
 end
