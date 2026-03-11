@@ -70,7 +70,7 @@ if isempty(X_trg)
     for k = 1:ns
         c_ang_k = c_ang(k);
         c_rad_k = c_rad(k);
-        swfc_k = shc_to_swfc(shc(:, :, k), p, oblate(k), c_ang_k);
+        swfc_k = shc_to_swfc(shc(:, :, k), p, c_ang_k);
         Snm_k = LOCAL_compute_Snm(p, c_ang_k);
         [~, spectra_surf_k, ~] = LOCAL_modDLPspectrum( ...
             p, u0(k), a(k), oblate(k), c_rad_k, mex_opts);
@@ -88,7 +88,7 @@ else
     for k = 1:ns
         c_ang_k = c_ang(k);
         c_rad_k = c_rad(k);
-        swfc_k = shc_to_swfc(shc(:, :, k), p, oblate(k), c_ang_k);
+        swfc_k = shc_to_swfc(shc(:, :, k), p, c_ang_k);
         [spectra_int_k, spectra_surf_k, spectra_ext_k] = ...
             LOCAL_modDLPspectrum(p, u0(k), a(k), oblate(k), c_rad_k, mex_opts);
 

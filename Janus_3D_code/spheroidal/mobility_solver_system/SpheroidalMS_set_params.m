@@ -16,7 +16,7 @@ Inputs
     flag_pot    - (string) type of Stokes potential to be used for problem in mobility oslver
     kerd        - (int) dimension of kernel (should be 1 for Laplace potentials, 3 for Stokes potentials)
     dense       - (bool) whether to use FMM or not
-    tsl_dealiasing - (bool, optional) enable dealiasing in TSL near-evaluation
+    tsl_dealiasing - (bool, optional) enable dealiasing in TSL near-evaluation (default true)
     tsl_dealiasing_pad - (int, optional) padding for dealiasing
 
 Outputs
@@ -35,7 +35,7 @@ arguments
     opts.kerd (1,1) double
     opts.dense (1,1) logical
     opts.bodydist (1,1) struct
-    opts.tsl_dealiasing (1,1) logical = false
+    opts.tsl_dealiasing (1,1) logical = true
     opts.tsl_dealiasing_pad (1,1) double = 4
 end
 

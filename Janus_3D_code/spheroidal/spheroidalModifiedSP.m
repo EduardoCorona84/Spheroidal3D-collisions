@@ -71,7 +71,7 @@ end
 Gswfc = zeros(sp, nf, ns);
 for k = 1:ns
     c_ang_k = c_ang(k);
-    swfc_k = shc_to_swfc(shc(:, :, k), p, oblate(k), c_ang_k);
+    swfc_k = shc_to_swfc(shc(:, :, k), p, c_ang_k);
     Gk = ASWF_Gmatrix(p, u0(k), c_ang_k, 0, oblate(k), 50, 0);
     Gswfc(:, :, k) = Gk \ swfc_k;
 end

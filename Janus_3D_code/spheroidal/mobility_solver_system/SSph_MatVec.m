@@ -30,7 +30,7 @@ params - parameter struct with fields such as:
         'DL_Stk_3D'   double layer, Stokes
         'dSL_Stk_3D'  normal derivative of single layer, Stokes
         'TSL_Stk_3D'  traction kernel of single layer, Stokes
-    tsl_dealiasing - (bool, optional) enable dealiasing in optimized TSL near-evaluation
+    tsl_dealiasing - (bool, optional) enable dealiasing in TSL near-evaluation (default true)
     tsl_dealiasing_pad - (int, optional) spherical harmonic padding for dealiasing (default 4)
     Xv - (double 3*np*n3 x 3) duplicated list of points; seems to be only
     used for Kernel_Eval/FMM
@@ -942,7 +942,7 @@ function [tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_tsl_dealiasing_op
     if isfield(params, 'tsl_dealiasing')
         tsl_dealiasing_flag = logical(params.tsl_dealiasing);
     else
-        tsl_dealiasing_flag = false;
+        tsl_dealiasing_flag = true;
     end
 
     if isfield(params, 'tsl_dealiasing_pad')

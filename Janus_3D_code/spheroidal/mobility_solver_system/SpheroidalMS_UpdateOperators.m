@@ -56,7 +56,7 @@ bodydist = Fparams.parbd.bodydist;
 if isfield(Fparams.parbd, 'tsl_dealiasing')
     tsl_dealiasing = Fparams.parbd.tsl_dealiasing;
 else
-    tsl_dealiasing = false;
+    tsl_dealiasing = true;
 end
 if isfield(Fparams.parbd, 'tsl_dealiasing_pad')
     tsl_dealiasing_pad = Fparams.parbd.tsl_dealiasing_pad;
@@ -263,7 +263,7 @@ function ITSSDd = LOCAL_build_td_inverse_blocks(parbd, Lk, Nb, n3)
     if isfield(parbd, 'tsl_dealiasing')
         tsl_dealiasing_flag = parbd.tsl_dealiasing;
     else
-        tsl_dealiasing_flag = false;
+        tsl_dealiasing_flag = true;
     end
     if isfield(parbd, 'tsl_dealiasing_pad')
         tsl_dealiasing_pad = parbd.tsl_dealiasing_pad;
