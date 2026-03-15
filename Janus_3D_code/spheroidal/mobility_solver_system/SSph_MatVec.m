@@ -302,15 +302,15 @@ if strcmp(V, 'Mat')
     % Add jump relation on the diagonal.
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
         jump_diag = LOCAL_get_jump_correction(params, pot, out, Nb);
+        diag_shift = params.a + jump_diag;
         if strcmp(pot(2:3),'SL') 
-            diag_shift = params.a + jump_diag;
             if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
                 Y = params.eta*Y + spdiags(diag_shift, 0, N, N); 
             else
                 Y = Y + spdiags(diag_shift, 0, N, N); 
             end
         else
-            Y = Y + params.a*eye(N); 
+            Y = Y + spdiags(diag_shift, 0, N, N); 
         end
     end
 
@@ -643,15 +643,15 @@ elseif ~isempty(V) && isnumeric(V)
     % Add jump-relation.
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
         jump_diag = LOCAL_get_jump_correction(params, pot, out, Nb);
+        diag_shift = params.a + jump_diag;
         if strcmp(pot(2:3),'SL') 
-            diag_shift = params.a + jump_diag;
             if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
                 Y = params.eta*Y + diag_shift.*V; 
             else
                 Y = Y + diag_shift.*V; 
             end
         else
-            Y = Y + params.a*V; 
+            Y = Y + diag_shift.*V; 
         end
     end
 
@@ -661,7 +661,6 @@ elseif ~isempty(V) && isnumeric(V)
     end
 
 elseif isempty(V)
-    fprintf('\nGoing matrix free...\n')
     % Matrix-free
     Y = @(V) SSph_MatVec(V,L,params,modlap_opts);
 else
@@ -672,7 +671,7 @@ end %% END SSph_MatVec
 
 function Vrot = LOCAL_rotate_interleaved_vectors(V, row_rotation)
     % Rotate interleaved vector data [x_1; y_1; z_1; x_2; ...] while
-    % preserving the matrix's layouts.
+    % preserving the matrix's layout.
     if isempty(V)
         Vrot = V;
         return;
@@ -722,19 +721,33 @@ function R = LOCAL_interleaved_rotation_matrix(N, row_rotation)
 end
 
 function jump_diag = LOCAL_get_jump_correction(params, pot, out, Nb)
-    % The matvecs for the spheres are not principal-valued. So, we need to
-    % account for the jump relation: this function does exactly that.
+    % Sphere spectral matvecs do not all use the same principal-value
+    % convention as the spheroidal operators, so we correct the baseline
+    % here before interpreting params.a.
     jump_diag = zeros(params.n3 * Nb, 1);
-    if ~strcmp(pot, 'TSL_Stk_3D')
+    sphere_shift = LOCAL_get_sphere_shift_for_potential(pot, out);
+    if sphere_shift == 0
         return;
     end
 
-    sphere_shift = 0.5 * (out - ~out);
     for body_ind = 1:params.n3
         if strcmp(params.shape_type(body_ind), 'sphere')
             idx = (1:Nb) + Nb*(body_ind-1);
             jump_diag(idx) = sphere_shift;
         end
+    end
+end
+
+function sphere_shift = LOCAL_get_sphere_shift_for_potential(pot, out)
+    jump_sign = 0.5 * (out - ~out);
+
+    switch pot
+        case {'TSL_Stk_3D', 'dSL_LMOD_3D'}
+            sphere_shift = jump_sign;
+        case 'DL_LMOD_3D'
+            sphere_shift = -jump_sign;
+        otherwise
+            sphere_shift = 0;
     end
 end
 
@@ -988,16 +1001,13 @@ function eval = LOCAL_eval_ldslp(params_i, X_eval, Nu_eval, sigma, source_Gmatri
 end
 
 function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_type)
-    %{
-    TODO: Don't do this.
-    %}
     [u0, a] = calculate_u0_and_a_from_radii(shape_type, equ_radius, polar_radius);
     oblate = strcmp(shape_type,'oblate');
 end
 
 function [tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_tsl_dealiasing_options(params)
     if isfield(params, 'tsl_dealiasing')
-        tsl_dealiasing_flag = logical(params.tsl_dealiasing);
+        tsl_dealiasing_flag = params.tsl_dealiasing;
     else
         tsl_dealiasing_flag = true;
     end
