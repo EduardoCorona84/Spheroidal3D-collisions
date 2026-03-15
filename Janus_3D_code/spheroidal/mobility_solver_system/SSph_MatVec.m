@@ -34,12 +34,12 @@ params - parameter struct with fields such as:
     tsl_dealiasing_pad - (int, optional) spherical harmonic padding for dealiasing (default 4)
     Xv - (double 3*np*n3 x 3) duplicated list of points; seems to be only
     used for Kernel_Eval/FMM
-    X - (double 3*np*n3 x 3) list of points; should be in the global frame
-    (i.e. the points are already rotated and in their respective centered
-    positions)
+    X - (double 3*np*n3 x 3) list of points in the global frame (i.e. the
+    points are already rotated and in their respective centered positions)
 V - (double n_c*N_deg x 1) array of density or densities
-    should (probably) be formatted like
+    should be formatted like
     [sig_x(p_1) ; sig_y(p_1) ; sig_z(p_1) ; sig_x(p_2) ; ...]
+    and is interpreted in the global frame for vector kernels
 L - (sparse array) Extra matrix for completion flow / nullspace correction
 modlap_opts - (struct)
     optional struct to pass in for the MEX calls used in modified Laplace
@@ -277,12 +277,6 @@ if strcmp(V, 'Mat')
 
                 Ynear = Vsh_Kernel_Eval_off([p 1], pMat, 0, out, rho, phi, th, Nrtrg);
 
-                if rot
-                    Ynear = permute(reshape(Ynear,[3 np*num_ngh Nb]),[2 3 1]); 
-                    Ynear = reshape(Ynear,[],3)*MRot{body_ind};   
-                    Ynear = permute(reshape(Ynear,[np*num_ngh Nb 3]),[3 1 2]); 
-                    Ynear = reshape(Ynear,[],Nb); 
-                end
             end
 
             if strncmp(pot,'SL_',3)
@@ -297,28 +291,26 @@ if strcmp(V, 'Mat')
             error('Invalid body shape type; should be "sphere" or "prolate" or "oblate".');
         end
 
-        if rot && kerd==3 && (strcmp(body_shape_type,'prolate') || strcmp(body_shape_type,'oblate'))
-            Ynear = reshape(Ynear, [], 3) * MRot{body_ind}; % Reformat vector into matrix and rotate back
-            Ynear = reshape(Ynear, 3*size(target_pts,1), Nb); % Place back into a vector
+        if rot && kerd==3
+            % Convert the local operator into the global-frame interleaved basis.
+            Ynear = LOCAL_rotate_interleaved_operator(Ynear, MRot{body_ind}.', MRot{body_ind});
         end
 
         Y(I_nghv, I_box) = Ynear;
     end
 
     % Add jump relation on the diagonal.
-    % Exterior-only convention: params.a is the explicit coefficient in
-    % front of the identity.
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
-        if isfield(params,'a')
-            if strcmp(pot(2:3),'SL') 
-                if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
-                    Y = params.eta*Y + params.a*eye(N); 
-                else
-                    Y = Y + params.a*eye(N); 
-                end
+        jump_diag = LOCAL_get_jump_correction(params, pot, out, Nb);
+        if strcmp(pot(2:3),'SL') 
+            diag_shift = params.a + jump_diag;
+            if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
+                Y = params.eta*Y + spdiags(diag_shift, 0, N, N); 
             else
-                Y = Y + params.a*eye(N); 
+                Y = Y + spdiags(diag_shift, 0, N, N); 
             end
+        else
+            Y = Y + params.a*eye(N); 
         end
     end
 
@@ -356,20 +348,24 @@ elseif ~isempty(V) && isnumeric(V)
         target_normals = Nor(I_nghv(1:kerd:end),:);
 
         %% Near-interaction
-        % No matter what, we need to rotate the target spheres and spheroids to be in the local frame
-        % of the current body.
-        if rot % It seems that the target points are already in the local frame. Is this a good idea?
+        % The near-evaluation is performed in the source body's local frame.
+        if rot
             target_pts = (target_pts - C(body_ind, :)) * MRot{body_ind};
             target_normals = target_normals * MRot{body_ind};
         else
-            % Translate to local frame (no rotation)
             target_pts = (target_pts - repmat(C(body_ind,:), size(target_pts,1), 1));
+        end
+
+        % Density in source body's local frame (assumed to be interleaved)
+        Vloc = V(I_box,:);
+        if rot && kerd == 3
+            Vloc = LOCAL_rotate_interleaved_vectors(Vloc, MRot{body_ind});
         end
 
         if strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate')
             if kerd==1
                 % Scalar Laplace near-eval on spheroids
-                sigma = V(I_box,:);
+                sigma = Vloc;
 
                 % Build local parameters
                 [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
@@ -406,9 +402,9 @@ elseif ~isempty(V) && isnumeric(V)
                 end
             else
                 % Grab density on source particle
-                sig_x = V(I_box(1:3:end));
-                sig_y = V(I_box(2:3:end));
-                sig_z = V(I_box(3:3:end));
+                sig_x = Vloc(1:3:end,:);
+                sig_y = Vloc(2:3:end,:);
+                sig_z = Vloc(3:3:end,:);
 
                 % Build local parameters for optimized L2Stk
                 [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, body_shape_type);
@@ -503,7 +499,6 @@ elseif ~isempty(V) && isnumeric(V)
             th(th<0) = th(th<0) + 2*pi;
             phi = pi/2 - phi;
 
-            Vloc = V(I_box,:);
             if kerd == 1
                 Nrtrg = target_normals;
                 Vh_loc = shAna(Vloc);
@@ -545,7 +540,6 @@ elseif ~isempty(V) && isnumeric(V)
                     Nrtrg = Nrtrg * MRot{body_ind};
                 end
 
-                % Densities are assumed in the local body frame
                 Vh_loc = VshAna([Vloc(1:3:end,:); Vloc(2:3:end,:); Vloc(3:3:end,:)],'VW');
 
                 if num_ngh>1
@@ -555,11 +549,11 @@ elseif ~isempty(V) && isnumeric(V)
 
                     Ynear = zeros(Nb*num_ngh, size(Vh_loc,2));
 
-                    % Self term (evaluate at unit radius)
                     Ynear(Nb*(slf-1)+1:Nb*slf, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
                     % Off-diagonal neighbor terms at specified spherical coordinates and normals
                     if ~isempty(ind_off)
-                        Ynear(indv_off, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off,:));
+                        Ynear(indv_off, :) = Vsh_Kernel_Eval_off( ...
+                            Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off,:));
                     end
                 else
                     Ynear = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
@@ -585,12 +579,7 @@ elseif ~isempty(V) && isnumeric(V)
 
         % Post-processing of Ynear
         if rot && kerd==3
-            % Rotate back
-            Ynear = [Ynear(1:3:end,:), Ynear(2:3:end,:), Ynear(3:3:end,:)];  
-            Ynear = Ynear*MRot{body_ind};       
-
-            % Go back to interleaved format
-            Ynear = reshape(reshape(Ynear,[],3).',[],1);
+            Ynear = LOCAL_rotate_interleaved_vectors(Ynear, MRot{body_ind}.');
         end
 
         %% Far-interaction
@@ -651,18 +640,18 @@ elseif ~isempty(V) && isnumeric(V)
         Y = Y + SSph_FMM_Eval(V, W, kerd, pot, X, X, Nr);
     end
 
-    % Add jump-relation (i.e. params.a).
+    % Add jump-relation.
     if ~strcmp(pot(1:3),'SL_') && ~strcmp(pot(1:3),'dDL')
-        if isfield(params,'a')
-            if strcmp(pot(2:3),'SL') 
-                if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
-                    Y = params.eta*Y + params.a*V; 
-                else
-                    Y = Y + params.a*V; 
-                end
+        jump_diag = LOCAL_get_jump_correction(params, pot, out, Nb);
+        if strcmp(pot(2:3),'SL') 
+            diag_shift = params.a + jump_diag;
+            if isfield(params,'eta') && strcmp(pot(1:3),'dSL') 
+                Y = params.eta*Y + diag_shift.*V; 
             else
-                Y = Y + params.a*V; 
+                Y = Y + diag_shift.*V; 
             end
+        else
+            Y = Y + params.a*V; 
         end
     end
 
@@ -680,6 +669,74 @@ else
 end
 
 end %% END SSph_MatVec
+
+function Vrot = LOCAL_rotate_interleaved_vectors(V, row_rotation)
+    % Rotate interleaved vector data [x_1; y_1; z_1; x_2; ...] while
+    % preserving the matrix's layouts.
+    if isempty(V)
+        Vrot = V;
+        return;
+    end
+
+    [nrows, nrhs] = size(V);
+    np = nrows / 3;
+    Vmat = permute(reshape(V, 3, np, nrhs), [2 1 3]);
+    Vmat = reshape(Vmat, [], 3) * row_rotation;
+    Vmat = reshape(Vmat, np, 3, nrhs);
+    Vrot = reshape(permute(Vmat, [2 1 3]), nrows, nrhs);
+end
+
+function Arot = LOCAL_rotate_interleaved_operator(A, target_row_rotation, source_row_rotation)
+    % Convert a local-frame operator block into another frame by rotating
+    % its output rows and input columns separately in interleaved form.
+    Arot = LOCAL_rotate_interleaved_output_rows(A, target_row_rotation);
+    Arot = LOCAL_rotate_interleaved_input_columns(Arot, source_row_rotation);
+end
+
+function Arot = LOCAL_rotate_interleaved_output_rows(A, row_rotation)
+    % Apply the same 3x3 rotation to each target row block of an operator.
+    if isempty(A)
+        Arot = A;
+        return;
+    end
+
+    np = size(A, 1);
+    Arot = LOCAL_interleaved_rotation_matrix(np / 3, row_rotation) * A;
+end
+
+function Arot = LOCAL_rotate_interleaved_input_columns(A, row_rotation)
+    % Apply the same 3x3 rotation to each source column block of an operator.
+    if isempty(A)
+        Arot = A;
+        return;
+    end
+
+    np = size(A, 2);
+    Arot = A * LOCAL_interleaved_rotation_matrix(np / 3, row_rotation);
+end
+
+function R = LOCAL_interleaved_rotation_matrix(N, row_rotation)
+    % Build the sparse block-diagonal rotation matrix matching the
+    % interleaved [x; y; z] ordering used throughout the mobility solver.
+    R = kron(speye(N), sparse(row_rotation.'));
+end
+
+function jump_diag = LOCAL_get_jump_correction(params, pot, out, Nb)
+    % The matvecs for the spheres are not principal-valued. So, we need to
+    % account for the jump relation: this function does exactly that.
+    jump_diag = zeros(params.n3 * Nb, 1);
+    if ~strcmp(pot, 'TSL_Stk_3D')
+        return;
+    end
+
+    sphere_shift = 0.5 * (out - ~out);
+    for body_ind = 1:params.n3
+        if strcmp(params.shape_type(body_ind), 'sphere')
+            idx = (1:Nb) + Nb*(body_ind-1);
+            jump_diag(idx) = sphere_shift;
+        end
+    end
+end
 
 function Ynear = LOCAL_spheroid_near_matrix( ...
     pot, u0, a, oblate, target_pts, target_normals, np, iprm, source_Gmatrix, lambda, modlap_opts, ...

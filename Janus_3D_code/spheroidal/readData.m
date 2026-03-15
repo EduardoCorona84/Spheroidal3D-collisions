@@ -1,11 +1,13 @@
 function [val rFlag] = readData(fileInit, suffix, dim)
 % READDATA(fileInit, suffix, dim) - Project specific interface to read binary files
-  
+
+  this_dir = fileparts(mfilename('fullpath'));
+  data_dir = fullfile(this_dir, 'data');
   nd = prod(dim); % number of entries to be read
   if(isstr(suffix))
-    fileName = ['./data' filesep fileInit suffix '.bin'];
+    fileName = fullfile(data_dir, [fileInit suffix '.bin']);
   else
-    fileName = ['./data' filesep fileInit num2str(suffix) '.bin'];
+    fileName = fullfile(data_dir, [fileInit num2str(suffix) '.bin']);
   end
   rFlag = exist(fileName,'file'); 
   if(rFlag)

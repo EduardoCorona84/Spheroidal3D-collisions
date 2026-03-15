@@ -80,6 +80,7 @@ Fparams.parbd = SpheroidalMS_set_params( ...
     kerd        = kerd, ...
     dense       = denseMV, ...
     bodydist    = bodydist, ...
+    MRot        = Mt, ...
     tsl_dealiasing = tsl_dealiasing, ...
     tsl_dealiasing_pad = tsl_dealiasing_pad ...
     );
@@ -116,18 +117,7 @@ if strcmp(Fparams.type,'MHD')
     Kernels.SLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0,'SL_L_3D'); 
     Kernels.KLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0.5,'dSL_L_3D');
 elseif strcmp(Fparams.type, 'JanusAmp')
-    if ~denseMV
-        error('JanusAmp currently requires Fparams.denseMV = true in the spheroidal solver.');
-    end
-    if ~isfield(Fparams,'lambda')
-        error('Fparams.lambda is required for JanusAmp.');
-    end
-    if ~isfield(Fparams,'boundary_label') || ~isa(Fparams.boundary_label,'function_handle')
-        error('Fparams.boundary_label must be a function handle for JanusAmp.');
-    end
-    if ~isfield(Fparams,'init_dir') || ~isequal(size(Fparams.init_dir), [n3, 3])
-        error('Fparams.init_dir must be an n3-by-3 array for JanusAmp.');
-    end
+    tic
 
     lap_params = Fparams.parbd;
     lap_params.lambda = Fparams.lambda;
@@ -136,11 +126,9 @@ elseif strcmp(Fparams.type, 'JanusAmp')
         lap_params.sphwv_mex_opts = Fparams.sphwv_mex_opts;
     end
 
-    Kernels.SLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'SL_LMOD_3D');
-    % In exterior-only mode, params.a is the explicit identity coefficient.
-    % Use a=0.5 so DLMODD represents (0.5I + DL), matching the Janus BIE.
+    % Kernels.SLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'SL_LMOD_3D');
     Kernels.DLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0.5,'DL_LMOD_3D');
-    Kernels.dSLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'dSL_LMOD_3D');
+    % Kernels.dSLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'dSL_LMOD_3D');
     Kernels.dDLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'dDL_LMOD_3D');
 
     % Compute hydrophilic label at each point in the local body frame.
@@ -159,6 +147,8 @@ elseif strcmp(Fparams.type, 'JanusAmp')
        surfacelabel(:,body_idx) = LOCAL_eval_boundary_label(flabel, Xbackrot, init_dir(body_idx,:), body_meta);
     end
     Fparams.SurfaceLabel = reshape(surfacelabel,[],1);
+
+    fprintf('Time for JanusAmp update: %e\n', toc);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -288,9 +278,8 @@ function ITSSDd = LOCAL_build_td_inverse_blocks(parbd, Lk, Nb, n3)
         [u0, a] = calculate_u0_and_a_from_radii(shape_type, parbd.equ_radii(k), parbd.polar_radii(k));
         oblate = strcmp(shape_type,'oblate');
 
-        % Build spheroidal parameters once and evaluate three basis families.
         params_i = SpheroidalParameters();
-        params_i.sigma = eye(np); % sets order p via dependent property
+        params_i.sigma = eye(np);
         params_i.u0 = u0;
         params_i.a = a;
         params_i.oblate = oblate;

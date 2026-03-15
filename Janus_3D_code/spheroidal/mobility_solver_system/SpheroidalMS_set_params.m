@@ -37,12 +37,12 @@ arguments
     opts.bodydist (1,1) struct
     opts.tsl_dealiasing (1,1) logical = true
     opts.tsl_dealiasing_pad (1,1) double = 4
+    opts.MRot = []
 end
 
 % Alias variables
 equ_radii = opts.equ_radii;
 polar_radii = opts.polar_radii;
-max_radii = max(equ_radii, polar_radii);
 p = opts.p;
 C = opts.C;
 collision_eps = opts.collision_eps;
@@ -54,6 +54,7 @@ dense = opts.dense;
 bodydist = opts.bodydist;
 tsl_dealiasing = opts.tsl_dealiasing;
 tsl_dealiasing_pad = opts.tsl_dealiasing_pad;
+MRot = LOCAL_normalize_rotations(opts.MRot, size(C,1));
 
 np=2*p*(p+1); 
 Nb = kerd*np; % DOF per particle   
@@ -76,13 +77,16 @@ for j=1:n3
     shape_type = body_shape_types(j);
     equatorial_radius = equ_radii(j);
     polar_radius = polar_radii(j);
+    Rj = MRot{j};
     surface = LOCAL_build_axisymmetric_shape(p, shape_type, equatorial_radius, polar_radius);
     
     % Pre-compute points of shape
-    X{j} = [surface.cart.x, surface.cart.y, surface.cart.z];
+    X_local = [surface.cart.x, surface.cart.y, surface.cart.z];
+    X{j} = X_local*Rj.';
 
     % Pre-compute normals
-    Nr{j} = [surface.geoProp.nor.x, surface.geoProp.nor.y, surface.geoProp.nor.z];
+    Nr_local = [surface.geoProp.nor.x, surface.geoProp.nor.y, surface.geoProp.nor.z];
+    Nr{j} = Nr_local*Rj.';
 
     % Pre-compute area elements
     W{j} = surface.geoProp.W .* wt;
@@ -148,6 +152,7 @@ parbd = struct(...
     'doAna',doAna, ...
     'shape_type',body_shape_types, ...
     'bodydist', bodydist, ...
+    'MRot', {MRot}, ...
     'tsl_dealiasing', tsl_dealiasing, ...
     'tsl_dealiasing_pad', tsl_dealiasing_pad ...
 ); 
@@ -174,5 +179,28 @@ function surface = LOCAL_build_axisymmetric_shape(p, shape_type, equatorial_radi
         case 'oblate'
             [u0, a] = calculate_u0_and_a_from_radii(shape_type, equatorial_radius, polar_radius);
             surface = SurfaceSph(oblate_spheroid_shape(p, u0, a));
+    end
+end
+
+function MRot = LOCAL_normalize_rotations(raw_rotations, n3)
+    if isempty(raw_rotations)
+        MRot = repmat({eye(3)}, n3, 1);
+        return;
+    end
+
+    if iscell(raw_rotations)
+        if numel(raw_rotations) ~= n3
+            error('opts.MRot must contain one 3x3 matrix per body.');
+        end
+        MRot = reshape(raw_rotations, [], 1);
+    elseif isnumeric(raw_rotations) && isequal(size(raw_rotations), [3 3 n3])
+        MRot = cell(n3, 1);
+        for k = 1:n3
+            MRot{k} = raw_rotations(:,:,k);
+        end
+    elseif isnumeric(raw_rotations) && isequal(size(raw_rotations), [3 3]) && n3 == 1
+        MRot = {raw_rotations};
+    else
+        error('opts.MRot must be empty, a 1-by-n3 or n3-by-1 cell array, or a 3x3xn3 numeric array.');
     end
 end
