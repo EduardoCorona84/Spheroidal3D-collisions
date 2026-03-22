@@ -29,7 +29,7 @@ oblate = params.oblate;
 if nargin < 4
     mex_opts = struct();
 end
-mex_opts = modifiedLaplaceGetMexOptions(mex_opts);
+mex_opts = modified_laplace_get_mex_options(mex_opts);
 
 shc = params.sigma_coefficients;
 [sp, nf, ns] = size(shc);
@@ -159,7 +159,7 @@ function [lambda_int, lambda_surf, lambda_ext] = LOCAL_modSLPspectrum(p, u0, a, 
         cnm = 1j * a * c * sqrt(u0^2 - 1);
     end
 
-    [Rnm1_u0, ~, Rnm3_u0, ~] = modifiedLaplaceEvalRadialSphwv(p, u0, c, oblate, mex_opts);
+    [Rnm1_u0, ~, Rnm3_u0, ~] = modified_laplace_eval_radial_sphwv(p, u0, c, oblate, mex_opts);
 
     lambda_int = cnm .* Rnm3_u0;
     lambda_surf = cnm .* (Rnm1_u0 .* Rnm3_u0);
@@ -172,11 +172,11 @@ function F = LOCAL_solid_swf(p, u0, u_x, oblate, c, mex_opts)
     idx_ext = abs(u_x) - u0 > 1e-14;
 
     if any(idx_int)
-        [R1, ~, ~, ~] = modifiedLaplaceEvalRadialSphwv(p, u_x(idx_int), c, oblate, mex_opts);
+        [R1, ~, ~, ~] = modified_laplace_eval_radial_sphwv(p, u_x(idx_int), c, oblate, mex_opts);
         F(idx_int, :) = R1;
     end
     if any(idx_ext)
-        [~, ~, R3, ~] = modifiedLaplaceEvalRadialSphwv(p, u_x(idx_ext), c, oblate, mex_opts);
+        [~, ~, R3, ~] = modified_laplace_eval_radial_sphwv(p, u_x(idx_ext), c, oblate, mex_opts);
         F(idx_ext, :) = R3;
     end
 end

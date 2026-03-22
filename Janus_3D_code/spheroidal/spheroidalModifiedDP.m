@@ -31,7 +31,7 @@ oblate = params.oblate;
 if nargin < 4
     mex_opts = struct();
 end
-mex_opts = modifiedLaplaceGetMexOptions(mex_opts);
+mex_opts = modified_laplace_get_mex_options(mex_opts);
 
 shc = params.sigma_coefficients;
 [sp, nf, ns] = size(shc);
@@ -159,7 +159,7 @@ function [spectra_int, spectra_surf, spectra_ext] = LOCAL_modDPspectrum(p, u0, a
     spectra_surf = zeros(nt, sp);
     spectra_ext = zeros(nt, sp);
 
-    [~, dR1_u0, ~, dR3_u0] = modifiedLaplaceEvalRadialSphwv(p, u0, c, oblate, mex_opts);
+    [~, dR1_u0, ~, dR3_u0] = modified_laplace_eval_radial_sphwv(p, u0, c, oblate, mex_opts);
 
     if oblate
         % In the oblate modified-Laplace convention, c is real while
@@ -177,12 +177,12 @@ function [spectra_int, spectra_surf, spectra_ext] = LOCAL_modDPspectrum(p, u0, a
     id_surf = ~id_int & ~id_ext;
 
     if any(id_int)
-        [~, dR1_u, ~, ~] = modifiedLaplaceEvalRadialSphwv(p, u_x(id_int), c, oblate, mex_opts);
+        [~, dR1_u, ~, ~] = modified_laplace_eval_radial_sphwv(p, u_x(id_int), c, oblate, mex_opts);
         spectra_int(id_int, :) = anm(id_int) .* dR3_u0 .* dR1_u;
     end
 
     if any(id_ext)
-        [~, ~, ~, dR3_u] = modifiedLaplaceEvalRadialSphwv(p, u_x(id_ext), c, oblate, mex_opts);
+        [~, ~, ~, dR3_u] = modified_laplace_eval_radial_sphwv(p, u_x(id_ext), c, oblate, mex_opts);
         spectra_ext(id_ext, :) = anm(id_ext) .* dR1_u0 .* dR3_u;
     end
 
