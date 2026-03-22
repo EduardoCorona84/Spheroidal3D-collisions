@@ -5,10 +5,6 @@ the inputs so that we can pass it to the correct functions.
 
 Note that this is modeled after VSh_MatVec_RB2.m.
 
-IMPORTANT NOTE: This does not implement the principal-valued part only;
-this implements the entire BIO on-surface (so there is an associated jump 
-relation that is being added).
-
 Inputs
 params - parameter struct with fields such as: 
     p - (int) - spherical harmonic degree
@@ -898,11 +894,13 @@ function eval = LOCAL_eval_lmod_dlp(params_i, X_eval, sigma, lambda, modlap_opts
     params_eval.get_shc();
 
     if isempty(X_eval)
-        modDL = spheroidalModifiedDLP(params_eval, lambda, [], modlap_opts);
+        X_trg = [];
     else
         X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
-        modDL = spheroidalModifiedDLP(params_eval, lambda, X_trg, modlap_opts);
     end
+
+    radial_ws = spheroidal_modified_radial_workspace(params_eval, lambda, X_trg, modlap_opts);
+    modDL = spheroidalModDLPOptimized(params_eval, lambda, X_trg, modlap_opts, radial_ws);
 
     eval = reshape(modDL, size(modDL,1), size(modDL,2));
 end
@@ -936,11 +934,13 @@ function eval = LOCAL_eval_lmod_dp(params_i, X_eval, sigma, lambda, modlap_opts)
     params_eval.get_shc();
 
     if isempty(X_eval)
-        modDP = spheroidalModifiedDP(params_eval, lambda, [], modlap_opts);
+        X_trg = [];
     else
         X_trg = reshape(X_eval, size(X_eval,1), 3, 1);
-        modDP = spheroidalModifiedDP(params_eval, lambda, X_trg, modlap_opts);
     end
+
+    radial_ws = spheroidal_modified_radial_workspace(params_eval, lambda, X_trg, modlap_opts);
+    modDP = spheroidalModDPOptimized(params_eval, lambda, X_trg, modlap_opts, radial_ws);
 
     eval = reshape(modDP, size(modDP,1), size(modDP,2));
 end

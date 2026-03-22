@@ -112,6 +112,8 @@ tic
 Kernels.TD = SpheroidalMS_MatVec([],Lk,typeMV,Fparams.parbd,sdim,0.5,'TSL_Stk_3D');
 fprintf('Time for TSL update: %e\n',toc);
 
+% For the initial timestep, the cache must be built for the modified Laplace, which may
+% take a long time!
 if strcmp(Fparams.type,'MHD')
     % Laplace kernels
     Kernels.SLD = SpheroidalMS_MatVec([],[],typeMV,Fparams.parbd,ldim,0,'SL_L_3D'); 
@@ -125,6 +127,8 @@ elseif strcmp(Fparams.type, 'JanusAmp')
     if isfield(Fparams, 'sphwv_mex_opts')
         lap_params.sphwv_mex_opts = Fparams.sphwv_mex_opts;
     end
+
+    spheroidal_modified_radial_workspace('clear');
 
     % Kernels.SLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0,'SL_LMOD_3D');
     Kernels.DLMODD = SpheroidalMS_MatVec([],[],typeMV,lap_params,ldim,0.5,'DL_LMOD_3D');
