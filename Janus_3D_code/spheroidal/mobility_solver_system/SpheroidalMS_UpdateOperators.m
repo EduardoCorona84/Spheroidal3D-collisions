@@ -162,22 +162,16 @@ tic
 if n3>1 && ~denseMV && strcmp(precond_type,'bkdiag')
     if i==0 || ~isfield(Kernels,'ITSSD0')
         fprintf('Building reference block diagonal preconditioner.\n');
-        ITSSD0 = LOCAL_build_td_inverse_blocks(Fparams.parbd, Lk, Nb, n3, 0.5); % cell of size n3
+        ITSSD0 = LOCAL_build_td_inverse_blocks(Fparams.parbd, Lk, Nb, n3); % cell of size n3
     else
         ITSSD0 = Kernels.ITSSD0;
     end
 
-    if i==0
-        % Match RBS flow: initialize current blocks from reference blocks.
-        ITSSDd = ITSSD0;
-    else
-        if isfield(Kernels,'ITSSDd')
-            prev_rot = Kernels.ITSSDd;
-        else
-            prev_rot = {};
-        end
-        ITSSDd = LOCAL_rotate_inverse_blocks(ITSSD0, Mt, np, n3, nrmW, prev_rot);
-        fprintf('Rotating reference block diagonal preconditioner.\n');
+    % TD self-blocks are assembled in each spheroid's local frame, so
+    % reuse the reference inverse blocks directly instead of rotating them.
+    ITSSDd = ITSSD0;
+    if i>0
+        fprintf('Reusing reference block diagonal preconditioner in local row frame.\n');
     end
 
     Kernels.ITSSD0 = ITSSD0;
