@@ -65,6 +65,11 @@ function spheroidal_mobility(fname,Fparams,init)
         plotForceColor    force vector RGB color ([r g b])
         plotVectorLineWidth overlay line width (default 1.5)
         plotForceMaxLength max force-vector length (default 0.8*diam)
+
+    Optional background flow (Fparams.background_flow):
+        enabled           enable background flow (bool, default false)
+        U0                3-vector offset velocity in the lab frame
+        A                 3x3 trace-free velocity-gradient matrix
     ----
 
     %%%
@@ -722,6 +727,8 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
     rdw = repmat((rd.').^(-2),3,1);
     vind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((1:3),1,num_body);
     wind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((4:6),1,num_body);
+    ambient = SpheroidalMS_EvalBackgroundFlow(Fparams.parbd, Fparams.background_flow);
+
     % Do a generic fluid solve, and then adjust if collision occurs.
     if isempty(VW) || Fparams.comp
         % Fluid Solve
@@ -733,7 +740,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         tic;
         % Note that Kernels.TD = 0.5I + K + L. So, we need to the
         % L[\sigma] term below to get rid of L.
-        B = Nullsp.L*sigma-Lapp(Kernels.TD,sigma); 
+        B = -ambient.traction + Nullsp.L*sigma - Lapp(Kernels.TD,sigma); 
         timings.velocities.apply(i) = 0.5*toc;
         
         % Solve Fredholm eq (aI + K + L)*mu = -(aI+K)*sigma for mu
@@ -743,7 +750,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         timings.velocities.solve(i) = toc;  
 
         tic; 
-        U = Lapp(Kernels.SD,(mu+sigma)); 
+        U = LOCAL_rebuild_total_surface_velocity(Kernels, sigma, mu, ambient); 
         fprintf('\n Time for apply (of S) to compute U: %e',toc);
         timings.velocities.apply(i) = timings.velocities.apply(i) + 0.5*toc;
 
@@ -757,14 +764,14 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
     elseif col
         % If comp=false and we entered with collision info, still compute baseline solve.
         tic;
-        B = Nullsp.L*sigma - Lapp(Kernels.TD,sigma);
+        B = -ambient.traction + Nullsp.L*sigma - Lapp(Kernels.TD,sigma);
         timings.velocities.apply(i) = toc;
 
         tic;
         mu = Lslv(Kernels.TD,B,parslv);
         timings.velocities.solve(i) = toc;
 
-        U = Lapp(Kernels.SD,(mu+sigma));
+        U = LOCAL_rebuild_total_surface_velocity(Kernels, sigma, mu, ambient);
         VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body);
     end
 
@@ -788,7 +795,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         if ~isempty(mu_c)
             mu = mu + mu_c; 
             sigma = sigma + rho_c; 
-            U = Lapp(Kernels.SD,(mu+sigma)); 
+            U = LOCAL_rebuild_total_surface_velocity(Kernels, sigma, mu, ambient); 
             VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body);
         end
 
@@ -800,6 +807,10 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
     end
 
     VW = real(VW);
+end
+
+function U = LOCAL_rebuild_total_surface_velocity(Kernels, sigma, mu, ambient)
+    U = ambient.velocity + Lapp(Kernels.SD, (mu + sigma));
 end
 
 function VW = LOCAL_extract_RBM(U,Nullsp,W,tau,rdw,rdt,vind,wind,num_body)

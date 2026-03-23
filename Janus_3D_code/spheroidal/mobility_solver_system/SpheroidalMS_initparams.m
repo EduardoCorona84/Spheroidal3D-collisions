@@ -16,6 +16,8 @@ switch Fparams.type
 end
 end
 
+Fparams.background_flow = LOCAL_process_background_flow(Fparams);
+
 % Params struct for rigid bodies
 p = Fparams.parbd.p;
 C = Fparams.parbd.Ct;
@@ -67,5 +69,23 @@ if strcmp(Fparams.tdisc,'abash')
 end
 
 end %% END OF MAIN FUNCTION
-    
-    
+
+function background_flow = LOCAL_process_background_flow(Fparams)
+    background_flow = struct( ...
+        'enabled', false, ...
+        'U0', zeros(1,3), ...
+        'A', zeros(3,3) ...
+    );
+
+    if ~isfield(Fparams, 'background_flow') || isempty(Fparams.background_flow)
+        return;
+    end
+
+    background_flow.enabled = Fparams.background_flow.enabled;
+    background_flow.U0 = Fparams.background_flow.U0;
+    background_flow.A = Fparams.background_flow.A;
+
+    trace_tol = 1e-12;
+    assert(abs(trace(background_flow.A)) <= trace_tol, ...
+        'Fparams.background_flow.A must have trace 0 to represent incompressible flow.');
+end
