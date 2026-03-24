@@ -48,6 +48,20 @@
 
 
 /*
+ * Support for 32-bit and 64-bit MEX files
+ */
+#ifndef mwSize
+#  define mwSize int
+#endif
+#ifndef mwIndex
+#  define mwIndex int
+#endif
+#ifndef mwSignedIndex
+#  define mwSignedIndex int
+#endif
+
+
+/*
  * Records for call profile.
  */
 int* mexprofrecord_= NULL;
@@ -115,7 +129,7 @@ double mxWrapGetScalar(const mxArray* a, const char** e)
 char* mxWrapGetString(const mxArray* a, const char** e)
 {
     char* s;
-    int slen;
+    mwSize slen;
     if (!a || (!mxIsChar(a) && mxGetM(a)*mxGetN(a) > 0)) {
         *e = "Invalid string argument";
         return NULL;
@@ -134,8 +148,8 @@ char* mxWrapGetString(const mxArray* a, const char** e)
 T* func(const mxArray* a, const char** e)     \
 { \
     T* array; \
-    int arraylen; \
-    int i; \
+    mwSize arraylen; \
+    mwIndex i; \
     T* p; \
     double* q; \
     if (!a || mxGetClassID(a) != mxDOUBLE_CLASS) { \
@@ -153,9 +167,9 @@ T* func(const mxArray* a, const char** e)     \
 
 
 #define mxWrapCopyDef(func, T) \
-void func(mxArray* a, const T* q, int n) \
+void func(mxArray* a, const T* q, mwSize n) \
 { \
-    int i; \
+    mwIndex i; \
     double* p = mxGetPr(a); \
     for (i = 0; i < n; ++i) \
         *p++ = *q++; \
@@ -163,9 +177,9 @@ void func(mxArray* a, const T* q, int n) \
 
 
 #define mxWrapReturnDef(func, T) \
-mxArray* func(const T* q, int m, int n) \
+mxArray* func(const T* q, mwSize m, mwSize n) \
 { \
-    int i; \
+    mwIndex i; \
     double* p; \
     if (!q) { \
         return mxCreateDoubleMatrix(0,0, mxREAL); \
@@ -192,8 +206,8 @@ void func(T* z, const mxArray* a) \
 T* func(const mxArray* a, const char** e) \
 { \
     T* array; \
-    int arraylen; \
-    int i; \
+    mwSize arraylen; \
+    mwIndex i; \
     T* p; \
     double* qr; \
     double* qi; \
@@ -217,9 +231,9 @@ T* func(const mxArray* a, const char** e) \
 
 
 #define mxWrapCopyZDef(func, T, real, imag) \
-void func(mxArray* a, const T* q, int n) \
+void func(mxArray* a, const T* q, mwSize n) \
 { \
-    int i; \
+    mwIndex i; \
     double* pr = mxGetPr(a); \
     double* pi = mxGetPi(a); \
     for (i = 0; i < n; ++i) { \
@@ -231,9 +245,9 @@ void func(mxArray* a, const T* q, int n) \
 
 
 #define mxWrapReturnZDef(func, T, real, imag) \
-mxArray* func(const T* q, int m, int n) \
+mxArray* func(const T* q, mwSize m, mwSize n) \
 { \
-    int i; \
+    mwIndex i; \
     double* pr; \
     double* pi; \
     if (!q) { \
@@ -282,6 +296,15 @@ mxWrapReturnDef  (mxWrapReturn_int,   int)
 mxWrapGetArrayDef(mxWrapGetArray_long, long)
 mxWrapCopyDef    (mxWrapCopy_long,     long)
 mxWrapReturnDef  (mxWrapReturn_long,   long)
+mxWrapGetArrayDef(mxWrapGetArray_mwIndex, mwIndex)
+mxWrapCopyDef    (mxWrapCopy_mwIndex,     mwIndex)
+mxWrapReturnDef  (mxWrapReturn_mwIndex,   mwIndex)
+mxWrapGetArrayDef(mxWrapGetArray_mwSignedIndex, mwSignedIndex)
+mxWrapCopyDef    (mxWrapCopy_mwSignedIndex,     mwSignedIndex)
+mxWrapReturnDef  (mxWrapReturn_mwSignedIndex,   mwSignedIndex)
+mxWrapGetArrayDef(mxWrapGetArray_mwSize, mwSize)
+mxWrapCopyDef    (mxWrapCopy_mwSize,     mwSize)
+mxWrapReturnDef  (mxWrapReturn_mwSize,   mwSize)
 mxWrapGetArrayDef(mxWrapGetArray_size_t, size_t)
 mxWrapCopyDef    (mxWrapCopy_size_t,     size_t)
 mxWrapReturnDef  (mxWrapReturn_size_t,   size_t)
@@ -392,29 +415,29 @@ void mexStub1(int nlhs, mxArray* plhs[],
     double*     in11_ =0; /* pre        */
     int*        in12_ =0; /* ifgrad     */
     double*     in13_ =0; /* grad       */
-    int         dim14_;   /* 1          */
-    int         dim15_;   /* 1          */
-    int         dim16_;   /* 1          */
-    int         dim17_;   /* 3          */
-    int         dim18_;   /* nsource    */
-    int         dim19_;   /* 1          */
-    int         dim20_;   /* 1          */
-    int         dim21_;   /* 3          */
-    int         dim22_;   /* nsource    */
-    int         dim23_;   /* 1          */
-    int         dim24_;   /* 1          */
+    mwSize      dim14_;   /* 1          */
+    mwSize      dim15_;   /* 1          */
+    mwSize      dim16_;   /* 1          */
+    mwSize      dim17_;   /* 3          */
+    mwSize      dim18_;   /* nsource    */
+    mwSize      dim19_;   /* 1          */
+    mwSize      dim20_;   /* 1          */
+    mwSize      dim21_;   /* 3          */
+    mwSize      dim22_;   /* nsource    */
+    mwSize      dim23_;   /* 1          */
+    mwSize      dim24_;   /* 1          */
 
-    dim14_ = (int) mxWrapGetScalar(prhs[14], &mw_err_txt_);
-    dim15_ = (int) mxWrapGetScalar(prhs[15], &mw_err_txt_);
-    dim16_ = (int) mxWrapGetScalar(prhs[16], &mw_err_txt_);
-    dim17_ = (int) mxWrapGetScalar(prhs[17], &mw_err_txt_);
-    dim18_ = (int) mxWrapGetScalar(prhs[18], &mw_err_txt_);
-    dim19_ = (int) mxWrapGetScalar(prhs[19], &mw_err_txt_);
-    dim20_ = (int) mxWrapGetScalar(prhs[20], &mw_err_txt_);
-    dim21_ = (int) mxWrapGetScalar(prhs[21], &mw_err_txt_);
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim14_ = (mwSize) mxWrapGetScalar(prhs[14], &mw_err_txt_);
+    dim15_ = (mwSize) mxWrapGetScalar(prhs[15], &mw_err_txt_);
+    dim16_ = (mwSize) mxWrapGetScalar(prhs[16], &mw_err_txt_);
+    dim17_ = (mwSize) mxWrapGetScalar(prhs[17], &mw_err_txt_);
+    dim18_ = (mwSize) mxWrapGetScalar(prhs[18], &mw_err_txt_);
+    dim19_ = (mwSize) mxWrapGetScalar(prhs[19], &mw_err_txt_);
+    dim20_ = (mwSize) mxWrapGetScalar(prhs[20], &mw_err_txt_);
+    dim21_ = (mwSize) mxWrapGetScalar(prhs[21], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim14_) {
         mw_err_txt_ = "Bad argument size: ier";        goto mw_err_label;
@@ -589,35 +612,35 @@ void mexStub2(int nlhs, mxArray* plhs[],
     double*     in18_ =0; /* pretarg    */
     int*        in19_ =0; /* ifgradtarg */
     double*     in20_ =0; /* gradtarg   */
-    int         dim21_;   /* 1          */
-    int         dim22_;   /* 1          */
-    int         dim23_;   /* 1          */
-    int         dim24_;   /* 3          */
-    int         dim25_;   /* nsource    */
-    int         dim26_;   /* 1          */
-    int         dim27_;   /* 1          */
-    int         dim28_;   /* 3          */
-    int         dim29_;   /* nsource    */
-    int         dim30_;   /* 1          */
-    int         dim31_;   /* 1          */
-    int         dim32_;   /* 1          */
-    int         dim33_;   /* 1          */
-    int         dim34_;   /* 1          */
+    mwSize      dim21_;   /* 1          */
+    mwSize      dim22_;   /* 1          */
+    mwSize      dim23_;   /* 1          */
+    mwSize      dim24_;   /* 3          */
+    mwSize      dim25_;   /* nsource    */
+    mwSize      dim26_;   /* 1          */
+    mwSize      dim27_;   /* 1          */
+    mwSize      dim28_;   /* 3          */
+    mwSize      dim29_;   /* nsource    */
+    mwSize      dim30_;   /* 1          */
+    mwSize      dim31_;   /* 1          */
+    mwSize      dim32_;   /* 1          */
+    mwSize      dim33_;   /* 1          */
+    mwSize      dim34_;   /* 1          */
 
-    dim21_ = (int) mxWrapGetScalar(prhs[21], &mw_err_txt_);
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
-    dim31_ = (int) mxWrapGetScalar(prhs[31], &mw_err_txt_);
-    dim32_ = (int) mxWrapGetScalar(prhs[32], &mw_err_txt_);
-    dim33_ = (int) mxWrapGetScalar(prhs[33], &mw_err_txt_);
-    dim34_ = (int) mxWrapGetScalar(prhs[34], &mw_err_txt_);
+    dim21_ = (mwSize) mxWrapGetScalar(prhs[21], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim31_ = (mwSize) mxWrapGetScalar(prhs[31], &mw_err_txt_);
+    dim32_ = (mwSize) mxWrapGetScalar(prhs[32], &mw_err_txt_);
+    dim33_ = (mwSize) mxWrapGetScalar(prhs[33], &mw_err_txt_);
+    dim34_ = (mwSize) mxWrapGetScalar(prhs[34], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim21_) {
         mw_err_txt_ = "Bad argument size: ier";        goto mw_err_label;
@@ -854,31 +877,31 @@ void mexStub3(int nlhs, mxArray* plhs[],
     double*     in16_ =0; /* pretarg    */
     int*        in17_ =0; /* ifgradtarg */
     double*     in18_ =0; /* gradtarg   */
-    int         dim19_;   /* 1          */
-    int         dim20_;   /* 3          */
-    int         dim21_;   /* nsource    */
-    int         dim22_;   /* 1          */
-    int         dim23_;   /* 1          */
-    int         dim24_;   /* 3          */
-    int         dim25_;   /* nsource    */
-    int         dim26_;   /* 1          */
-    int         dim27_;   /* 1          */
-    int         dim28_;   /* 1          */
-    int         dim29_;   /* 1          */
-    int         dim30_;   /* 1          */
+    mwSize      dim19_;   /* 1          */
+    mwSize      dim20_;   /* 3          */
+    mwSize      dim21_;   /* nsource    */
+    mwSize      dim22_;   /* 1          */
+    mwSize      dim23_;   /* 1          */
+    mwSize      dim24_;   /* 3          */
+    mwSize      dim25_;   /* nsource    */
+    mwSize      dim26_;   /* 1          */
+    mwSize      dim27_;   /* 1          */
+    mwSize      dim28_;   /* 1          */
+    mwSize      dim29_;   /* 1          */
+    mwSize      dim30_;   /* 1          */
 
-    dim19_ = (int) mxWrapGetScalar(prhs[19], &mw_err_txt_);
-    dim20_ = (int) mxWrapGetScalar(prhs[20], &mw_err_txt_);
-    dim21_ = (int) mxWrapGetScalar(prhs[21], &mw_err_txt_);
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim19_ = (mwSize) mxWrapGetScalar(prhs[19], &mw_err_txt_);
+    dim20_ = (mwSize) mxWrapGetScalar(prhs[20], &mw_err_txt_);
+    dim21_ = (mwSize) mxWrapGetScalar(prhs[21], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim19_) {
         mw_err_txt_ = "Bad argument size: nsource";        goto mw_err_label;
@@ -1087,31 +1110,31 @@ void mexStub4(int nlhs, mxArray* plhs[],
     double*     in12_ =0; /* pre        */
     int*        in13_ =0; /* ifgrad     */
     double*     in14_ =0; /* grad       */
-    int         dim15_;   /* 1          */
-    int         dim16_;   /* 1          */
-    int         dim17_;   /* 1          */
-    int         dim18_;   /* 1          */
-    int         dim19_;   /* 3          */
-    int         dim20_;   /* nsource    */
-    int         dim21_;   /* 1          */
-    int         dim22_;   /* 1          */
-    int         dim23_;   /* 3          */
-    int         dim24_;   /* nsource    */
-    int         dim25_;   /* 1          */
-    int         dim26_;   /* 1          */
+    mwSize      dim15_;   /* 1          */
+    mwSize      dim16_;   /* 1          */
+    mwSize      dim17_;   /* 1          */
+    mwSize      dim18_;   /* 1          */
+    mwSize      dim19_;   /* 3          */
+    mwSize      dim20_;   /* nsource    */
+    mwSize      dim21_;   /* 1          */
+    mwSize      dim22_;   /* 1          */
+    mwSize      dim23_;   /* 3          */
+    mwSize      dim24_;   /* nsource    */
+    mwSize      dim25_;   /* 1          */
+    mwSize      dim26_;   /* 1          */
 
-    dim15_ = (int) mxWrapGetScalar(prhs[15], &mw_err_txt_);
-    dim16_ = (int) mxWrapGetScalar(prhs[16], &mw_err_txt_);
-    dim17_ = (int) mxWrapGetScalar(prhs[17], &mw_err_txt_);
-    dim18_ = (int) mxWrapGetScalar(prhs[18], &mw_err_txt_);
-    dim19_ = (int) mxWrapGetScalar(prhs[19], &mw_err_txt_);
-    dim20_ = (int) mxWrapGetScalar(prhs[20], &mw_err_txt_);
-    dim21_ = (int) mxWrapGetScalar(prhs[21], &mw_err_txt_);
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim15_ = (mwSize) mxWrapGetScalar(prhs[15], &mw_err_txt_);
+    dim16_ = (mwSize) mxWrapGetScalar(prhs[16], &mw_err_txt_);
+    dim17_ = (mwSize) mxWrapGetScalar(prhs[17], &mw_err_txt_);
+    dim18_ = (mwSize) mxWrapGetScalar(prhs[18], &mw_err_txt_);
+    dim19_ = (mwSize) mxWrapGetScalar(prhs[19], &mw_err_txt_);
+    dim20_ = (mwSize) mxWrapGetScalar(prhs[20], &mw_err_txt_);
+    dim21_ = (mwSize) mxWrapGetScalar(prhs[21], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim15_) {
         mw_err_txt_ = "Bad argument size: ier";        goto mw_err_label;
@@ -1298,37 +1321,37 @@ void mexStub5(int nlhs, mxArray* plhs[],
     double*     in19_ =0; /* pretarg    */
     int*        in20_ =0; /* ifgradtarg */
     double*     in21_ =0; /* gradtarg   */
-    int         dim22_;   /* 1          */
-    int         dim23_;   /* 1          */
-    int         dim24_;   /* 1          */
-    int         dim25_;   /* 1          */
-    int         dim26_;   /* 3          */
-    int         dim27_;   /* nsource    */
-    int         dim28_;   /* 1          */
-    int         dim29_;   /* 1          */
-    int         dim30_;   /* 3          */
-    int         dim31_;   /* nsource    */
-    int         dim32_;   /* 1          */
-    int         dim33_;   /* 1          */
-    int         dim34_;   /* 1          */
-    int         dim35_;   /* 1          */
-    int         dim36_;   /* 1          */
+    mwSize      dim22_;   /* 1          */
+    mwSize      dim23_;   /* 1          */
+    mwSize      dim24_;   /* 1          */
+    mwSize      dim25_;   /* 1          */
+    mwSize      dim26_;   /* 3          */
+    mwSize      dim27_;   /* nsource    */
+    mwSize      dim28_;   /* 1          */
+    mwSize      dim29_;   /* 1          */
+    mwSize      dim30_;   /* 3          */
+    mwSize      dim31_;   /* nsource    */
+    mwSize      dim32_;   /* 1          */
+    mwSize      dim33_;   /* 1          */
+    mwSize      dim34_;   /* 1          */
+    mwSize      dim35_;   /* 1          */
+    mwSize      dim36_;   /* 1          */
 
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
-    dim31_ = (int) mxWrapGetScalar(prhs[31], &mw_err_txt_);
-    dim32_ = (int) mxWrapGetScalar(prhs[32], &mw_err_txt_);
-    dim33_ = (int) mxWrapGetScalar(prhs[33], &mw_err_txt_);
-    dim34_ = (int) mxWrapGetScalar(prhs[34], &mw_err_txt_);
-    dim35_ = (int) mxWrapGetScalar(prhs[35], &mw_err_txt_);
-    dim36_ = (int) mxWrapGetScalar(prhs[36], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim31_ = (mwSize) mxWrapGetScalar(prhs[31], &mw_err_txt_);
+    dim32_ = (mwSize) mxWrapGetScalar(prhs[32], &mw_err_txt_);
+    dim33_ = (mwSize) mxWrapGetScalar(prhs[33], &mw_err_txt_);
+    dim34_ = (mwSize) mxWrapGetScalar(prhs[34], &mw_err_txt_);
+    dim35_ = (mwSize) mxWrapGetScalar(prhs[35], &mw_err_txt_);
+    dim36_ = (mwSize) mxWrapGetScalar(prhs[36], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim22_) {
         mw_err_txt_ = "Bad argument size: ier";        goto mw_err_label;
@@ -1577,33 +1600,33 @@ void mexStub6(int nlhs, mxArray* plhs[],
     double*     in17_ =0; /* pretarg    */
     int*        in18_ =0; /* ifgradtarg */
     double*     in19_ =0; /* gradtarg   */
-    int         dim20_;   /* 1          */
-    int         dim21_;   /* 1          */
-    int         dim22_;   /* 3          */
-    int         dim23_;   /* nsource    */
-    int         dim24_;   /* 1          */
-    int         dim25_;   /* 1          */
-    int         dim26_;   /* 3          */
-    int         dim27_;   /* nsource    */
-    int         dim28_;   /* 1          */
-    int         dim29_;   /* 1          */
-    int         dim30_;   /* 1          */
-    int         dim31_;   /* 1          */
-    int         dim32_;   /* 1          */
+    mwSize      dim20_;   /* 1          */
+    mwSize      dim21_;   /* 1          */
+    mwSize      dim22_;   /* 3          */
+    mwSize      dim23_;   /* nsource    */
+    mwSize      dim24_;   /* 1          */
+    mwSize      dim25_;   /* 1          */
+    mwSize      dim26_;   /* 3          */
+    mwSize      dim27_;   /* nsource    */
+    mwSize      dim28_;   /* 1          */
+    mwSize      dim29_;   /* 1          */
+    mwSize      dim30_;   /* 1          */
+    mwSize      dim31_;   /* 1          */
+    mwSize      dim32_;   /* 1          */
 
-    dim20_ = (int) mxWrapGetScalar(prhs[20], &mw_err_txt_);
-    dim21_ = (int) mxWrapGetScalar(prhs[21], &mw_err_txt_);
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
-    dim31_ = (int) mxWrapGetScalar(prhs[31], &mw_err_txt_);
-    dim32_ = (int) mxWrapGetScalar(prhs[32], &mw_err_txt_);
+    dim20_ = (mwSize) mxWrapGetScalar(prhs[20], &mw_err_txt_);
+    dim21_ = (mwSize) mxWrapGetScalar(prhs[21], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim31_ = (mwSize) mxWrapGetScalar(prhs[31], &mw_err_txt_);
+    dim32_ = (mwSize) mxWrapGetScalar(prhs[32], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim20_) {
         mw_err_txt_ = "Bad argument size: itype";        goto mw_err_label;
@@ -1810,11 +1833,11 @@ void mexStub7(int nlhs, mxArray* plhs[],
     const char* mw_err_txt_ = 0;
     int*        in0_ =0; /* unit1      */
     int*        in1_ =0; /* unit2      */
-    int         dim2_;   /* 1          */
-    int         dim3_;   /* 1          */
+    mwSize      dim2_;   /* 1          */
+    mwSize      dim3_;   /* 1          */
 
-    dim2_ = (int) mxWrapGetScalar(prhs[2], &mw_err_txt_);
-    dim3_ = (int) mxWrapGetScalar(prhs[3], &mw_err_txt_);
+    dim2_ = (mwSize) mxWrapGetScalar(prhs[2], &mw_err_txt_);
+    dim3_ = (mwSize) mxWrapGetScalar(prhs[3], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim2_) {
         mw_err_txt_ = "Bad argument size: unit1";        goto mw_err_label;
@@ -1874,37 +1897,37 @@ void mexStub8(int nlhs, mxArray* plhs[],
     dcomplex*   in15_ =0; /* fld        */
     int*        in16_ =0; /* ifhess     */
     dcomplex*   in17_ =0; /* hess       */
-    int         dim18_;   /* 1          */
-    int         dim19_;   /* 1          */
-    int         dim20_;   /* 1          */
-    int         dim21_;   /* 3          */
-    int         dim22_;   /* nsource    */
-    int         dim23_;   /* 1          */
-    int         dim24_;   /* 1          */
-    int         dim25_;   /* 3          */
-    int         dim26_;   /* nsource    */
-    int         dim27_;   /* 1          */
-    int         dim28_;   /* 6          */
-    int         dim29_;   /* nsource    */
-    int         dim30_;   /* 1          */
-    int         dim31_;   /* 1          */
-    int         dim32_;   /* 1          */
+    mwSize      dim18_;   /* 1          */
+    mwSize      dim19_;   /* 1          */
+    mwSize      dim20_;   /* 1          */
+    mwSize      dim21_;   /* 3          */
+    mwSize      dim22_;   /* nsource    */
+    mwSize      dim23_;   /* 1          */
+    mwSize      dim24_;   /* 1          */
+    mwSize      dim25_;   /* 3          */
+    mwSize      dim26_;   /* nsource    */
+    mwSize      dim27_;   /* 1          */
+    mwSize      dim28_;   /* 6          */
+    mwSize      dim29_;   /* nsource    */
+    mwSize      dim30_;   /* 1          */
+    mwSize      dim31_;   /* 1          */
+    mwSize      dim32_;   /* 1          */
 
-    dim18_ = (int) mxWrapGetScalar(prhs[18], &mw_err_txt_);
-    dim19_ = (int) mxWrapGetScalar(prhs[19], &mw_err_txt_);
-    dim20_ = (int) mxWrapGetScalar(prhs[20], &mw_err_txt_);
-    dim21_ = (int) mxWrapGetScalar(prhs[21], &mw_err_txt_);
-    dim22_ = (int) mxWrapGetScalar(prhs[22], &mw_err_txt_);
-    dim23_ = (int) mxWrapGetScalar(prhs[23], &mw_err_txt_);
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
-    dim31_ = (int) mxWrapGetScalar(prhs[31], &mw_err_txt_);
-    dim32_ = (int) mxWrapGetScalar(prhs[32], &mw_err_txt_);
+    dim18_ = (mwSize) mxWrapGetScalar(prhs[18], &mw_err_txt_);
+    dim19_ = (mwSize) mxWrapGetScalar(prhs[19], &mw_err_txt_);
+    dim20_ = (mwSize) mxWrapGetScalar(prhs[20], &mw_err_txt_);
+    dim21_ = (mwSize) mxWrapGetScalar(prhs[21], &mw_err_txt_);
+    dim22_ = (mwSize) mxWrapGetScalar(prhs[22], &mw_err_txt_);
+    dim23_ = (mwSize) mxWrapGetScalar(prhs[23], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim31_ = (mwSize) mxWrapGetScalar(prhs[31], &mw_err_txt_);
+    dim32_ = (mwSize) mxWrapGetScalar(prhs[32], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim18_) {
         mw_err_txt_ = "Bad argument size: ier";        goto mw_err_label;
@@ -2129,45 +2152,45 @@ void mexStub9(int nlhs, mxArray* plhs[],
     dcomplex*   in23_ =0; /* fldtarg    */
     int*        in24_ =0; /* ifhesstarg */
     dcomplex*   in25_ =0; /* hesstarg   */
-    int         dim26_;   /* 1          */
-    int         dim27_;   /* 1          */
-    int         dim28_;   /* 1          */
-    int         dim29_;   /* 3          */
-    int         dim30_;   /* nsource    */
-    int         dim31_;   /* 1          */
-    int         dim32_;   /* 1          */
-    int         dim33_;   /* 3          */
-    int         dim34_;   /* nsource    */
-    int         dim35_;   /* 1          */
-    int         dim36_;   /* 6          */
-    int         dim37_;   /* nsource    */
-    int         dim38_;   /* 1          */
-    int         dim39_;   /* 1          */
-    int         dim40_;   /* 1          */
-    int         dim41_;   /* 1          */
-    int         dim42_;   /* 1          */
-    int         dim43_;   /* 1          */
-    int         dim44_;   /* 1          */
+    mwSize      dim26_;   /* 1          */
+    mwSize      dim27_;   /* 1          */
+    mwSize      dim28_;   /* 1          */
+    mwSize      dim29_;   /* 3          */
+    mwSize      dim30_;   /* nsource    */
+    mwSize      dim31_;   /* 1          */
+    mwSize      dim32_;   /* 1          */
+    mwSize      dim33_;   /* 3          */
+    mwSize      dim34_;   /* nsource    */
+    mwSize      dim35_;   /* 1          */
+    mwSize      dim36_;   /* 6          */
+    mwSize      dim37_;   /* nsource    */
+    mwSize      dim38_;   /* 1          */
+    mwSize      dim39_;   /* 1          */
+    mwSize      dim40_;   /* 1          */
+    mwSize      dim41_;   /* 1          */
+    mwSize      dim42_;   /* 1          */
+    mwSize      dim43_;   /* 1          */
+    mwSize      dim44_;   /* 1          */
 
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
-    dim31_ = (int) mxWrapGetScalar(prhs[31], &mw_err_txt_);
-    dim32_ = (int) mxWrapGetScalar(prhs[32], &mw_err_txt_);
-    dim33_ = (int) mxWrapGetScalar(prhs[33], &mw_err_txt_);
-    dim34_ = (int) mxWrapGetScalar(prhs[34], &mw_err_txt_);
-    dim35_ = (int) mxWrapGetScalar(prhs[35], &mw_err_txt_);
-    dim36_ = (int) mxWrapGetScalar(prhs[36], &mw_err_txt_);
-    dim37_ = (int) mxWrapGetScalar(prhs[37], &mw_err_txt_);
-    dim38_ = (int) mxWrapGetScalar(prhs[38], &mw_err_txt_);
-    dim39_ = (int) mxWrapGetScalar(prhs[39], &mw_err_txt_);
-    dim40_ = (int) mxWrapGetScalar(prhs[40], &mw_err_txt_);
-    dim41_ = (int) mxWrapGetScalar(prhs[41], &mw_err_txt_);
-    dim42_ = (int) mxWrapGetScalar(prhs[42], &mw_err_txt_);
-    dim43_ = (int) mxWrapGetScalar(prhs[43], &mw_err_txt_);
-    dim44_ = (int) mxWrapGetScalar(prhs[44], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim31_ = (mwSize) mxWrapGetScalar(prhs[31], &mw_err_txt_);
+    dim32_ = (mwSize) mxWrapGetScalar(prhs[32], &mw_err_txt_);
+    dim33_ = (mwSize) mxWrapGetScalar(prhs[33], &mw_err_txt_);
+    dim34_ = (mwSize) mxWrapGetScalar(prhs[34], &mw_err_txt_);
+    dim35_ = (mwSize) mxWrapGetScalar(prhs[35], &mw_err_txt_);
+    dim36_ = (mwSize) mxWrapGetScalar(prhs[36], &mw_err_txt_);
+    dim37_ = (mwSize) mxWrapGetScalar(prhs[37], &mw_err_txt_);
+    dim38_ = (mwSize) mxWrapGetScalar(prhs[38], &mw_err_txt_);
+    dim39_ = (mwSize) mxWrapGetScalar(prhs[39], &mw_err_txt_);
+    dim40_ = (mwSize) mxWrapGetScalar(prhs[40], &mw_err_txt_);
+    dim41_ = (mwSize) mxWrapGetScalar(prhs[41], &mw_err_txt_);
+    dim42_ = (mwSize) mxWrapGetScalar(prhs[42], &mw_err_txt_);
+    dim43_ = (mwSize) mxWrapGetScalar(prhs[43], &mw_err_txt_);
+    dim44_ = (mwSize) mxWrapGetScalar(prhs[44], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim26_) {
         mw_err_txt_ = "Bad argument size: ier";        goto mw_err_label;
@@ -2465,41 +2488,41 @@ void mexStub10(int nlhs, mxArray* plhs[],
     dcomplex*   in21_ =0; /* fldtarg    */
     int*        in22_ =0; /* ifhesstarg */
     dcomplex*   in23_ =0; /* hesstarg   */
-    int         dim24_;   /* 1          */
-    int         dim25_;   /* 3          */
-    int         dim26_;   /* nsource    */
-    int         dim27_;   /* 1          */
-    int         dim28_;   /* 1          */
-    int         dim29_;   /* 3          */
-    int         dim30_;   /* nsource    */
-    int         dim31_;   /* 1          */
-    int         dim32_;   /* 6          */
-    int         dim33_;   /* nsource    */
-    int         dim34_;   /* 1          */
-    int         dim35_;   /* 1          */
-    int         dim36_;   /* 1          */
-    int         dim37_;   /* 1          */
-    int         dim38_;   /* 1          */
-    int         dim39_;   /* 1          */
-    int         dim40_;   /* 1          */
+    mwSize      dim24_;   /* 1          */
+    mwSize      dim25_;   /* 3          */
+    mwSize      dim26_;   /* nsource    */
+    mwSize      dim27_;   /* 1          */
+    mwSize      dim28_;   /* 1          */
+    mwSize      dim29_;   /* 3          */
+    mwSize      dim30_;   /* nsource    */
+    mwSize      dim31_;   /* 1          */
+    mwSize      dim32_;   /* 6          */
+    mwSize      dim33_;   /* nsource    */
+    mwSize      dim34_;   /* 1          */
+    mwSize      dim35_;   /* 1          */
+    mwSize      dim36_;   /* 1          */
+    mwSize      dim37_;   /* 1          */
+    mwSize      dim38_;   /* 1          */
+    mwSize      dim39_;   /* 1          */
+    mwSize      dim40_;   /* 1          */
 
-    dim24_ = (int) mxWrapGetScalar(prhs[24], &mw_err_txt_);
-    dim25_ = (int) mxWrapGetScalar(prhs[25], &mw_err_txt_);
-    dim26_ = (int) mxWrapGetScalar(prhs[26], &mw_err_txt_);
-    dim27_ = (int) mxWrapGetScalar(prhs[27], &mw_err_txt_);
-    dim28_ = (int) mxWrapGetScalar(prhs[28], &mw_err_txt_);
-    dim29_ = (int) mxWrapGetScalar(prhs[29], &mw_err_txt_);
-    dim30_ = (int) mxWrapGetScalar(prhs[30], &mw_err_txt_);
-    dim31_ = (int) mxWrapGetScalar(prhs[31], &mw_err_txt_);
-    dim32_ = (int) mxWrapGetScalar(prhs[32], &mw_err_txt_);
-    dim33_ = (int) mxWrapGetScalar(prhs[33], &mw_err_txt_);
-    dim34_ = (int) mxWrapGetScalar(prhs[34], &mw_err_txt_);
-    dim35_ = (int) mxWrapGetScalar(prhs[35], &mw_err_txt_);
-    dim36_ = (int) mxWrapGetScalar(prhs[36], &mw_err_txt_);
-    dim37_ = (int) mxWrapGetScalar(prhs[37], &mw_err_txt_);
-    dim38_ = (int) mxWrapGetScalar(prhs[38], &mw_err_txt_);
-    dim39_ = (int) mxWrapGetScalar(prhs[39], &mw_err_txt_);
-    dim40_ = (int) mxWrapGetScalar(prhs[40], &mw_err_txt_);
+    dim24_ = (mwSize) mxWrapGetScalar(prhs[24], &mw_err_txt_);
+    dim25_ = (mwSize) mxWrapGetScalar(prhs[25], &mw_err_txt_);
+    dim26_ = (mwSize) mxWrapGetScalar(prhs[26], &mw_err_txt_);
+    dim27_ = (mwSize) mxWrapGetScalar(prhs[27], &mw_err_txt_);
+    dim28_ = (mwSize) mxWrapGetScalar(prhs[28], &mw_err_txt_);
+    dim29_ = (mwSize) mxWrapGetScalar(prhs[29], &mw_err_txt_);
+    dim30_ = (mwSize) mxWrapGetScalar(prhs[30], &mw_err_txt_);
+    dim31_ = (mwSize) mxWrapGetScalar(prhs[31], &mw_err_txt_);
+    dim32_ = (mwSize) mxWrapGetScalar(prhs[32], &mw_err_txt_);
+    dim33_ = (mwSize) mxWrapGetScalar(prhs[33], &mw_err_txt_);
+    dim34_ = (mwSize) mxWrapGetScalar(prhs[34], &mw_err_txt_);
+    dim35_ = (mwSize) mxWrapGetScalar(prhs[35], &mw_err_txt_);
+    dim36_ = (mwSize) mxWrapGetScalar(prhs[36], &mw_err_txt_);
+    dim37_ = (mwSize) mxWrapGetScalar(prhs[37], &mw_err_txt_);
+    dim38_ = (mwSize) mxWrapGetScalar(prhs[38], &mw_err_txt_);
+    dim39_ = (mwSize) mxWrapGetScalar(prhs[39], &mw_err_txt_);
+    dim40_ = (mwSize) mxWrapGetScalar(prhs[40], &mw_err_txt_);
 
     if (mxGetM(prhs[0])*mxGetN(prhs[0]) != dim24_) {
         mw_err_txt_ = "Bad argument size: nsource";        goto mw_err_label;
