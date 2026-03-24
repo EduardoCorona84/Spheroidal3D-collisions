@@ -972,7 +972,6 @@ end
 %% Build A 
 A = getLCPMatVec(Fparams, F, Kernels, Nullsp);
 if Fparams.denseMV
-
     A = @(x) A*x;
 end
 %% Build constant vector b: 
@@ -1148,7 +1147,7 @@ if isempty(VW) || Fparams.comp
 
     % Solve Fredholm eq TD*mu = B
     FredholmSolveTic = tic; 
-    verboseMVP = @(x) Lapp(Kernels.TD, x, true);
+    verboseMVP = @(x) Lapp(Kernels.TD, x);
     mu = Lslv(verboseMVP,B,parslv);
     timings.velocities.solve(i) = toc(FredholmSolveTic);  
     fprintf('\n Time for solve TD[mu] = B: %e',timings.velocities.solve(i)); 

@@ -198,10 +198,10 @@ saveas(f1, absErrFile);
 %%
 f2 = figure;
 subplot(1,1,1)
-h = heatmap(ps, tols, 100*absErr');
-h.CellLabelFormat = '%.2g%%';
+h = heatmap(ps, tols, log10(absErr)');
+h.CellLabelFormat = '%.2g';
 colormap(viridis)
-clim([0 10]);
+clim([-6 -2]);
 sgtitle('Absolute Error $\|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$', 'Interpreter', 'latex')
 % title(name)
 set(f2, 'Position',  [0, 0, 1000,1000])
@@ -213,27 +213,27 @@ absErrFile = fullfile(basedir,'..','docs','fig', [prefix '_absErr.png']);
 disp(['Saving to ' absErrFile])
 saveas(f2, absErrFile);
 %%
-f3 = figure;
-subplot(1,1,1)
-h = heatmap(ps, tols, preCond');
-h.CellLabelFormat = '%.2g';
-colormap(viridis)
-clim([1 2.5]);
-sgtitle('Condition  Number of $\hat{A}^{-1/2}A\hat{A}^{-1/2}$', 'Interpreter', 'latex');
-% title(name)
-set(f3, 'Position',  [0, 0, 1000,1000])
-xlabel('p')
-ylabel('\epsilon_{gmres}')
-% set(gca,'Interpreter','latex')
-fontsize(f3, 40, 'points')
-timePerHiFile = fullfile(basedir,'..','docs','fig', [prefix '_preCond.png']);
-disp(['Saving to ' timePerHiFile])
-saveas(f3, timePerHiFile);
+% f3 = figure;
+% subplot(1,1,1)
+% h = heatmap(ps, tols, preCond');
+% h.CellLabelFormat = '%.2g';
+% colormap(viridis)
+% clim([1 2.5]);
+% sgtitle('Condition  Number of $\hat{A}^{-1/2}A\hat{A}^{-1/2}$', 'Interpreter', 'latex');
+% % title(name)
+% set(f3, 'Position',  [0, 0, 1000,1000])
+% xlabel('p')
+% ylabel('\epsilon_{gmres}')
+% % set(gca,'Interpreter','latex')
+% fontsize(f3, 40, 'points')
+% timePerHiFile = fullfile(basedir,'..','docs','fig', [prefix '_preCond.png']);
+% disp(['Saving to ' timePerHiFile])
+% saveas(f3, timePerHiFile);
 %%
 f4 = figure;
 subplot(1,1,1)
 h=heatmap(ps, tols, timePerHi');
-h.CellLabelFormat = '%.2f';
+h.CellLabelFormat = '%.0f';
 colormap(viridis)
 clim([1 20])
 sgtitle('Average Time to apply $\hat{\mathbf{A}}$ vs $\mathbf{A}$', 'Interpreter', 'latex');

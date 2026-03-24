@@ -8,8 +8,8 @@ if cache.isKey(resFile)
     disp('- Loading from precomputed cache')
     mcGood = cache(resFile);
     return 
-elseif isfile(resFile + '.mcGood.mat')
-    load(resFile + '.mcGood.mat', 'mcGood')
+elseif isfile([resFile  '.mcGood.mat'])
+    load([resFile  '.mcGood.mat'], 'mcGood')
     cache(resFile) = mcGood;
     return 
 end
