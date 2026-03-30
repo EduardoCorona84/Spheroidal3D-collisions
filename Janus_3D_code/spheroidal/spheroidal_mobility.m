@@ -35,8 +35,36 @@ function spheroidal_mobility(fname,Fparams,init)
          prec     - (string) preconditioner type, '' for unprec, 'bkdiag'
                     (block diagonal), 'TT' (tensor train)
          precond_type - (string) 'bkdiag' or 'TT'
-         solver   - gmres, pcg, bicg, etc. 
-         tol (tolerance), maxit (maximum iterations), rst (restart), etc.
+         solver   - 'gmres' (default)
+         tol (tolerance), maxit (maximum restart cycles), rst (restart size), etc.
+         Contact-LCP options:
+            td_sparse_nn - when true, build a sparse contact-pair body-
+                        block preconditioner for TD solves near or at
+                        contact.
+            td_sparse_nn_reg - diagonal regularization factor applied to
+                        the sparse contact-pair TD operator before sparse
+                        factorization.
+            td_sparse_nn_droptol - ILU drop tolerance for the sparse
+                        contact-pair TD preconditioner.
+            td_sparse_nn_inverse - inverse method used on the sparse
+                        contact-pair TD operator; should be 'ilu' or 'lu'.
+            td_sparse_nn_reuse_local_state - when true, reuse the assembled
+                        and inverted active-body local TD state within the
+                        current timestep.
+         Augmentation options:
+            deflate - when true, near-contact/active-contact TD_main solves
+                        attach a contact-aware coarse basis before the Krylov
+                        solve.
+            deflate_max_dim - maximum total dimension of that coarse basis.
+            deflate_sval_tol - singular-value cutoff used when building the
+                        contact-derived basis from each active contact block.
+            deflate_near_contact - when true, use the nearest prospective
+                        contact pairs to switch TD_main into the targeted
+                        augmented solve before collision detection activates.
+            deflate_near_contact_factor - near-contact switch threshold,
+                        measured in multiples of collision_eps.
+            deflate_probe_pairs - number of nearest candidate pairs checked
+                        for that near-contact switch.
     
     Depending on the type of problem that is implemented
     Ffun, Tfun = @(t,C,q) with output of size 3 x n_b.
@@ -130,6 +158,9 @@ function spheroidal_mobility(fname,Fparams,init)
     else
         plot_enabled = false;
     end
+
+    LOCAL_log_input_options(fname, Fparams, init);
+    LOCAL_manage_td_sparse_nn_cache('reset', [], []);
 
     %%(0.1) (optional) Load data in init, initialize output arrays
     num_timesteps = Fparams.Nt; num_body=Fparams.parbd.n3; 
@@ -729,6 +760,9 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
     wind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((4:6),1,num_body);
     ambient = SpheroidalMS_EvalBackgroundFlow(Fparams.parbd, Fparams.background_flow);
 
+    parslv_td = LOCAL_build_td_main_solver_params(Kernels, Nullsp, Fparams, Ct, Mt, col, collist, ...
+        closest_points_1, closest_points_2, i);
+
     % Do a generic fluid solve, and then adjust if collision occurs.
     if isempty(VW) || Fparams.comp
         % Fluid Solve
@@ -745,7 +779,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         
         % Solve Fredholm eq (aI + K + L)*mu = -(aI+K)*sigma for mu
         tic; 
-        mu = Lslv(Kernels.TD,B,parslv);
+        mu = Lslv(Kernels.TD,B,parslv_td);
         fprintf('\n Time for solve: %e',toc); 
         timings.velocities.solve(i) = toc;  
 
@@ -768,7 +802,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         timings.velocities.apply(i) = toc;
 
         tic;
-        mu = Lslv(Kernels.TD,B,parslv);
+        mu = Lslv(Kernels.TD,B,parslv_td);
         timings.velocities.solve(i) = toc;
 
         U = LOCAL_rebuild_total_surface_velocity(Kernels, sigma, mu, ambient);
@@ -787,7 +821,7 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
         fprintf('-------------------------------------------------\n');
 
         [F_c,mu_c,rho_c] = ...
-            LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2);
+            LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2,i);
 
         F_c = reshape(F_c,6,[]);
         display(F_c(1:3,:));
@@ -854,7 +888,7 @@ end
 
 %% Collision resolution
 function [F_c,mu_c,rho_c] = ...
-    LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2)
+    LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2,timestep_idx)
     %{
     Calculates the force and the resulting densities due to the collision.
     Note that this does not resolve the collision, only calculates the effect of it.
@@ -894,7 +928,6 @@ function [F_c,mu_c,rho_c] = ...
     %}
     parslv = Fparams.parslv;
     n3 = Fparams.parbd.n3;
-    tol = parslv.tol;
     collision_eps = Fparams.parbd.collision_eps;
     max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
 
@@ -917,54 +950,28 @@ function [F_c,mu_c,rho_c] = ...
     Lk = Nullsp.L;
     Ak = Nullsp.A;
 
-    % f(x) = (x-C)^T A (x-C) - 1 = 0, and \nabla f = 2*A*(x-C).
-    % TODO: cache this.
-    quadratic_forms = zeros(3,3,n3);
-    for body_idx = 1:n3
-        spheroid_params = LOCAL_get_spheroid_params(body_idx, Ct, Mt, Fparams.parbd);
-        D = diag([spheroid_params.a spheroid_params.b spheroid_params.c].^-2);
-        quadratic_forms(:,:,body_idx) = spheroid_params.R*D*(spheroid_params.R.');
-    end
-
-    % Build contact-direction matrix F
-    F = zeros(6*n3,num_contact_pairs); 
-    for k = 1:num_contact_pairs
-        translational_indi = (1:3)+6*(body_1_idx(k)-1);
-        translational_indj = (1:3)+6*(body_2_idx(k)-1);
-
-        rotational_indi = (4:6)+6*(body_1_idx(k)-1);
-        rotational_indj = (4:6)+6*(body_2_idx(k)-1);
-
-        % Use the analytic spheroid gradient to build the contact normal.
-        cp_i = closest_points_1(:,k);
-        cp_j = closest_points_2(:,k);
-
-        % body_i = body_1_idx(k);
-        body_j = body_2_idx(k);
-
-        % Convention: contact normal vector points from body 2 to body 1, so we 
-        % use the outward normal of body 2 at cp_j.
-        grad_j = quadratic_forms(:,:,body_j)*(cp_j - Ct(body_j,:).');
-        nvec = grad_j/norm(grad_j);
-
-        r_i = cp_i - Ct(body_1_idx(k),:).';
-        r_j = cp_j - Ct(body_2_idx(k),:).';
-
-        F(translational_indi,k) = nvec;
-        F(translational_indj,k) = -nvec;
-        F(rotational_indi,k) = cross(r_i, nvec);
-        F(rotational_indj,k) = -cross(r_j, nvec);
-    end
+    F = LOCAL_build_contact_force_matrix(collist, closest_points_1, closest_points_2, Ct, Mt, Fparams.parbd);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%
     % Build A = F^T * M * F %
     %%%%%%%%%%%%%%%%%%%%%%%%%
     matfree = ~Fparams.denseMV || num_contact_pairs > 1;
 
+    % Separate outer solves from contact-LCP inner solves
+    td_build_info = LOCAL_make_td_build_info(Fparams, Nullsp, timestep_idx);
+
+    contact_parslv = parslv;
+    % Contact-LCP inner TD solves seemed to be more robust with plain restarted GMRES
+    % than with recycled variants.
+    contact_parslv.solver = 'gmres';
+
+    contact_parslv = LOCAL_configure_td_contact_preconditioner(contact_parslv, TD, ...
+        size(Bk, 2), n3, collist, closest_points_1, closest_points_2, distances, 'Contact TD', ...
+        td_build_info);
     if ~matfree
         rho_c = (Bk.')*F; % This is rho_c -- the incident field.
         BIE_RHS = -Lapp(TD,rho_c)+Lk*rho_c; % (-0.5I-T)*rho_c
-        mu_c = Lslv(TD,BIE_RHS,parslv); % \mu_c = (0.5I + T + L)^{-1}(-0.5I - T)*rho_c
+        mu_c = Lslv(TD,BIE_RHS,contact_parslv); % \mu_c = (0.5I + T + L)^{-1}(-0.5I - T)*rho_c
 
         % Setup LCP: x \perp A*x + b (dense build of Amat = F^T M F)
         % Lapp(SD, MuNS+Bf) represents the mobility solve, and conversion of density to velocity.
@@ -972,11 +979,11 @@ function [F_c,mu_c,rho_c] = ...
         % So, Amat = F^T (A S (0.5I + T + L)^{-1}(-0.5 - T)B^T) F, where whatever is in the paranthesis is
         %   the mobility matrix \mathcal{M} in the equation \mathcal{U} = \mathcal{M}F.
         Amat = real(F.'*(Ak*Lapp(SD,mu_c+rho_c)));
-    else % What is happening here...?
-        parslv.tol = parslv.coltol;
+    else
+        contact_parslv.tol = parslv.coltol;
         rho_c = @(x) (Bk.')*(F*x);
-        Amat = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,rho_c(x))+Lk*rho_c(x),parslv)+rho_c(x))));
-        parslv.tol = tol;
+        % Contact-LCP inner TD solves forced to plain GMRES
+        Amat = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,rho_c(x))+Lk*rho_c(x),contact_parslv)+rho_c(x))));
     end
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -995,21 +1002,22 @@ function [F_c,mu_c,rho_c] = ...
     %LCP solve
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     max_iter=parslv.colmaxit; 
-    tol_rel=parslv.col_tolrel; %1e-6; 
-    tol_abs=parslv.col_tolabs; %1e-9; 
+    tol_rel=parslv.col_tolrel;
+    tol_abs=parslv.col_tolabs;
     profile=1;
+    lam0 = zeros(size(bvec));
 
     if matfree
         switch parslv.colsolver
             case 'Newton'
                 [lam, err, iter, ~, ~, ~] = ...
-                    minmap_newton_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
+                    minmap_newton_matfree(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'APGD'
                 [lam, err, iter, ~, ~, ~] = ...
-                    APGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
+                    APGD_matfree(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'BBPGD'
                 [lam, err, iter, ~, ~, ~] = ...
-                    BBPGD_matfree(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
+                    BBPGD_matfree(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             otherwise
                 error('Invalid LCP solver in params.');
         end
@@ -1017,13 +1025,13 @@ function [F_c,mu_c,rho_c] = ...
         switch parslv.colsolver
             case 'Newton'
                 [lam, err, iter, ~, ~, ~] = ...
-                    minmap_newton(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
+                    minmap_newton(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'APGD'
                 [lam, err, iter, ~, ~, ~] = ...
-                    APGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
+                    APGD(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'BBPGD'
                 [lam, err, iter, ~, ~, ~] = ...
-                    BBPGD(Amat, bvec, zeros(size(bvec)), max_iter, tol_rel, tol_abs, profile);
+                    BBPGD(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             otherwise
                 error('Invalid LCP solver in params.');
         end
@@ -1041,8 +1049,11 @@ function [F_c,mu_c,rho_c] = ...
         
         % Given the new data (i.e. force/torque) on surface, correct the densities
         % by doing another mobility solve.
-        [mu_c,rho_c] = LOCAL_mobility_solve(TD, SD, Lk, Bk.', [], F_c, parslv);
-    else % Else, there is no collision-related corrections that are needed.
+        [mu_c,rho_c] = LOCAL_mobility_solve(TD, SD, Lk, Bk.', [], F_c, ...
+            LOCAL_post_contact_solver_params(parslv, TD, size(Bk, 2), n3, ...
+                collist, closest_points_1, closest_points_2, distances, td_build_info) ...
+        );
+    else % Else, there are no collision-related corrections that are needed.
         mu_c = [];
         rho_c = [];
         F_c = [];
@@ -1118,14 +1129,7 @@ function [Ctp, Mtp, Xtp, normW, dt, colevent, collist, closest_points_1, closest
 end
     
 function [colevent,collist,mindst] = LOCAL_check_collision_sph(C,Fparams)
-    %{
-    Calculates distance between spheres using their centers and radius.
-
-    Inputs
-        -
-
-    Outputs
-    %}
+    % Calculates distance between spheres using their centers and radius.
     n3 = size(C,1); 
     
     max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
@@ -1196,6 +1200,600 @@ function [colevent, collist, mindst, distances, closest_points_1, closest_points
 end
 
 %% Utility functions
+function LOCAL_log_input_options(fname, Fparams, init)
+    function value_str = LOCAL_parse_string_param(value, empty_label)
+        if nargin < 2
+            empty_label = '<empty>';
+        end
+
+        if isempty(value)
+            value_str = empty_label;
+        else
+            value_str = strtrim(value);
+        end
+    end
+
+    fprintf('\n============================================================\n');
+    fprintf('spheroidal_mobility input options\n');
+    fprintf('fname: %s\n', LOCAL_parse_string_param(fname, '<empty>'));
+    fprintf('init: %s\n', LOCAL_parse_string_param(init, '<none>'));
+    fprintf('Fparams:\n');
+    if isempty(Fparams)
+        fprintf('  <empty>\n');
+    else
+        fprintf('%s', evalc('disp(Fparams)'));
+        if isfield(Fparams, 'parslv')
+            fprintf('Fparams.parslv:\n');
+            fprintf('%s', evalc('disp(Fparams.parslv)'));
+        end
+    end
+    fprintf('============================================================\n\n');
+end
+
+function correction_parslv = LOCAL_post_contact_solver_params(parslv, TD, problem_size, n3, contact_pairs, closest_points_1, closest_points_2, pair_distances, build_info)
+    correction_parslv = parslv;
+    correction_parslv.solver = 'gmres';
+    correction_parslv.deflate = false;
+    if isfield(correction_parslv, 'deflate_basis')
+        correction_parslv.deflate_basis = [];
+    end
+    correction_parslv = LOCAL_configure_td_contact_preconditioner(correction_parslv, TD, ...
+        problem_size, n3, contact_pairs, closest_points_1, closest_points_2, pair_distances, ...
+        'Post-contact TD', build_info);
+end
+
+function parslv_td = LOCAL_build_td_main_solver_params(Kernels, Nullsp, Fparams, Ct, Mt, col, collist, closest_points_1, closest_points_2, timestep_idx)
+    % Start from the supplied TD solver settings, then specialize them
+    % for the current contact or near-contact geometry.
+    parslv_td = Fparams.parslv;
+
+    % Identify the contact pairs. This can be the active collision set or
+    % a small near-contact probe set used to switch early.
+    [contact_pairs, contact_points_1, contact_points_2, contact_distances] = ...
+        LOCAL_select_td_main_contact_pairs(parslv_td, Ct, Mt, Fparams, col, collist, ...
+            closest_points_1, closest_points_2);
+
+    % Build and attach a coarse basis from the contact directions when deflation is enabled.
+    parslv_td = LOCAL_attach_contact_deflation(parslv_td, Nullsp.B, Ct, Mt, Fparams, ...
+        contact_pairs, contact_points_1, contact_points_2);
+
+    % Attach the TD preconditioner that for the active/near-contact pairs.
+    parslv_td = LOCAL_configure_td_contact_preconditioner(parslv_td, Kernels.TD, ...
+        size(Nullsp.B, 2), Fparams.parbd.n3, contact_pairs, contact_points_1, contact_points_2, contact_distances, 'TD_main', ...
+        LOCAL_make_td_build_info(Fparams, Nullsp, timestep_idx));
+end
+
+function build_info = LOCAL_make_td_build_info(Fparams, Nullsp, timestep_idx)
+    build_info = struct( ...
+        'parbd', Fparams.parbd, ...
+        'Lk', Nullsp.L, ...
+        'BkT', Nullsp.B.', ...
+        'typeMV', Fparams.typeMV, ...
+        'timestep_idx', timestep_idx ...
+    );
+end
+
+function parslv = LOCAL_attach_contact_deflation(parslv, Bk, Ct, Mt, Fparams, collist, closest_points_1, closest_points_2)
+    if ~LOCAL_get_solver_option(parslv, 'deflate', false) || isempty(collist)
+        parslv.deflate_basis = [];
+        return;
+    end
+
+    if isempty(closest_points_1) || isempty(closest_points_2)
+        [~, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(Ct, Mt, Fparams, collist);
+    end
+
+    max_dim = LOCAL_get_solver_option(parslv, 'deflate_max_dim', min(8, size(collist, 1)));
+    sval_tol = LOCAL_get_solver_option(parslv, 'deflate_sval_tol', 1e-2);
+    % Always build the contact basis one connected contact component at a
+    % time
+    basis = LOCAL_build_component_augmented_contact_basis(Bk.', Ct, Mt, Fparams.parbd, ...
+        collist, closest_points_1, closest_points_2, max_dim, sval_tol);
+    parslv.deflate_basis = basis;
+end
+
+function [contact_pairs, closest_points_1, closest_points_2, pair_distances] = ...
+        LOCAL_select_td_main_contact_pairs(parslv, Ct, Mt, Fparams, col, collist, input_points_1, input_points_2)
+    contact_pairs = [];
+    closest_points_1 = [];
+    closest_points_2 = [];
+    pair_distances = [];
+
+    % Only necessary if the sparse NN preconditioner or deflation is enabled
+    if ~(LOCAL_get_solver_option(parslv, 'deflate', false) || LOCAL_get_solver_option(parslv, 'td_sparse_nn', false))
+        return;
+    end
+
+    collision_eps = Fparams.parbd.collision_eps;
+    if col && ~isempty(collist)
+        contact_pairs = collist;
+        if isempty(input_points_1) || isempty(input_points_2)
+            [distances, closest_points_1, closest_points_2] = LOCAL_spheroidal_distances(Ct, Mt, Fparams, collist);
+        else
+            closest_points_1 = input_points_1;
+            closest_points_2 = input_points_2;
+            distances = LOCAL_spheroidal_distances(Ct, Mt, Fparams, collist);
+        end
+        pair_distances = distances(:);
+        return;
+    end
+
+    % If there is no active collision list yet, we treat a few very close pairs
+    % as "contact-like".
+    if ~LOCAL_get_solver_option(parslv, 'deflate_near_contact', true)
+        return;
+    end
+
+    % Probe only a small candidate set, then keep those whose true gap is
+    % within the threshold_ratio multiple of collision_eps.
+    threshold_ratio = LOCAL_get_solver_option(parslv, 'deflate_near_contact_factor', 1.5);
+    probe_pairs = LOCAL_select_probe_pairs(Ct, Fparams, ...
+        LOCAL_get_solver_option(parslv, 'deflate_probe_pairs', 3));
+    if isempty(probe_pairs)
+        return;
+    end
+
+    % Refine the probe set with the actual spheroidal distance calculations.
+    [probe_distances, probe_points_1, probe_points_2] = LOCAL_spheroidal_distances(Ct, Mt, Fparams, probe_pairs);
+    near_rows = probe_distances(:) < threshold_ratio * collision_eps;
+    if ~any(near_rows)
+        return;
+    end
+
+    % Return only the probe pairs that are genuinely close enough.
+    contact_pairs = probe_pairs(near_rows, :);
+    closest_points_1 = probe_points_1(:, near_rows);
+    closest_points_2 = probe_points_2(:, near_rows);
+    pair_distances = probe_distances(near_rows);
+end
+
+function probe_pairs = LOCAL_select_probe_pairs(Ct, Fparams, max_pairs)
+    % Choose a small set of body pairs worth checking with the full
+    % spheroidal distance routine used by the near-contact code.
+    probe_pairs = [];
+
+    n3 = size(Ct, 1);
+    if n3 < 2
+        return;
+    end
+
+    [~, candidate_pairs, ~] = LOCAL_check_collision_sph(Ct, Fparams);
+    if isempty(candidate_pairs)
+        % Fall back to the globally nearest body centers.
+        distC = get_distances_between_centers(Ct);
+        distC(1:n3+1:end) = Inf;
+        [ii, jj] = find(triu(true(n3), 1));
+        center_dists = distC(sub2ind([n3 n3], ii, jj));
+        [~, order] = sort(center_dists, 'ascend');
+        keep = order(1:min(max_pairs, numel(order)));
+        probe_pairs = [ii(keep) jj(keep)];
+        return;
+    end
+
+    body_1_idx = candidate_pairs(:, 1);
+    body_2_idx = candidate_pairs(:, 2);
+    max_radii = max(Fparams.parbd.equ_radii, Fparams.parbd.polar_radii);
+    distC = get_distances_between_centers(Ct);
+
+    % First, do a pass through the distances through spherical distances
+    diam = max_radii(body_1_idx) + max_radii(body_2_idx);
+    rel_gap = (distC(sub2ind(size(distC), body_1_idx, body_2_idx)) - diam) ./ ...
+        max(max_radii(body_1_idx), max_radii(body_2_idx));
+    [~, order] = sort(rel_gap, 'ascend');
+    keep = order(1:min(max_pairs, numel(order)));
+    probe_pairs = candidate_pairs(keep, :);
+end
+
+function parslv = LOCAL_configure_td_contact_preconditioner(parslv, TD, problem_size, n3, contact_pairs, closest_points_1, closest_points_2, pair_distances, label, build_info)
+    if nargin < 10
+        build_info = [];
+    end
+    if isempty(contact_pairs)
+        return;
+    end
+
+    if LOCAL_get_solver_option(parslv, 'td_sparse_nn', false)
+        parslv = LOCAL_configure_td_sparse_nn_preconditioner(parslv, TD, problem_size, n3, contact_pairs, closest_points_1, closest_points_2, pair_distances, label, build_info);
+        return;
+    end
+end
+
+function parslv = LOCAL_configure_td_sparse_nn_preconditioner(parslv, TD, problem_size, n3, contact_pairs, closest_points_1, closest_points_2, pair_distances, label, build_info)
+    % Decides which bodies belong in the sparse local block, asks the low-level
+    % builder for the LU factorizations, and then installs the resulting apply function
+    % into parslv.prec.
+    if nargin < 10
+        build_info = [];
+    end
+
+    sparse_inverse_method = LOCAL_get_solver_option(parslv, 'td_sparse_nn_inverse', 'ilu');
+    fprintf('\n %s sparse NN prec: building inverse=%s for %d active pairs \n', ...
+        label, sparse_inverse_method, size(contact_pairs, 1));
+
+    build_tic = tic;
+
+    % Converts contact pair list into a graph representation. Then,
+    % send the graph to the local sparse operator builder, which assembles,
+    % regularizes, and factors.
+    [active_bodies, adjacency, edge_count] = LOCAL_build_td_sparse_nn_graph(contact_pairs, n3);
+    [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, problem_size, n3, ...
+        active_bodies, adjacency, parslv, build_info);
+
+    % Build the final preconditioner state for LOCAL_apply_td_sparse_nn_preconditioner:
+    % keep the cached LU factorizations for the active bodies, but also retain the
+    % original block-diagonal preconditioner for every other body.
+    % See LOCAL_apply_td_sparse_nn_preconditioner for more details.
+    state = local_state;
+    state.num_dofs = problem_size;
+    state.base_prec = LOCAL_get_solver_option(parslv, 'prec', []);
+
+    degrees = full(sum(adjacency, 2) - 1);
+    stats = struct( ...
+        'ok', true, ...
+        'reason', '', ...
+        'cache_status', local_stats.cache_status, ...
+        'sparse_inverse_method', sparse_inverse_method, ...
+        'num_active_bodies', numel(active_bodies), ...
+        'num_edges', edge_count - numel(active_bodies), ...
+        'avg_degree', mean(max(degrees, 0)), ...
+        'num_block_entries', nnz(adjacency), ...
+        'factor_nnz', local_stats.factor_nnz, ...
+        'assembly_time', local_stats.assembly_time, ...
+        'condest_time', local_stats.condest_time, ...
+        'condest_A_local', local_stats.condest_A_local, ...
+        'factor_time', local_stats.factor_time, ...
+        'build_time', toc(build_tic) ...
+    );
+
+    % Hand off preconditioner to parslv and log all debug information about it.
+    parslv.prec = @(X) LOCAL_apply_td_sparse_nn_preconditioner(state, X);
+    fprintf(['\n %s sparse NN prec: inverse=%s cache=%s bodies=%d edges=%d ' ...
+        'avg_degree=%1.2f nnz_blocks=%d local_w=1 ' ...
+        'build_time=%e assembly_time=%e condest_time=%e condest=%e factor_time=%e factor_nnz=%d \n'], ...
+        label, stats.sparse_inverse_method, stats.cache_status, ...
+        stats.num_active_bodies, stats.num_edges, stats.avg_degree, stats.num_block_entries, stats.build_time, ...
+        stats.assembly_time, stats.condest_time, stats.condest_A_local, ...
+        stats.factor_time, stats.factor_nnz);
+end
+
+function [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, problem_size, n3, active_bodies, adjacency, parslv, build_info)
+    % Assemble the active-body local operator, regularize it, estimate its
+    % condition number, and does a LU factorization on it.
+    local_state = [];
+    sparse_inverse_method = LOCAL_get_solver_option(parslv, 'td_sparse_nn_inverse', 'ilu');
+    local_stats = struct( ...
+        'ok', false, ...
+        'reason', '', ...
+        'cache_status', 'new', ...
+        'factor_nnz', 0, ...
+        'assembly_time', 0, ...
+        'condest_time', 0, ...
+        'condest_A_local', NaN, ...
+        'factor_time', 0 ...
+    );
+
+    Nb = problem_size / n3;
+    active_dim = Nb * numel(active_bodies);
+    reg_scale = LOCAL_get_solver_option(parslv, 'td_sparse_nn_reg', 1e-10);
+    reuse_local_state = LOCAL_get_solver_option(parslv, 'td_sparse_nn_reuse_local_state', true);
+
+    cache_key = [];
+    if reuse_local_state
+        cache_key = build_info.timestep_idx;
+        cached_value = LOCAL_manage_td_sparse_nn_cache('get', cache_key, []);
+        if ~isempty(cached_value)
+            local_state = cached_value.local_state;
+            local_stats = cached_value.stats;
+            local_stats.cache_status = 'reused';
+            local_stats.assembly_time = 0;
+            local_stats.factor_time = 0;
+            return;
+        end
+    end
+
+    assembly_tic = tic;
+    A_local = LOCAL_build_td_sparse_nn_pair_block_operator(build_info, active_bodies, adjacency, Nb);
+    assembly_time = toc(assembly_tic);
+
+    diag_abs = abs(diag(A_local));
+    scale = max(1, full(max(diag_abs)));
+    
+    if issparse(A_local)
+        A_local = A_local + reg_scale * scale * speye(active_dim);
+    else
+        A_local = A_local + reg_scale * scale * eye(active_dim);
+    end
+
+    condest_tic = tic;
+    local_stats.condest_A_local = condest(sparse(A_local));
+    local_stats.condest_time = toc(condest_tic);
+
+    [inverse_state, inverse_stats] = LOCAL_build_td_sparse_nn_inverse(A_local, sparse_inverse_method, parslv);
+    if ~inverse_stats.ok
+        local_stats.reason = inverse_stats.reason;
+        return;
+    end
+
+    local_state = struct( ...
+        'active_dof_idx', LOCAL_get_body_idx(active_bodies, Nb), ...
+        'A_local', A_local, ...
+        'solver_type', inverse_state.solver_type, ...
+        'P', inverse_state.P, ...
+        'Q', inverse_state.Q, ...
+        'R', inverse_state.R, ...
+        'L', inverse_state.L, ...
+        'U', inverse_state.U ...
+    );
+    local_stats.ok = true;
+    local_stats.factor_nnz = inverse_stats.factor_nnz;
+    local_stats.assembly_time = assembly_time;
+    local_stats.factor_time = inverse_stats.factor_time;
+
+    if reuse_local_state
+        LOCAL_manage_td_sparse_nn_cache('set', cache_key, struct('local_state', local_state, 'stats', local_stats));
+    end
+end
+
+function [active_bodies, adjacency, edge_count] = LOCAL_build_td_sparse_nn_graph(contact_pairs, n3)
+    active_bodies = unique(contact_pairs(:));
+    m = numel(active_bodies);
+    adjacency = false(m, m);
+    edge_count = 0;
+    if m == 0
+        return;
+    end
+
+    local_body_idx = zeros(n3, 1);
+    local_body_idx(active_bodies) = 1:m;
+    adjacency(1:(m + 1):m^2) = true;
+
+    for pair_idx = 1:size(contact_pairs, 1)
+        i_local = local_body_idx(contact_pairs(pair_idx, 1));
+        j_local = local_body_idx(contact_pairs(pair_idx, 2));
+        if i_local == 0 || j_local == 0 || i_local == j_local
+            continue;
+        end
+        adjacency(i_local, j_local) = true;
+        adjacency(j_local, i_local) = true;
+    end
+
+    adjacency = adjacency | adjacency.';
+    edge_count = nnz(adjacency);
+end
+
+function A_local = LOCAL_build_td_sparse_nn_direct_operator(build_info, active_bodies, ~, ~)
+    local_parbd = LOCAL_build_td_sparse_nn_local_parbd(build_info.parbd, active_bodies);
+    local_dof_idx = LOCAL_get_body_idx(active_bodies, build_info.parbd.Nb);
+    L_local = build_info.Lk(local_dof_idx, local_dof_idx);
+    TD_local = SpheroidalMS_MatVec([], L_local, build_info.typeMV, local_parbd, ...
+        local_parbd.kerd, 0.5, 'TSL_Stk_3D');
+    A_local = real(TD_local);
+end
+
+function local_parbd = LOCAL_build_td_sparse_nn_local_parbd(parbd, active_bodies)
+    % Only consider the active body geometry
+    local_parbd = SpheroidalMS_set_params( ...
+        equ_radii = parbd.equ_radii(active_bodies), ...
+        polar_radii = parbd.polar_radii(active_bodies), ...
+        p = parbd.p, ...
+        C = parbd.C(active_bodies, :), ...
+        collision_eps = parbd.collision_eps, ...
+        mdist = parbd.mdist, ...
+        doAna = parbd.doAna, ...
+        flag_pot = "TSL_Stk_3D", ...
+        kerd = parbd.kerd, ...
+        dense = true, ...
+        bodydist = parbd.bodydist, ...
+        MRot = {parbd.MRot{active_bodies}}, ...
+        tsl_dealiasing = parbd.tsl_dealiasing, ...
+        tsl_dealiasing_pad = parbd.tsl_dealiasing_pad ...
+    );
+end
+
+function A_local = LOCAL_build_td_sparse_nn_pair_block_operator(build_info, active_bodies, adjacency, Nb)
+    % Actually construct the preconditioner
+    m = numel(active_bodies);
+    active_dim = Nb * m;
+    A_local = spalloc(active_dim, active_dim, max(1, nnz(adjacency)) * Nb * Nb);
+
+    % Build diagonal self blocks through the dense self-eval path.
+    for body_local = 1:m
+        local_idx = (1:Nb) + Nb * (body_local - 1);
+        A_self = LOCAL_build_td_self_block_prec(build_info.parbd, build_info.Lk, Nb, active_bodies(body_local));
+        A_local(local_idx, local_idx) = sparse(real(A_self));
+    end
+
+    % Build each undirected off-diagonal body pair, then place them in the matrix.
+    for src_local = 1:m
+        src_idx = (1:Nb) + Nb * (src_local - 1);
+        for dst_local = (src_local + 1):m
+            if ~adjacency(dst_local, src_local)
+                continue;
+            end
+
+            pair_dense = LOCAL_build_td_sparse_nn_direct_operator( ...
+                build_info, [active_bodies(dst_local); active_bodies(src_local)], [], []);
+            dst_idx = (1:Nb) + Nb * (dst_local - 1);
+
+            A_local(dst_idx, src_idx) = sparse(real(pair_dense(1:Nb, (Nb + 1):(2 * Nb))));
+            A_local(src_idx, dst_idx) = sparse(real(pair_dense((Nb + 1):(2 * Nb), 1:Nb)));
+        end
+    end
+end
+
+function [inverse_state, inverse_stats] = LOCAL_build_td_sparse_nn_inverse(A_local, sparse_inverse_method, parslv)
+    inverse_state = struct('solver_type', '', 'P', [], 'Q', [], 'R', [], 'L', [], 'U', []);
+    inverse_stats = struct( ...
+        'ok', false, ...
+        'reason', '', ...
+        'factor_time', 0, ...
+        'factor_nnz', 0 ...
+    );
+
+    factor_tic = tic;
+    if strcmp(sparse_inverse_method, 'lu')
+        [L, U, P, Q, R] = lu(sparse(A_local));
+        inverse_state.solver_type = 'sparse-lu';
+        inverse_state.P = P;
+        inverse_state.Q = Q;
+        inverse_state.R = R;
+    else % ILU
+        ilu_setup = struct( ...
+            'type', 'crout', ...
+            'droptol', LOCAL_get_solver_option(parslv, 'td_sparse_nn_droptol', 1e-3), ...
+            'udiag', 1 ...
+        );
+        [L, U] = ilu(sparse(A_local), ilu_setup);
+        inverse_state.solver_type = 'ilu';
+    end
+    inverse_state.L = L;
+    inverse_state.U = U;
+    inverse_stats.ok = true;
+    inverse_stats.factor_time = toc(factor_tic);
+    inverse_stats.factor_nnz = nnz(L) + nnz(U);
+end
+
+function Y = LOCAL_apply_td_sparse_nn_preconditioner(state, X)
+    Y = LOCAL_apply_preconditioner(state.base_prec, X); % Apply block-diagonal preconditioner first
+    if isempty(state.active_dof_idx) % No active bodies
+        return;
+    end
+
+    % Only apply sparse NN preconditioner on active bodies (this also includes the block-diagonal)
+    rhs = X(state.active_dof_idx, :);
+    local_action = LOCAL_solve_td_sparse_nn_local_system(state, rhs);
+    Y(state.active_dof_idx, :) = local_action;
+end
+
+function local_correction = LOCAL_solve_td_sparse_nn_local_system(state, local_residual)
+    % Solve the active-body block using the cached LU factorization.
+    % This replaces the base preconditioner action on the active DoFs with a
+    % more accurate preconditioner for A_local * x = local_residual.
+    switch state.solver_type
+        case 'dense-lu'
+            % Dense LU path: state.P is the row-pivot vector, so first
+            % permute the residual into pivoted row order, then apply L/U (or U^{-1}L^{-1}).
+            local_correction = state.U \ (state.L \ local_residual(state.P, :));
+        case 'sparse-lu'
+            % MATLAB sparse LU returns factors satisfying
+            % P * (R \ A_local) * Q = L * U. Undo that ordering to recover the
+            % solution of A_local * x = local_residual on this local block.
+            local_correction = state.Q * (state.U \ (state.L \ (state.P * (state.R \ local_residual))));
+        otherwise
+            % ILU stores only the incomplete triangular factors, so this acts
+            % as an approximate local inverse via forward/back substitution.
+            local_correction = state.U \ (state.L \ local_residual);
+    end
+end
+
+function dof_idx = LOCAL_get_body_idx(body_ids, Nb)
+    % If each body owns Nb consecutive rows, then body k contributes
+    % rows ((k-1)*Nb + 1) : (k*Nb).
+    body_ids = body_ids(:);
+    dof_idx = zeros(Nb * numel(body_ids), 1);
+    block_start_idx = 1;
+    for body_idx = 1:numel(body_ids)
+        % Global row block for this body in the full TD system.
+        rows = (1:Nb) + Nb*(body_ids(body_idx) - 1);
+        % Store those rows contiguously so callers can index all active-body
+        % DoFs with one vector, preserving the body order in body_ids.
+        dof_idx(block_start_idx:(block_start_idx + Nb - 1)) = rows(:);
+        block_start_idx = block_start_idx + Nb;
+    end
+end
+
+function basis = LOCAL_build_augmented_contact_basis(BkT, F, max_dim, sval_tol)
+    % Build a coarse basis from the dominant singular directions of the
+    % contact-force map F, then convert those directions into the solver's
+    % unknown space through BkT.
+    basis = [];
+    if isempty(F) || max_dim <= 0
+        return;
+    end
+
+    % The left singular vectors identify the main force directions induced
+    % by this contact block.
+    [Ub, S, ~] = svd(F, 'econ');
+    sing = diag(S);
+    if isempty(sing) || sing(1) <= 0
+        return;
+    end
+
+    % Keep only the dominant singular directions, then orthonormalize after
+    % mapping them into the density space (i.e. after left-applying B^T).
+    eligible_count = find(sing >= sval_tol * sing(1), 1, 'last');
+    if isempty(eligible_count)
+        eligible_count = 1;
+    end
+    keep = 1:min(max_dim, eligible_count);
+    basis = orth(real(BkT * Ub(:, keep)));
+end
+
+function basis = LOCAL_build_component_augmented_contact_basis(BkT, Ct, Mt, parbd, collist, closest_points_1, closest_points_2, max_dim, sval_tol)
+    % Build the deflation basis one connected contact component at a time,
+    % then merge those component-local bases into one global coarse space.
+    basis = [];
+    if isempty(collist) || max_dim <= 0
+        return;
+    end
+
+    components = LOCAL_contact_components(parbd.n3, collist);
+    component_basis = zeros(size(BkT, 1), 0);
+    for comp_idx = 1:numel(components)
+        rows = components{comp_idx};
+        % Build the contact-force map for just this connected component.
+        F_comp = LOCAL_build_contact_force_matrix(collist(rows, :), closest_points_1(:, rows), ...
+            closest_points_2(:, rows), Ct, Mt, parbd);
+        % Allow the component to contribute as many independent modes as its
+        % local force map supports; the final global cap is enforced below.
+        basis_comp = LOCAL_build_augmented_contact_basis(BkT, F_comp, size(F_comp, 2), sval_tol);
+        component_basis = [component_basis, basis_comp];
+    end
+
+    % Re-orthonormalize after concatenation, then truncate to the requested
+    % global dimension cap.
+    basis = orth(real(component_basis));
+    if size(basis, 2) > max_dim
+        basis = basis(:, 1:max_dim);
+    end
+end
+
+function components = LOCAL_contact_components(n3, collist)
+    % Partition the contact-pair list into connected components. Two rows
+    % belong to the same component if they are linked through shared bodies.
+    components = {};
+    if isempty(collist)
+        return;
+    end
+
+    unassigned = true(size(collist, 1), 1);
+    while any(unassigned)
+        % Start from one unassigned contact row and grow the component until
+        % no new rows touch any currently active body. Note that this is the
+        % flood-fill algorithm.
+        seed = find(unassigned, 1);
+        active_rows = false(size(unassigned));
+        active_bodies = false(n3, 1);
+        active_bodies(collist(seed, :)) = true;
+
+        changed = true;
+        while changed
+            % Pull in every remaining row that touches the current body set.
+            hits = unassigned & (active_bodies(collist(:, 1)) | active_bodies(collist(:, 2)));
+            changed = any(hits);
+            if ~changed
+                break;
+            end
+            active_rows = active_rows | hits;
+            unassigned(hits) = false;
+            bodies = unique(collist(active_rows, :));
+            active_bodies(bodies) = true;
+        end
+
+        components{end+1} = find(active_rows);
+    end
+end
+
 function [Mf,rho_c] = LOCAL_mobility_solve(TD, SD, Lk, BMR, VNS, f, parslv)
     % The VNS parameter remains baffling to me, so we shall keep it for now...
     % Apply contact-force map and recover correction densities.
@@ -1213,38 +1811,212 @@ end
 function y = Lapp(A,x)
     % Left-apply the matrix A to the vector x.
     if isnumeric(A)
-        y=A*x;  
+        y=A*x;
     else
-        y=real(A(x)); 
+        y=real(A(x));
     end
 end
-    
+
 function x = Lslv(A,b,parslv)
-    %{
-    Linear solve for Ax = b, with parameters given in parslv.
-    %}
-    prec = parslv.prec; 
-    
-    if nargin<6
-        if ~isempty(prec) 
-            pr=prec;  
+    % Linear solve for Ax = b, with parameters given in parslv.
+    prec = LOCAL_get_solver_option(parslv, 'prec', []);
+    silent = logical(LOCAL_get_solver_option(parslv, 'silent', false));
+
+    if isempty(prec)
+        pr = [];
+    else
+        pr = prec;
+    end
+
+    % Dense/direct path
+    if isnumeric(A)
+        x = A\b;
+        return;
+    end
+
+    A_op = LOCAL_get_matvec_func(A);
+    x = zeros(size(b));
+    use_deflation = isfield(parslv, 'deflate_basis') && ~isempty(parslv.deflate_basis);
+    for i=1:size(b,2)
+        if use_deflation
+            [x(:,i),flag,rs,total_iters,it,deflation_info] = ...
+                LOCAL_run_augmented_solver(A,b(:,i),pr,parslv);
+            if ~silent
+                fprintf('\n gmres %d flag=%d outer=%d inner=%d total=%d basis=%d coarse=%1.4g relres=%1.4g \n', ...
+                    i, flag, it(1), it(2), total_iters, deflation_info.basis_dim, ...
+                    deflation_info.coarse_relres, rs);
+            end
         else
-            pr=[]; 
+            restart = parslv.rst;
+            tol = parslv.tol;
+            maxit = parslv.maxit;
+            [x(:,i),flag,rs,it] = gmres(A_op,b(:,i),restart,tol,maxit,pr);
+            total_iters = LOCAL_total_gmres_iters(it, restart);
+            if ~silent
+                fprintf('\n gmres %d flag=%d outer=%d inner=%d total=%d relres=%1.4g \n', ...
+                    i, flag, it(1), it(2), total_iters, rs);
+            end
         end
     end
-    
-    if isnumeric(A)
-        x=A\b;
-    else
-        x = zeros(size(b)); 
-        for i=1:size(b,2)
-            if nargin==2
-                [x(:,i),~,rs,it]=gmres(A,b(:,i),1,1e-6,200,pr);
-            else
-                [x(:,i),~,rs,it]=gmres(A,b(:,i),parslv.rst,parslv.tol,parslv.maxit,pr);
-            end
-            fprintf('\n gmres %d iters=%d, res=%1.4g \n',i,prod(it),rs); 
+end
+
+function value = LOCAL_get_solver_option(parslv, field_names, default_value)
+    if ischar(field_names) || (isstring(field_names) && isscalar(field_names))
+        field_names = {char(field_names)};
+    end
+
+    for j = 1:numel(field_names)
+        field_name = field_names{j};
+        if isfield(parslv, field_name) && ~isempty(parslv.(field_name))
+            value = parslv.(field_name);
+            return;
         end
+    end
+
+    value = default_value;
+end
+
+function [x, flag, relres, total_iters, iter, info] = LOCAL_run_augmented_solver(A, b, prec, parslv)
+    A_op = LOCAL_get_matvec_func(A);
+
+    solve_opts = struct( ...
+        'rst', parslv.rst, ...
+        'tol', parslv.tol, ...
+        'maxit', parslv.maxit, ...
+        'prec', prec, ...
+        'deflate_basis', parslv.deflate_basis, ...
+        'krylov_solver', 'gmres' ...
+    );
+
+    [x, flag, relres, iter, info] = SpheroidalMS_augmented_GMRES(A_op, b, solve_opts);
+    total_iters = LOCAL_total_gmres_iters(iter, parslv.rst);
+end
+
+function value = LOCAL_manage_td_sparse_nn_cache(action, key, value_in)
+    persistent keys values
+
+    if isempty(keys)
+        keys = [];
+        values = {};
+    end
+
+    if nargin < 3
+        value_in = [];
+    end
+
+    switch action
+        case 'reset'
+            keys = [];
+            values = {};
+            value = [];
+        case 'get'
+            idx = find(keys == key, 1);
+            if isempty(idx)
+                value = [];
+            else
+                value = values{idx};
+            end
+        case 'set'
+            idx = find(keys == key, 1);
+            if isempty(idx)
+                keys(end+1) = key;
+                values{end+1} = value_in;
+            else
+                values{idx} = value_in;
+            end
+            value = [];
+        case 'remove'
+            idx = find(keys == key, 1);
+            if ~isempty(idx)
+                keys(idx) = [];
+                values(idx) = [];
+            end
+            value = [];
+        otherwise
+            error('Invalid sparse-NN cache action "%s".', action);
+    end
+end
+
+function A_op = LOCAL_get_matvec_func(A)
+    if isnumeric(A)
+        A_op = @(x) A*x;
+    else
+        A_op = @(x) real(A(x));
+    end
+end
+
+function F = LOCAL_build_contact_force_matrix(collist, closest_points_1, closest_points_2, Ct, Mt, parbd)
+    n3 = parbd.n3;
+    num_contact_pairs = size(collist, 1);
+    F = zeros(6 * n3, num_contact_pairs);
+    if num_contact_pairs == 0 || isempty(closest_points_1) || isempty(closest_points_2)
+        return;
+    end
+
+    quadratic_forms = zeros(3, 3, n3);
+    for body_idx = 1:n3
+        spheroid_params = LOCAL_get_spheroid_params(body_idx, Ct, Mt, parbd);
+        D = diag([spheroid_params.a spheroid_params.b spheroid_params.c].^-2);
+        quadratic_forms(:, :, body_idx) = spheroid_params.R * D * (spheroid_params.R.');
+    end
+
+    body_1_idx = collist(:, 1);
+    body_2_idx = collist(:, 2);
+    for pair_idx = 1:num_contact_pairs
+        translational_indi = (1:3) + 6 * (body_1_idx(pair_idx) - 1);
+        translational_indj = (1:3) + 6 * (body_2_idx(pair_idx) - 1);
+        rotational_indi = (4:6) + 6 * (body_1_idx(pair_idx) - 1);
+        rotational_indj = (4:6) + 6 * (body_2_idx(pair_idx) - 1);
+
+        cp_i = closest_points_1(:, pair_idx);
+        cp_j = closest_points_2(:, pair_idx);
+
+        body_j = body_2_idx(pair_idx);
+        grad_j = quadratic_forms(:, :, body_j) * (cp_j - Ct(body_j, :).');
+        nvec = grad_j / norm(grad_j);
+
+        r_i = cp_i - Ct(body_1_idx(pair_idx), :).';
+        r_j = cp_j - Ct(body_2_idx(pair_idx), :).';
+
+        F(translational_indi, pair_idx) = nvec;
+        F(translational_indj, pair_idx) = -nvec;
+        F(rotational_indi, pair_idx) = cross(r_i, nvec);
+        F(rotational_indj, pair_idx) = -cross(r_j, nvec);
+    end
+end
+
+function ITSSDd = LOCAL_build_td_inverse_blocks_prec(parbd, Lk, Nb, n3)
+    Iblock = eye(Nb);
+    ITSSDd = cell(n3,1);
+
+    for k = 1:n3
+        Akk = LOCAL_build_td_self_block_prec(parbd, Lk, Nb, k);
+        ITSSDd{k} = Akk \ Iblock;
+    end
+end
+
+function Akk = LOCAL_build_td_self_block_prec(parbd, Lk, ~, body_idx)
+    Akk = SpheroidalMS_BuildTDSelfBlock(parbd, Lk, body_idx);
+end
+
+function Y = LOCAL_apply_preconditioner(prec, X)
+    if isempty(prec)
+        Y = X;
+        return;
+    end
+
+    if isnumeric(prec)
+        Y = prec\X;
+    else
+        Y = prec(X);
+    end
+end
+
+function total_iters = LOCAL_total_gmres_iters(it, restart)
+    if it(1) <= 0
+        total_iters = it(2);
+    else
+        total_iters = (it(1)-1)*restart + it(2);
     end
 end
 
@@ -1321,68 +2093,4 @@ function M = RotationMat(wh,t)
         wh(1)*wh(2)*(1-cos(t))+wh(3)*sin(t),1-(wh(1)^2+wh(3)^2)*(1-cos(t)),wh(2)*wh(3)*(1-cos(t))-wh(1)*sin(t);...
         wh(1)*wh(3)*(1-cos(t))-wh(2)*sin(t),wh(2)*wh(3)*(1-cos(t))+wh(1)*sin(t),1-(wh(2)^2+wh(1)^2)*(1-cos(t))
     ];
-end
-
-function q = rotation2quaternion(R)
-    % Convert rotation matrix to unit quaternion
-    % Given by Gemini, I need to verify this
-
-    % numerical stability purposes
-    
-    v_w = 1 + trace(R);
-    v_x = 1 + R(1,1) - R(2,2) - R(3,3);
-    v_y = 1 - R(1,1) + R(2,2) - R(3,3);
-    v_z = 1 - R(1,1) - R(2,2) + R(3,3);
-
-    [~, max_index] = max([v_w, v_x, v_y, v_z]);
-    switch max_index
-        case 1
-            qw = 0.5 * sqrt(v_w);
-            qx = (R(3,2) - R(2,3)) / (4 * qw);
-            qy = (R(1,3) - R(3,1)) / (4 * qw);
-            qz = (R(2,1) - R(1,2)) / (4 * qw);
-        case 2
-            qx = 0.5 * sqrt(v_x);
-            qw = (R(3,2) - R(2,3)) / (4 * qx);
-            qy = (R(1,2) + R(2,1)) / (4 * qx);
-            qz = (R(1,3) + R(3,1)) / (4 * qx);
-        case 3
-            qy = 0.5 * sqrt(v_y);
-            qw = (R(1,3) - R(3,1)) / (4 * qy);
-            qx = (R(1,2) + R(2,1)) / (4 * qy);
-            qz = (R(2,3) + R(3,2)) / (4 * qy);
-        case 4
-            qz = 0.5 * sqrt(v_z);  
-            qw = (R(2,1) - R(1,2)) / (4 * qz);
-            qx = (R(1,3) + R(3,1)) / (4 * qz);
-            qy = (R(2,3) + R(3,2)) / (4 * qz);
-    end
-    q = [qw; qx; qy; qz];
-end
-
-function R = quaternion2rotation(q)
-    % Convert unit quaternion to rotation matrix
-    % Given by Gemini, I need to verify this
-
-    qw = q(1);
-    qx = q(2);
-    qy = q(3);
-    qz = q(4);
-
-    R = [
-        1 - 2*(qy^2 + qz^2), 2*(qx*qy - qw*qz), 2*(qx*qz + qw*qy);
-        2*(qx*qy + qw*qz), 1 - 2*(qx^2 + qz^2), 2*(qy*qz - qw*qx);
-        2*(qx*qz - qw*qy), 2*(qy*qz + qw*qx), 1 - 2*(qx^2 + qy^2)
-    ];
-end
-
-function psi = construct_global_psi(q)
-    % This constructs the psi matrix that interfaces between angular velocity and derivative of the rotational configuration in quaternion form
-    % This assumes angular velocity is given in global frame.
-    P = [0 -q(4) q(3);
-         q(4) 0 -q(2);
-         -q(3) q(2) 0];
-
-    psi = (1/2).*[-q(2:4).' ; 
-                  q(1).*eye(3) - P];
 end

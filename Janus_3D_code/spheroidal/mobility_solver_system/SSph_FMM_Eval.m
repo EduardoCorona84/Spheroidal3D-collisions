@@ -1,8 +1,6 @@
 function Y = SSph_FMM_Eval(Q, W, kerd, pot, Xtrg, Xsrc, Nr)
 %{
-Wrapper function to call the external FMM library. Note that FMM evaluates the operator
-with the jump relation instead of just the principal-valued component. Thus, we automatically negate
-the effect of the jump in this function.
+Wrapper function to call the external FMM library.
 Inputs
 Q - (double) kerd*N_src × 1 column vector 
     source densities per DOF, ordered as follows:
