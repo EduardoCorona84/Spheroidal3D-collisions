@@ -16,6 +16,7 @@ Inputs
     flag_pot    - (string) type of Stokes potential to be used for problem in mobility oslver
     kerd        - (int) dimension of kernel (should be 1 for Laplace potentials, 3 for Stokes potentials)
     dense       - (bool) whether to use FMM or not
+    tsl_backend - (string, optional) 'spheroidal' (default) or 'cartesian'
     tsl_dealiasing - (bool, optional) enable dealiasing in TSL near-evaluation (default true)
     tsl_dealiasing_pad - (int, optional) padding for dealiasing
 
@@ -35,6 +36,7 @@ arguments
     opts.kerd (1,1) double
     opts.dense (1,1) logical
     opts.bodydist (1,1) struct
+    opts.tsl_backend (1,1) string = "spheroidal"
     opts.tsl_dealiasing (1,1) logical = true
     opts.tsl_dealiasing_pad (1,1) double = 4
     opts.MRot = []
@@ -52,6 +54,7 @@ flag_pot = opts.flag_pot;
 kerd = opts.kerd;
 dense = opts.dense;
 bodydist = opts.bodydist;
+tsl_backend = opts.tsl_backend;
 tsl_dealiasing = opts.tsl_dealiasing;
 tsl_dealiasing_pad = opts.tsl_dealiasing_pad;
 MRot = LOCAL_normalize_rotations(opts.MRot, size(C,1));
@@ -153,6 +156,7 @@ parbd = struct(...
     'shape_type',body_shape_types, ...
     'bodydist', bodydist, ...
     'MRot', {MRot}, ...
+    'tsl_backend', tsl_backend, ...
     'tsl_dealiasing', tsl_dealiasing, ...
     'tsl_dealiasing_pad', tsl_dealiasing_pad ...
 ); 

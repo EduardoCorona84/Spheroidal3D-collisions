@@ -22,11 +22,18 @@ if nargin < 2 || isempty(background_flow) || ~background_flow.enabled
     return;
 end
 
+if isfield(parbd, 'mu')
+    fluid_mu = parbd.mu;
+else
+    fluid_mu = 1;
+end
+
 U0 = reshape(background_flow.U0, 1, 3);
 A = background_flow.A;
+stress = fluid_mu * (A + A.');
 
 flow_struct.enabled = true;
 flow_struct.velocity = reshape((parbd.Xp * A.' + U0).', [], 1);
-flow_struct.traction = reshape((parbd.Nrp * (A + A.').').', [], 1);
+flow_struct.traction = reshape((parbd.Nrp * stress.').', [], 1);
 flow_struct.stress = stress;
 end

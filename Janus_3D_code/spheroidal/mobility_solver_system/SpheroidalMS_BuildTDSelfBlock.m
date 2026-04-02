@@ -43,6 +43,11 @@ function Tself = LOCAL_build_td_local_tself(parbd, body_idx)
     else
         tsl_dealiasing_pad = 4;
     end
+    if isfield(parbd, 'tsl_backend') && ~isempty(parbd.tsl_backend)
+        tsl_backend = parbd.tsl_backend;
+    else
+        tsl_backend = 'spheroidal';
+    end
 
     prm = zeros(1, Nb);
     prm(1:np) = 1:3:Nb;
@@ -73,17 +78,25 @@ function Tself = LOCAL_build_td_local_tself(parbd, body_idx)
     Z = zeros(np);
     source_Gmatrix = sparse(Gmatrix(params_i.p, u0, 0, oblate));
 
-    Yx = LOCAL_eval_l2stk_dense_self(params_i, I, Z, Z, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad);
-    Yy = LOCAL_eval_l2stk_dense_self(params_i, Z, I, Z, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad);
-    Yz = LOCAL_eval_l2stk_dense_self(params_i, Z, Z, I, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad);
+    Yx = LOCAL_eval_l2stk_dense_self(params_i, I, Z, Z, source_Gmatrix, np, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
+    Yy = LOCAL_eval_l2stk_dense_self(params_i, Z, I, Z, source_Gmatrix, np, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
+    Yz = LOCAL_eval_l2stk_dense_self(params_i, Z, Z, I, source_Gmatrix, np, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
 
     Tself = [Yx, Yy, Yz];
     Tself = Tself(:, iprm);
 end
 
-function Yblk = LOCAL_eval_l2stk_dense_self(params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, np, tsl_dealiasing_flag, tsl_dealiasing_pad)
-    [vx, vy, vz] = ...
-        L2StkTLPOptimized([], [], params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false, tsl_dealiasing_flag, tsl_dealiasing_pad);
+function Yblk = LOCAL_eval_l2stk_dense_self(params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, np, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad)
+    switch tsl_backend
+        case 'spheroidal'
+            [vx, vy, vz] = ...
+                L2StkTLPOptimized([], [], params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false, tsl_dealiasing_flag, tsl_dealiasing_pad);
+        case 'cartesian'
+            [vx, vy, vz] = ...
+                L2StkTLPCartesianOptimized([], [], params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, tsl_dealiasing_flag, tsl_dealiasing_pad);
+        otherwise
+            error('Unknown TSL backend "%s".', tsl_backend);
+    end
     y = reshape([vx(:), vy(:), vz(:)].', [], 1);
     Yblk = reshape(y, 3*np, np);
 end

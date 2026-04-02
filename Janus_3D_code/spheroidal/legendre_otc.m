@@ -208,7 +208,7 @@ end
 
 % Compute first derivatives
 %---------------------------------------------------------------------%
-if dPoption | dQoption
+if dPoption || dQoption
     if dPoption
         dP=zeros((p+1)^2,length(u));
     end
@@ -355,7 +355,6 @@ end
 function bj=b(n,j,m,x)
     %b_j(n,m,x) coefficient in recursion relation
     % bj= (2*(n+j-1)+1).*x ./(n+j-1+m);
-
     bj=-(2*(n+j-1)+1).*x ./(n+j-m);
 end
 
@@ -366,7 +365,6 @@ function aj=a(n,j,m)
     % else
     %     aj=-(n+j-1-m)./(n+j-2+m);
     % end
-
     aj=-(n+j-1+m)./(n+j-m);
 end
 
