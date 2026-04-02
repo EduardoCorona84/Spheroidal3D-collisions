@@ -38,6 +38,10 @@ function spheroidal_mobility(fname,Fparams,init)
          solver   - 'gmres' (default)
          tol (tolerance), maxit (maximum restart cycles), rst (restart size), etc.
          Contact-LCP options:
+            col_dense_max_pairs - when the number of frictionless contact
+                        pairs is at most this value, explicitly build the
+                        small projected contact matrix A = F^T M F rather
+                        than using a matrix-free LCP operator.
             td_sparse_nn - when true, build a sparse contact-pair body-
                         block preconditioner for TD solves near or at
                         contact.
@@ -554,19 +558,19 @@ function [Xtp,Mtp,Ctp,U,FT,sigma,mu,VW,Kernels,Nullsp,Fparams,colevent,collist,c
     
     MRot = @(wh,t) RotationMat(wh,t);
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Get incoming force distribution.
-    tic; 
-    [FT,sigma,VW,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt); 
+    tic;
+    [FT,sigma,VW,Energy] = LOCAL_get_incoming_Fc(Fparams,t,dt,Kernels,Nullsp,Xt);
     fprintf('\n Time to compute incoming force: %e ',toc)
-    timings.incoming(it) = timings.incoming(it) + toc; 
+    timings.incoming(it) = timings.incoming(it) + toc;
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     fprintf('\n Fluid Solve at time %.2f ',t)
-    tic; 
-    [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,Fparams,colevent,collist,it,dt, Mt, closest_points_1, closest_points_2); 
+    tic;
+    [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,Fparams,colevent,collist,it,dt, Mt, closest_points_1, closest_points_2);
     timings.velocities.total(it) = timings.velocities.total(it) + timings.velocities.solve(it) + timings.velocities.apply(it) ...
-        + timings.velocities.vw(it) + timings.velocities.col(it); 
-    fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(it)); 
+        + timings.velocities.vw(it) + timings.velocities.col(it);
+    fprintf('\n Time to compute velocities / fluid solve: %e',timings.velocities.total(it));
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Advance center Ct
     tic; 
@@ -759,7 +763,6 @@ function [sigma,mu,U,VW] = LOCAL_compute_velocities(sigma,VW,Ct,Kernels,Nullsp,F
     vind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((1:3),1,num_body);
     wind = reshape(repmat(6*(0:num_body-1),3,1),1,[])+repmat((4:6),1,num_body);
     ambient = SpheroidalMS_EvalBackgroundFlow(Fparams.parbd, Fparams.background_flow);
-
     parslv_td = LOCAL_build_td_main_solver_params(Kernels, Nullsp, Fparams, Ct, Mt, col, collist, ...
         closest_points_1, closest_points_2, i);
 
@@ -887,7 +890,7 @@ function [Mtp,Xtp,normW] = LOCAL_advance_rotation(MRot, VW, Mt, Xt, X0, dt, np, 
 end
 
 %% Collision resolution
-function [F_c,mu_c,rho_c] = ...
+function [F_c,mu_c,rho_c,lcp_info] = ...
     LOCAL_Compute_Contact_LCP(collist,Kernels,Nullsp,Fparams,Ct,VW,dt,Mt,closest_points_1,closest_points_2,timestep_idx)
     %{
     Calculates the force and the resulting densities due to the collision.
@@ -938,6 +941,7 @@ function [F_c,mu_c,rho_c] = ...
         mu_c = [];
         rho_c = [];
         F_c = [];
+        lcp_info = struct('err', 0, 'iter', 0, 'flag', 0, 'msg', 'no-contact');
         return;
     end
 
@@ -955,7 +959,8 @@ function [F_c,mu_c,rho_c] = ...
     %%%%%%%%%%%%%%%%%%%%%%%%%
     % Build A = F^T * M * F %
     %%%%%%%%%%%%%%%%%%%%%%%%%
-    matfree = ~Fparams.denseMV || num_contact_pairs > 1;
+    dense_contact_max_pairs = max(0, round(LOCAL_get_solver_option(parslv, 'col_dense_max_pairs', 4)));
+    matfree = num_contact_pairs > dense_contact_max_pairs;
 
     % Separate outer solves from contact-LCP inner solves
     td_build_info = LOCAL_make_td_build_info(Fparams, Nullsp, timestep_idx);
@@ -969,16 +974,9 @@ function [F_c,mu_c,rho_c] = ...
         size(Bk, 2), n3, collist, closest_points_1, closest_points_2, distances, 'Contact TD', ...
         td_build_info);
     if ~matfree
-        rho_c = (Bk.')*F; % This is rho_c -- the incident field.
-        BIE_RHS = -Lapp(TD,rho_c)+Lk*rho_c; % (-0.5I-T)*rho_c
-        mu_c = Lslv(TD,BIE_RHS,contact_parslv); % \mu_c = (0.5I + T + L)^{-1}(-0.5I - T)*rho_c
-
-        % Setup LCP: x \perp A*x + b (dense build of Amat = F^T M F)
-        % Lapp(SD, MuNS+Bf) represents the mobility solve, and conversion of density to velocity.
-        % Ak*Lapp(SD,MuNS+Bf)) extracts the rigid body motion from the velocity (i.e. the mobility matrix).
-        % So, Amat = F^T (A S (0.5I + T + L)^{-1}(-0.5 - T)B^T) F, where whatever is in the paranthesis is
-        %   the mobility matrix \mathcal{M} in the equation \mathcal{U} = \mathcal{M}F.
-        Amat = real(F.'*(Ak*Lapp(SD,mu_c+rho_c)));
+        fprintf('\n Contact LCP projected A: dense build for %d pairs ', num_contact_pairs);
+        contact_parslv.tol = parslv.coltol;
+        Amat = LOCAL_build_projected_contact_matrix(TD, SD, Lk, Bk.', Ak, F, contact_parslv);
     else
         contact_parslv.tol = parslv.coltol;
         rho_c = @(x) (Bk.')*(F*x);
@@ -1007,16 +1005,18 @@ function [F_c,mu_c,rho_c] = ...
     profile=1;
     lam0 = zeros(size(bvec));
 
+    lcp_flag = NaN;
+    lcp_msg = '';
     if matfree
         switch parslv.colsolver
             case 'Newton'
-                [lam, err, iter, ~, ~, ~] = ...
+                [lam, err, iter, lcp_flag, ~, lcp_msg] = ...
                     minmap_newton_matfree(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'APGD'
-                [lam, err, iter, ~, ~, ~] = ...
+                [lam, err, iter, lcp_flag, ~, lcp_msg] = ...
                     APGD_matfree(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'BBPGD'
-                [lam, err, iter, ~, ~, ~] = ...
+                [lam, err, iter, lcp_flag, ~, lcp_msg] = ...
                     BBPGD_matfree(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             otherwise
                 error('Invalid LCP solver in params.');
@@ -1024,20 +1024,22 @@ function [F_c,mu_c,rho_c] = ...
     else
         switch parslv.colsolver
             case 'Newton'
-                [lam, err, iter, ~, ~, ~] = ...
+                [lam, err, iter, lcp_flag, ~, lcp_msg] = ...
                     minmap_newton(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'APGD'
-                [lam, err, iter, ~, ~, ~] = ...
+                [lam, err, iter, lcp_flag, ~, lcp_msg] = ...
                     APGD(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             case 'BBPGD'
-                [lam, err, iter, ~, ~, ~] = ...
+                [lam, err, iter, lcp_flag, ~, lcp_msg] = ...
                     BBPGD(Amat, bvec, lam0, max_iter, tol_rel, tol_abs, profile);
             otherwise
                 error('Invalid LCP solver in params.');
         end
     end
 
-    fprintf(['\n' parslv.colsolver ' LCP solution error = %e, iters = %d \n'],err,iter);
+    lcp_info = struct('err', err, 'iter', iter, 'flag', lcp_flag, 'msg', lcp_msg);
+    fprintf(['\n' parslv.colsolver ' LCP solution error = %e, iters = %d, flag = %d (%s) \n'], ...
+        err, iter, lcp_flag, lcp_msg);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Contact forces and modified densities
@@ -1057,6 +1059,22 @@ function [F_c,mu_c,rho_c] = ...
         mu_c = [];
         rho_c = [];
         F_c = [];
+    end
+end
+
+function Amat = LOCAL_build_projected_contact_matrix(TD, SD, Lk, BkT, Ak, F, contact_parslv)
+    % Build the small dense projected contact matrix A = F' * M * F one
+    % contact column at a time. This avoids forming the full mobility
+    % matrix while still giving an exact projected operator for small
+    % contact sets.
+    num_contact_pairs = size(F, 2);
+    Amat = zeros(num_contact_pairs, num_contact_pairs);
+    for j = 1:num_contact_pairs
+        rho_col = BkT * F(:, j);
+        BIE_RHS = -Lapp(TD, rho_col) + Lk * rho_col;
+        mu_col = Lslv(TD, BIE_RHS, contact_parslv);
+        mobility_col = Ak * Lapp(SD, mu_col + rho_col);
+        Amat(:, j) = real(F.' * mobility_col);
     end
 end
 
@@ -1285,8 +1303,10 @@ function parslv = LOCAL_attach_contact_deflation(parslv, Bk, Ct, Mt, Fparams, co
 
     max_dim = LOCAL_get_solver_option(parslv, 'deflate_max_dim', min(8, size(collist, 1)));
     sval_tol = LOCAL_get_solver_option(parslv, 'deflate_sval_tol', 1e-2);
-    % Always build the contact basis one connected contact component at a
-    % time
+    % Always build the augmentation basis one connected contact component at
+    % a time. The component builder uses a contact-frame mode matrix
+    % (normal plus tangential relative-motion directions), not the physical
+    % frictionless LCP force map.
     basis = LOCAL_build_component_augmented_contact_basis(Bk.', Ct, Mt, Fparams.parbd, ...
         collist, closest_points_1, closest_points_2, max_dim, sval_tol);
     parslv.deflate_basis = basis;
@@ -1703,21 +1723,16 @@ function dof_idx = LOCAL_get_body_idx(body_ids, Nb)
 end
 
 function basis = LOCAL_build_augmented_contact_basis(BkT, F, max_dim, sval_tol)
-    % Build a coarse basis from the dominant singular directions of the
-    % contact-force map F, then convert those directions into the solver's
-    % unknown space through BkT.
+    % Build a coarse basis from the dominant singular directions of a
+    % contact-derived mode matrix F, then convert those directions into the
+    % density space through an application of B^T.
     basis = [];
     if isempty(F) || max_dim <= 0
         return;
     end
 
-    % The left singular vectors identify the main force directions induced
-    % by this contact block.
     [Ub, S, ~] = svd(F, 'econ');
     sing = diag(S);
-    if isempty(sing) || sing(1) <= 0
-        return;
-    end
 
     % Keep only the dominant singular directions, then orthonormalize after
     % mapping them into the density space (i.e. after left-applying B^T).
@@ -1741,11 +1756,11 @@ function basis = LOCAL_build_component_augmented_contact_basis(BkT, Ct, Mt, parb
     component_basis = zeros(size(BkT, 1), 0);
     for comp_idx = 1:numel(components)
         rows = components{comp_idx};
-        % Build the contact-force map for just this connected component.
-        F_comp = LOCAL_build_contact_force_matrix(collist(rows, :), closest_points_1(:, rows), ...
+        % Build a solver-only contact-mode matrix for this connected
+        % component. In addition to the normal contact direction, include
+        % the two tangent directions to hopefully mediate sliding problems.
+        F_comp = LOCAL_build_augmented_contact_mode_matrix(collist(rows, :), closest_points_1(:, rows), ...
             closest_points_2(:, rows), Ct, Mt, parbd);
-        % Allow the component to contribute as many independent modes as its
-        % local force map supports; the final global cap is enforced below.
         basis_comp = LOCAL_build_augmented_contact_basis(BkT, F_comp, size(F_comp, 2), sval_tol);
         component_basis = [component_basis, basis_comp];
     end
@@ -1953,12 +1968,7 @@ function F = LOCAL_build_contact_force_matrix(collist, closest_points_1, closest
         return;
     end
 
-    quadratic_forms = zeros(3, 3, n3);
-    for body_idx = 1:n3
-        spheroid_params = LOCAL_get_spheroid_params(body_idx, Ct, Mt, parbd);
-        D = diag([spheroid_params.a spheroid_params.b spheroid_params.c].^-2);
-        quadratic_forms(:, :, body_idx) = spheroid_params.R * D * (spheroid_params.R.');
-    end
+    quadratic_forms = LOCAL_build_contact_quadratic_forms(Ct, Mt, parbd);
 
     body_1_idx = collist(:, 1);
     body_2_idx = collist(:, 2);
@@ -1972,8 +1982,7 @@ function F = LOCAL_build_contact_force_matrix(collist, closest_points_1, closest
         cp_j = closest_points_2(:, pair_idx);
 
         body_j = body_2_idx(pair_idx);
-        grad_j = quadratic_forms(:, :, body_j) * (cp_j - Ct(body_j, :).');
-        nvec = grad_j / norm(grad_j);
+        nvec = LOCAL_contact_normal_from_quadratic_form(quadratic_forms, body_j, cp_j, Ct);
 
         r_i = cp_i - Ct(body_1_idx(pair_idx), :).';
         r_j = cp_j - Ct(body_2_idx(pair_idx), :).';
@@ -1983,6 +1992,83 @@ function F = LOCAL_build_contact_force_matrix(collist, closest_points_1, closest
         F(rotational_indi, pair_idx) = cross(r_i, nvec);
         F(rotational_indj, pair_idx) = -cross(r_j, nvec);
     end
+end
+
+function F = LOCAL_build_augmented_contact_mode_matrix(collist, closest_points_1, closest_points_2, Ct, Mt, parbd)
+    % Build solver-only contact-frame modes for the augmentation basis.
+    % Each contact contributes:
+    %   1. normal relative-motion mode
+    %   2. first tangential relative-motion mode
+    %   3. second tangential relative-motion mode
+    %
+    % The purpose of this is to help GMRES resolve sliding and near-contact modes.
+    n3 = parbd.n3;
+    num_contact_pairs = size(collist, 1);
+    F = zeros(6 * n3, 3 * num_contact_pairs);
+    if num_contact_pairs == 0 || isempty(closest_points_1) || isempty(closest_points_2)
+        return;
+    end
+
+    quadratic_forms = LOCAL_build_contact_quadratic_forms(Ct, Mt, parbd);
+    body_1_idx = collist(:, 1);
+    body_2_idx = collist(:, 2);
+    for pair_idx = 1:num_contact_pairs
+        cp_i = closest_points_1(:, pair_idx);
+        cp_j = closest_points_2(:, pair_idx);
+        body_i = body_1_idx(pair_idx);
+        body_j = body_2_idx(pair_idx);
+
+        nvec = LOCAL_contact_normal_from_quadratic_form(quadratic_forms, body_j, cp_j, Ct);
+        [t1, t2] = LOCAL_contact_tangent_frame(nvec);
+        r_i = cp_i - Ct(body_i, :).';
+        r_j = cp_j - Ct(body_j, :).';
+
+        col_offset = 3 * (pair_idx - 1);
+        F = LOCAL_store_contact_direction_mode(F, col_offset + 1, body_i, body_j, r_i, r_j, nvec);
+        F = LOCAL_store_contact_direction_mode(F, col_offset + 2, body_i, body_j, r_i, r_j, t1);
+        F = LOCAL_store_contact_direction_mode(F, col_offset + 3, body_i, body_j, r_i, r_j, t2);
+    end
+end
+
+function quadratic_forms = LOCAL_build_contact_quadratic_forms(Ct, Mt, parbd)
+    n3 = parbd.n3;
+    quadratic_forms = zeros(3, 3, n3);
+    for body_idx = 1:n3
+        spheroid_params = LOCAL_get_spheroid_params(body_idx, Ct, Mt, parbd);
+        D = diag([spheroid_params.a spheroid_params.b spheroid_params.c].^-2);
+        quadratic_forms(:, :, body_idx) = spheroid_params.R * D * (spheroid_params.R.');
+    end
+end
+
+function nvec = LOCAL_contact_normal_from_quadratic_form(quadratic_forms, body_idx, contact_point, Ct)
+    grad = quadratic_forms(:, :, body_idx) * (contact_point - Ct(body_idx, :).');
+    nvec = grad / norm(grad);
+end
+
+function [t1, t2] = LOCAL_contact_tangent_frame(nvec)
+    nvec = nvec / norm(nvec);
+
+    [~, axis_idx] = min(abs(nvec));
+    reference_axis = zeros(3,1);
+    reference_axis(axis_idx) = 1;
+
+    t1 = cross(nvec, reference_axis);
+    t1 = t1 / norm(t1);
+
+    t2 = cross(nvec, t1);
+    t2 = t2 / norm(t2);
+end
+
+function F = LOCAL_store_contact_direction_mode(F, col_idx, body_i, body_j, r_i, r_j, dvec)
+    translational_indi = (1:3) + 6 * (body_i - 1);
+    translational_indj = (1:3) + 6 * (body_j - 1);
+    rotational_indi = (4:6) + 6 * (body_i - 1);
+    rotational_indj = (4:6) + 6 * (body_j - 1);
+
+    F(translational_indi, col_idx) = dvec;
+    F(translational_indj, col_idx) = -dvec;
+    F(rotational_indi, col_idx) = cross(r_i, dvec);
+    F(rotational_indj, col_idx) = -cross(r_j, dvec);
 end
 
 function ITSSDd = LOCAL_build_td_inverse_blocks_prec(parbd, Lk, Nb, n3)
