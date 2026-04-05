@@ -168,7 +168,7 @@ end
 fprintf('The warm start bound holds %.2f \% of the time\n', mean(warmStartBoundHolds,1, "omitnan")*100)
 boundHolds = mean(boundHolds,1, "omitnan");
 boundHolds = reshape(boundHolds, numP, numTol);
-absErr = mean(absErr,1, "omitnan");
+absErr = max(absErr, [], 1, "omitnan");
 absErr = reshape(absErr, numP, numTol);
 preCond = mean(preCond,1, "omitnan");
 preCond = reshape(preCond, numP, numTol);
@@ -182,33 +182,37 @@ name = name{1};
 f1 = figure;
 subplot(1,1,1)
 h = heatmap(ps, tols, 100*boundHolds');
-h.CellLabelFormat = '%.0f%%';
+h.CellLabelFormat = '%.0f';
 colormap(viridis)
 clim([0 100]);
-sgtitle('$\|\mathbf{x} - \hat{\mathbf{x}}\|_\infty \leq c^\prime \|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$', 'Interpreter', 'latex')
 % title(name)
 set(f1, 'Position',  [0, 0, 1000,1000])
-xlabel('p')
-ylabel('\epsilon_{gmres}')
-% set(gca,'Interpreter','latex')
+xlabel('$p$')
+ylabel('$\epsilon_\mathrm{gmres}$')
+h.YDisplayLabels = arrayfun(@(x) sprintf('$10^{%g}$', log10(x)), tols, 'UniformOutput', false);
+set(gca,'Interpreter','latex')
 fontsize(f1, 40, 'points')
-absErrFile = fullfile(basedir,'..','docs','fig', [prefix '_boundsHold.png']);
-disp(['Saving to ' absErrFile])
-saveas(f1, absErrFile);
+sgtitle('$\|\mathbf{x} - \hat{\mathbf{x}}\|_\infty \leq c^\prime \|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$',...
+    'Interpreter', 'latex', 'FontSize', 50)
+boundFile = fullfile(basedir,'..','docs','fig', [prefix '_boundsHold.png']);
+disp(['Saving to ' boundFile])
+saveas(f1, boundFile);
 %%
 f2 = figure;
 subplot(1,1,1)
 h = heatmap(ps, tols, log10(absErr)');
+h.YDisplayLabels = arrayfun(@(x) sprintf('$10^{%g}$', log10(x)), tols, 'UniformOutput', false);
 h.CellLabelFormat = '%.2g';
 colormap(viridis)
 clim([-6 -2]);
-sgtitle('Absolute Error $\|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$', 'Interpreter', 'latex')
 % title(name)
 set(f2, 'Position',  [0, 0, 1000,1000])
-xlabel('p')
-ylabel('\epsilon_{gmres}')
-% set(gca,'Interpreter','latex')
+xlabel('$p$')
+ylabel('$\epsilon_\mathrm{gmres}$')
+set(gca,'Interpreter','latex')
 fontsize(f2, 40, 'points')
+sgtitle('Absolute Error $\|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$', ...
+    'Interpreter', 'latex', 'FontSize', 50)
 absErrFile = fullfile(basedir,'..','docs','fig', [prefix '_absErr.png']);
 disp(['Saving to ' absErrFile])
 saveas(f2, absErrFile);
@@ -233,16 +237,18 @@ saveas(f2, absErrFile);
 f4 = figure;
 subplot(1,1,1)
 h=heatmap(ps, tols, timePerHi');
+h.YDisplayLabels = arrayfun(@(x) sprintf('$10^{%g}$', log10(x)), tols, 'UniformOutput', false);
 h.CellLabelFormat = '%.0f';
 colormap(viridis)
 clim([1 20])
-sgtitle('Average Time to apply $\hat{\mathbf{A}}$ vs $\mathbf{A}$', 'Interpreter', 'latex');
 % title(name)
 set(f4, 'Position',  [0, 0, 1000,1000])
-xlabel('p')
-ylabel('\epsilon_{gmres}')
-% set(gca,'Interpreter','latex')
+xlabel('$p$')
+ylabel('$\epsilon_\mathrm{gmres}$')
+set(gca,'Interpreter','latex')
 fontsize(f4, 40, 'points')
+sgtitle('Average Time to apply $\hat{\mathbf{A}}$ vs $\mathbf{A}$', ...
+    'Interpreter', 'latex', 'FontSize', 50);
 timePerHiFile = fullfile(basedir,'..','docs','fig', [prefix '_timePerHi.png']);
 disp(['Saving to ' timePerHiFile])
 saveas(f4, timePerHiFile);

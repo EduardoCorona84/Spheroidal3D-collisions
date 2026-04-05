@@ -5,8 +5,12 @@ function [x, info, opts] = bifidelityProxQuasiNewton(fg, x0, opts)
     opts.low.A = opts.low.A;
     opts.low = defaultLCPOpts(opts.low, x0);
     if opts.low.initWithLofi
+        opts.low.kkt_rel = 1e-4;
+        opts.low.kkt_abs = 1e-4;
         [x0, ~, opts.low] = proxQuasiNewton(fgMid, x0, opts.low);
         Ahatx_k = opts.low.Ax_k;
+        opts.low.kkt_rel = 1e-8;
+        opts.low.kkt_abs = 1e-8;
     else
         Ahatx_k = opts.low.A(x0);
         opts.low.Ax_k = Ahatx_k;

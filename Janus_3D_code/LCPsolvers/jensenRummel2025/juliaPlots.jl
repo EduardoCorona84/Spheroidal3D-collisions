@@ -12,7 +12,7 @@ name2Display = Dict(
     "A-PGD"=>"A-PGD",
     "zeroSR1"=>"zeroSR1",
     "L-BFGS-B"=>"L-BFGS-B",
-    "Monofidelity PQN"=>"Monofidelity PQN",
+    "Monofidelity PQN"=>"Mono-PQN",
     "Min-Map Newton"=>"Min-Map Newton",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"B-PQN: p=3, ϵ=1e-5",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=4, ϵ=1e-6",
@@ -23,11 +23,11 @@ name2LatexDisplay = Dict(
     "A-PGD"=>"A-PGD",
     "zeroSR1"=>"zeroSR1",
     "L-BFGS-B"=>"L-BFGS-B",
-    "Monofidelity PQN"=>"Monofidelity PQN",
     "Min-Map Newton"=>"Min-Map Newton",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"  p=3,"*L"\epsilon_\mathrm{gmres}"*"=1e-5",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"  p=4,"*L"\epsilon_\mathrm{gmres}"*"=1e-6",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"  p=6,"*L"\epsilon_\mathrm{gmres}"*"=1e-6",
+    "Monofidelity PQN"=>"Mono-PQN",
+    # "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"  p=3,"*L"\epsilon_\mathrm{gmres}"*"=1e-5",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"Bi-PQN",
+    # "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"  p=6,"*L"\epsilon_\mathrm{gmres}"*"=1e-6",
 ) 
 
 name2Color = Dict(
@@ -132,8 +132,14 @@ function createBoxPlotAndTable(algoNames,metrics,prefix,root,fig_dir, title_text
 
     ## LaTex Table
     rows = Any[]
-    push!(rows, ["", "Minimum", "Lower Quartile", "Median", "Mean", "Upper Quartile", "Maximum"])
-        push!(rows, Rule(:top))
+    push!(rows, Rule(:top))
+    push!(rows, ["", L"\text{\large Minimum}",
+    #  "Lower Quartile", 
+     L"\text{\large Median}", L"\text{\large Mean}", 
+    #  "Upper Quartile",
+     L"\text{\large Maximum}"])
+    push!(rows, Rule(:mid))
+    push!(rows, [L"\text{\emph{Baseline Methods}}", "", "", "", "", "", ""])
     emvps_minimum = zeros(length(results))
     emvps_low_quantile = zeros(length(results))
     emvps_median = zeros(length(results))
@@ -162,28 +168,34 @@ function createBoxPlotAndTable(algoNames,metrics,prefix,root,fig_dir, title_text
         mvps_up_quantile[i] = quantile(mvps, 0.75) 
         mvps_maximum[i] = maximum(mvps) 
     end
-    seenBPQN = false
+    seenPQN = false
     for (i,name) in enumerate(algoNames)
         metric = results[name][metrics[1]]
-        if !seenBPQN && contains(name,"B-PQN")
-            seenBPQN = true
-            push!(rows, ["B-PQN", "", "", "", "", "", ""])
+        if !seenPQN && contains(name,"PQN")
+            seenPQN = true
+            push!(rows, Rule(:mid))
+            push!(rows, [L"\text{\emph{Proposed Methods}}", "", "", "", "", "", ""])
         end
         row = [LaTeXString(name2LatexDisplay[name])]
         if emvps_minimum[i] == mvps_minimum[i]
-            push!(row, @sprintf("%.4g",emvps_minimum[i]))
-            push!(row, @sprintf("%.4g",emvps_low_quantile[i]))
-            push!(row, @sprintf("%.4g",emvps_median[i]))
-            push!(row, @sprintf("%.4g",emvps_mean[i]))
-            push!(row, @sprintf("%.4g",emvps_up_quantile[i]))
-            push!(row, @sprintf("%.4g",emvps_maximum[i]))
+            push!(row, @sprintf("%.2g",emvps_minimum[i]))
+            # push!(row, @sprintf("%.2g",emvps_low_quantile[i]))
+            push!(row, @sprintf("%.2g",emvps_median[i]))
+            push!(row, @sprintf("%.2g",emvps_mean[i]))
+            # push!(row, @sprintf("%.2g",emvps_up_quantile[i]))
+            push!(row, @sprintf("%.2g",emvps_maximum[i]))
         else
-            push!(row, @sprintf("%.4g (%.4g)",emvps_minimum[i], mvps_minimum[i]))
-            push!(row, @sprintf("%.4g (%.4g)",emvps_low_quantile[i], mvps_low_quantile[i]))
-            push!(row, @sprintf("%.4g (%.4g)",emvps_median[i], mvps_median[i]))
-            push!(row, @sprintf("%.4g (%.4g)",emvps_mean[i], mvps_mean[i]))
-            push!(row, @sprintf("%.4g (%.4g)",emvps_up_quantile[i], mvps_up_quantile[i]))
-            push!(row, @sprintf("%.4g (%.4g)",emvps_maximum[i], mvps_maximum[i]))
+            push!(row, @sprintf("%.2g (%.2g)",emvps_minimum[i], mvps_minimum[i]))
+            # push!(row, @sprintf("%.2g (%.2g)",emvps_low_quantile[i], mvps_low_quantile[i]))
+            push!(row, @sprintf("%.2g (%.2g)",emvps_median[i], mvps_median[i]))
+            push!(row, @sprintf("%.2g (%.2g)",emvps_mean[i], mvps_mean[i]))
+            # push!(row, @sprintf("%.2g (%.2g)",emvps_up_quantile[i], mvps_up_quantile[i]))
+            push!(row, @sprintf("%.2g (%.2g)",emvps_maximum[i], mvps_maximum[i]))
+        end
+        if contains(name,"B-PQN")
+            for i = 1:length(row)
+                row[i] = "\\textbf{$(row[i])}"
+            end
         end
         push!(rows, row)
     end
@@ -202,8 +214,12 @@ end
 
 ## 
 fig_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig"
-root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/resultsForRecord.01.31.2026";
-prefix = "amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2";
+# poly-disperse
+# root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/resultsForRecord.01.31.2026";
+# prefix = "amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2";
+# mono-disperse 
+root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData";
+prefix = "amphi.lcp.lattice.n_5.p_8.cDist_2.5";
 postfix = "final"
 #
 algoNames = [
