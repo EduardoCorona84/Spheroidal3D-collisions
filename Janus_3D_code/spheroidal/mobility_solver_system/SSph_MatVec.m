@@ -26,7 +26,8 @@ params - parameter struct with fields such as:
         'DL_Stk_3D'   double layer, Stokes
         'dSL_Stk_3D'  normal derivative of single layer, Stokes
         'TSL_Stk_3D'  traction kernel of single layer, Stokes
-    tsl_backend - (string, optional) 'spheroidal' (default) or 'cartesian' for the
+    slp_backend - (string, optional) 'cartesian' (default) or 'spheroidal'
+    tsl_backend - (string, optional) 'cartesian' (default) or 'spheroidal' for the
         Cartesian TSL backend
     tsl_dealiasing - (bool, optional) enable dealiasing in TSL near-evaluation (default true)
     tsl_dealiasing_pad - (int, optional) spherical harmonic padding for dealiasing (default 4)
@@ -75,7 +76,7 @@ if is_modified_laplace && ~dense
     error('Modified Laplace currently requires params.dense = true.');
 end
 
-[tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_tsl_options(params);
+[slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_stokes_backend_options(params);
 
 if isempty(Gmatrix_cache)
     body_shape_types = params.shape_type;
@@ -223,15 +224,15 @@ if strcmp(V, 'Mat')
                     Ynear(indv_off,:) = LOCAL_spheroid_near_matrix( ...
                         pot, u0, a, oblate, target_pts_off, target_normals_off, ...
                         np, iprm, source_Gmatrix, lambda, modlap_opts, ...
-                        tsl_dealiasing_flag, tsl_dealiasing_pad, tsl_backend);
+                        tsl_dealiasing_flag, tsl_dealiasing_pad, slp_backend, tsl_backend);
                 end
                 Ynear(Nb*(slf-1)+1:Nb*slf,:) = LOCAL_spheroid_near_matrix( ...
                     pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix, lambda, modlap_opts, ...
-                    tsl_dealiasing_flag, tsl_dealiasing_pad, tsl_backend);
+                    tsl_dealiasing_flag, tsl_dealiasing_pad, slp_backend, tsl_backend);
             else
                 Ynear = LOCAL_spheroid_near_matrix( ...
                     pot, u0, a, oblate, [], [], np, iprm, source_Gmatrix, lambda, modlap_opts, ...
-                    tsl_dealiasing_flag, tsl_dealiasing_pad, tsl_backend);
+                    tsl_dealiasing_flag, tsl_dealiasing_pad, slp_backend, tsl_backend);
             end
         elseif strcmp(body_shape_type, 'sphere')
             switch pot(1:3)
@@ -416,57 +417,10 @@ elseif ~isempty(V) && isnumeric(V)
                 params_i.phis = 0;
                 params_i.Rmat = eye(3);
 
-                if num_ngh > 1
-                    % Get indices of target sources (self vs off-diagonal within neighbor list)
-                    slf = find(neigh{body_ind}==body_ind); 
-                    indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
-                    ind_off  = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
-
-                    Ynear = zeros(Nb*num_ngh,1);
-
-                    if ~isempty(ind_off)
-                        target_pts_off = reshape(target_pts(ind_off,:), [], 3, 1);
-                        target_normals_off = reshape(target_normals(ind_off,:), [], 3, 1);
-                        switch pot
-                            case 'SL_Stk_3D'
-                                Ynear(indv_off) = LOCAL_eval_l2stk_slp(params_i, target_pts_off, sig_x, sig_y, sig_z, source_Gmatrix);
-                            case 'TSL_Stk_3D'
-                                Ynear(indv_off) = LOCAL_eval_l2stk( ...
-                                    params_i, target_pts_off, target_normals_off, sig_x, sig_y, sig_z, source_Gmatrix, ...
-                                    tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
-                            case 'DL_Stk_3D'
-                                error('No reason to use this.');
-                            otherwise
-                                error('Incorrect potential passed in.');
-                        end
-                    end
-
-                    switch pot
-                        case 'SL_Stk_3D'
-                            Ynear(Nb*(slf-1)+1:Nb*slf) = LOCAL_eval_l2stk_slp(params_i, [], sig_x, sig_y, sig_z, source_Gmatrix);
-                        case 'TSL_Stk_3D'
-                            Ynear(Nb*(slf-1)+1:Nb*slf) = LOCAL_eval_l2stk( ...
-                                params_i, [], [], sig_x, sig_y, sig_z, source_Gmatrix, ...
-                                tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
-                        case 'DL_Stk_3D'
-                            error('No reason to use this.');
-                        otherwise
-                            error('Incorrect potential passed in.');
-                    end
-                else
-                    switch pot
-                        case 'SL_Stk_3D'
-                            Ynear = LOCAL_eval_l2stk_slp(params_i, [], sig_x, sig_y, sig_z, source_Gmatrix);
-                        case 'TSL_Stk_3D'
-                            Ynear = LOCAL_eval_l2stk( ...
-                                params_i, [], [], sig_x, sig_y, sig_z, source_Gmatrix, ...
-                                tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
-                        case 'DL_Stk_3D'
-                            error('No reason to use this.');
-                        otherwise
-                            error('Incorrect potential passed in.');
-                    end
-                end
+                Ynear = LOCAL_apply_stokes_lp_near( ...
+                    pot, params, body_ind, neigh{body_ind}, params_i, ...
+                    target_pts, target_normals, sig_x, sig_y, sig_z, source_Gmatrix, ...
+                    slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad);
             end
         elseif strcmp(body_shape_type, 'sphere')
             switch pot(1:3)
@@ -667,6 +621,93 @@ end
 
 end %% END SSph_MatVec
 
+function Ynear = LOCAL_apply_stokes_lp_near( ...
+        pot, params, source_body_ind, neigh_body_inds, params_i, ...
+        target_pts, target_normals, sig_x, sig_y, sig_z, source_Gmatrix, ...
+        slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad)
+    np = size(sig_x, 1);
+    nrhs = size(sig_x, 2);
+    Nb = 3 * np;
+    num_ngh = numel(neigh_body_inds);
+    Ynear = zeros(Nb * num_ngh, nrhs);
+
+    for ngh_slot = 1:num_ngh
+        pair_rows = (1:Nb) + Nb * (ngh_slot - 1);
+        pair_pts = (1:np) + np * (ngh_slot - 1);
+        target_body_ind = neigh_body_inds(ngh_slot);
+
+        if target_body_ind == source_body_ind
+            X_eval_pair = [];
+            Nu_eval_pair = [];
+            target_precomp = [];
+        else
+            X_eval_pair = reshape(target_pts(pair_pts, :), [], 3, 1);
+            Nu_eval_pair = reshape(target_normals(pair_pts, :), [], 3, 1);
+            target_precomp = LOCAL_get_pair_target_precomp( ...
+                params, source_body_ind, target_body_ind, params_i, X_eval_pair);
+        end
+
+        switch pot
+            case 'SL_Stk_3D'
+                Ypair = LOCAL_eval_l2stk_slp( ...
+                    params_i, X_eval_pair, sig_x, sig_y, sig_z, source_Gmatrix, ...
+                    slp_backend, target_precomp);
+            case 'TSL_Stk_3D'
+                Ypair = LOCAL_eval_l2stk( ...
+                    params_i, X_eval_pair, Nu_eval_pair, sig_x, sig_y, sig_z, source_Gmatrix, ...
+                    tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad, target_precomp);
+            case 'DL_Stk_3D'
+                error('Not implemented.');
+            otherwise
+                error('Incorrect potential passed in.');
+        end
+
+        Ynear(pair_rows, :) = reshape(Ypair, Nb, nrhs);
+    end
+end
+
+function target_precomp = LOCAL_get_pair_target_precomp(params, source_body_ind, target_body_ind, params_i, X_eval_pair)
+    persistent cached_key cache_keys cache_values
+    if isempty(cached_key)
+        cached_key = "";
+        cache_keys = strings(0, 1);
+        cache_values = {};
+    end
+
+    % Get current key
+    if isfield(params, 'operator_cache_id') && ~isempty(params.operator_cache_id)
+        current_key = string(params.operator_cache_id);
+    else
+        current_key = "";
+    end
+
+    if strlength(current_key) == 0 % Called from a test file
+        target_precomp = ...
+            spheroidal_cartesian_target_precompute(params.p, params_i.u0, params_i.a, params_i.oblate, X_eval_pair, true);
+        return;
+    end
+
+    % When operator_cache_id changes, discard all cached pair data
+    % from the previous solve.
+    if cached_key ~= current_key
+        cached_key = current_key;
+        cache_keys = strings(0, 1);
+        cache_values = {};
+    end
+
+    pair_key = sprintf('src=%d|trg=%d', source_body_ind, target_body_ind);
+    cache_id = find(cache_keys == pair_key, 1);
+    if ~isempty(cache_id)
+        target_precomp = cache_values{cache_id};
+        return;
+    end
+
+    target_precomp = ...
+        spheroidal_cartesian_target_precompute(params.p, params_i.u0, params_i.a, params_i.oblate, X_eval_pair, true);
+    cache_keys(end+1,1) = string(pair_key);
+    cache_values{end+1,1} = target_precomp;
+end
+
 function Vrot = LOCAL_rotate_interleaved_vectors(V, row_rotation)
     % Rotate interleaved vector data [x_1; y_1; z_1; x_2; ...] while
     % preserving the matrix's layout.
@@ -751,7 +792,7 @@ end
 
 function Ynear = LOCAL_spheroid_near_matrix( ...
     pot, u0, a, oblate, target_pts, target_normals, np, iprm, source_Gmatrix, lambda, modlap_opts, ...
-    tsl_dealiasing_flag, tsl_dealiasing_pad, tsl_backend)
+    tsl_dealiasing_flag, tsl_dealiasing_pad, slp_backend, tsl_backend)
     %{
     Builds the dense block for near-field interaction from one source spheroid by applying
     the near matvec to unit-basis densities.
@@ -799,9 +840,9 @@ function Ynear = LOCAL_spheroid_near_matrix( ...
                 'SL_LMOD_3D', 'dSL_LMOD_3D', 'DL_LMOD_3D', 'dDL_LMOD_3D'}
             Ynear = LOCAL_eval_scalar_spheroidal_potential(pot, params_i, X_eval, Nu_eval, I, source_Gmatrix, lambda, modlap_opts);
         case 'SL_Stk_3D'
-            Yx = LOCAL_eval_l2stk_slp(params_i, X_eval, I, Z, Z, source_Gmatrix);
-            Yy = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, I, Z, source_Gmatrix);
-            Yz = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, Z, I, source_Gmatrix);
+            Yx = LOCAL_eval_l2stk_slp(params_i, X_eval, I, Z, Z, source_Gmatrix, slp_backend);
+            Yy = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, I, Z, source_Gmatrix, slp_backend);
+            Yz = LOCAL_eval_l2stk_slp(params_i, X_eval, Z, Z, I, source_Gmatrix, slp_backend);
         case 'DL_Stk_3D'
             error('No reason to use this for the mobility solver.');
         case 'TSL_Stk_3D'
@@ -833,21 +874,41 @@ function Ynear = LOCAL_spheroid_near_matrix( ...
     Ynear = Ynear(:, iprm);
 end
 
-function eval = LOCAL_eval_l2stk_slp(params_i, X_eval, sigma_x, sigma_y, sigma_z, source_Gmatrix)
-    [vx, vy, vz] = L2StkSLPOptimized(X_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix);
+function eval = LOCAL_eval_l2stk_slp(params_i, X_eval, sigma_x, sigma_y, sigma_z, source_Gmatrix, slp_backend, target_precomp)
+    if nargin < 7 || isempty(slp_backend)
+        slp_backend = 'cartesian';
+    end
+    if nargin < 8
+        target_precomp = [];
+    end
+
+    switch lower(slp_backend)
+        case 'spheroidal'
+            [vx, vy, vz] = L2StkSLPOptimized(X_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix);
+        case 'cartesian'
+            [vx, vy, vz] = ...
+                L2StkSLPCartesianOptimized(X_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, target_precomp);
+        otherwise
+            error('Unknown SLP backend "%s".', slp_backend);
+    end
 
     % Interleave result
     eval = reshape([vx(:), vy(:), vz(:)].', [], 1);
 end
 
-function eval = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, sigma_x, sigma_y, sigma_z, source_Gmatrix, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad)
+function eval = LOCAL_eval_l2stk(params_i, X_eval, Nu_eval, sigma_x, sigma_y, sigma_z, source_Gmatrix, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad, target_precomp)
+    if nargin < 11
+        target_precomp = [];
+    end
+
     switch lower(tsl_backend)
         case 'spheroidal'
             [vx, vy, vz] = L2StkTLPOptimized( ...
                 X_eval, Nu_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, false, tsl_dealiasing_flag, tsl_dealiasing_pad);
         case 'cartesian'
             [vx, vy, vz] = L2StkTLPCartesianOptimized( ...
-                X_eval, Nu_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, tsl_dealiasing_flag, tsl_dealiasing_pad);
+                X_eval, Nu_eval, params_i, sigma_x, sigma_y, sigma_z, source_Gmatrix, ...
+                tsl_dealiasing_flag, tsl_dealiasing_pad, target_precomp);
         otherwise
             error('Unknown TSL backend "%s".', tsl_backend);
     end
@@ -1015,11 +1076,16 @@ function [u0, a, oblate] = LOCAL_calculate_u0_a(equ_radius, polar_radius, shape_
     oblate = strcmp(shape_type,'oblate');
 end
 
-function [tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_tsl_options(params)
+function [slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad] = LOCAL_get_stokes_backend_options(params)
+    if isfield(params, 'slp_backend') && ~isempty(params.slp_backend)
+        slp_backend = params.slp_backend;
+    else
+        slp_backend = 'cartesian';
+    end
     if isfield(params, 'tsl_backend') && ~isempty(params.tsl_backend)
         tsl_backend = params.tsl_backend;
     else
-        tsl_backend = 'spheroidal';
+        tsl_backend = 'cartesian';
     end
 
     if isfield(params, 'tsl_dealiasing')

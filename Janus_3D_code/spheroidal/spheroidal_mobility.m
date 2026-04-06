@@ -1512,7 +1512,7 @@ function [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, p
     end
 
     assembly_tic = tic;
-    A_local = LOCAL_build_td_sparse_nn_pair_block_operator(build_info, active_bodies, adjacency, Nb);
+    A_local = LOCAL_build_td_sparse_nn_pair_block_operator(TD, build_info, active_bodies, adjacency, Nb);
     assembly_time = toc(assembly_tic);
 
     diag_abs = abs(diag(A_local));
@@ -1524,9 +1524,11 @@ function [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, p
         A_local = A_local + reg_scale * scale * eye(active_dim);
     end
 
-    condest_tic = tic;
-    local_stats.condest_A_local = condest(sparse(A_local));
-    local_stats.condest_time = toc(condest_tic);
+    if LOCAL_get_solver_option(parslv, 'td_sparse_nn_estimate_cond', false)
+        condest_tic = tic;
+        local_stats.condest_A_local = condest(sparse(A_local));
+        local_stats.condest_time = toc(condest_tic);
+    end
 
     [inverse_state, inverse_stats] = LOCAL_build_td_sparse_nn_inverse(A_local, sparse_inverse_method, parslv);
     if ~inverse_stats.ok
@@ -1610,8 +1612,16 @@ function local_parbd = LOCAL_build_td_sparse_nn_local_parbd(parbd, active_bodies
     );
 end
 
-function A_local = LOCAL_build_td_sparse_nn_pair_block_operator(build_info, active_bodies, adjacency, Nb)
-    % Actually construct the preconditioner
+function A_local = LOCAL_build_td_sparse_nn_pair_block_operator(TD, build_info, active_bodies, adjacency, Nb)
+    % Actually construct the preconditioner. If the full dense TD operator is
+    % already available, the active-body block can be extracted directly
+    % instead of being reassembled pair-by-pair.
+    if isnumeric(TD) && ~issparse(TD)
+        active_dof_idx = LOCAL_get_body_idx(active_bodies, Nb);
+        A_local = sparse(real(TD(active_dof_idx, active_dof_idx)));
+        return;
+    end
+
     m = numel(active_bodies);
     active_dim = Nb * m;
     A_local = spalloc(active_dim, active_dim, max(1, nnz(adjacency)) * Nb * Nb);

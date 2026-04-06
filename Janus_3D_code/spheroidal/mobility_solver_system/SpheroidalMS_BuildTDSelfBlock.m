@@ -46,7 +46,7 @@ function Tself = LOCAL_build_td_local_tself(parbd, body_idx)
     if isfield(parbd, 'tsl_backend') && ~isempty(parbd.tsl_backend)
         tsl_backend = parbd.tsl_backend;
     else
-        tsl_backend = 'spheroidal';
+        tsl_backend = 'cartesian';
     end
 
     prm = zeros(1, Nb);

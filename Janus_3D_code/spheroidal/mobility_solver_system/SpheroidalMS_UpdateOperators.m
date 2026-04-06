@@ -41,6 +41,10 @@ typeMV = Fparams.typeMV;
 denseMV = Fparams.denseMV;
 
 tic;
+persistent operator_cache_timestep_id
+if isempty(operator_cache_timestep_id)
+    operator_cache_timestep_id = 0;
+end
 
 % Body parameters
 equ_radii = Fparams.parbd.equ_radii;
@@ -65,7 +69,12 @@ end
 if isfield(Fparams.parbd, 'tsl_backend')
     tsl_backend = Fparams.parbd.tsl_backend;
 else
-    tsl_backend = 'spheroidal';
+    tsl_backend = 'cartesian';
+end
+if isfield(Fparams.parbd, 'slp_backend')
+    slp_backend = Fparams.parbd.slp_backend;
+else
+    slp_backend = 'cartesian';
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -85,10 +94,13 @@ Fparams.parbd = SpheroidalMS_set_params( ...
     dense       = denseMV, ...
     bodydist    = bodydist, ...
     MRot        = Mt, ...
+    slp_backend = slp_backend, ...
     tsl_backend = tsl_backend, ...
     tsl_dealiasing = tsl_dealiasing, ...
     tsl_dealiasing_pad = tsl_dealiasing_pad ...
     );
+operator_cache_timestep_id = operator_cache_timestep_id + 1;
+Fparams.parbd.operator_cache_id = operator_cache_timestep_id;
 
 Xt = Fparams.parbd.Xrp; % X rotated points
 
