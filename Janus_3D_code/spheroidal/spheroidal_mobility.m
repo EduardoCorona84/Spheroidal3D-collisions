@@ -1436,44 +1436,102 @@ function parslv = LOCAL_configure_td_sparse_nn_preconditioner(parslv, TD, proble
 
     % Converts contact pair list into a graph representation. Then,
     % send the graph to the local sparse operator builder, which assembles,
-    % regularizes, and factors.
-    [active_bodies, adjacency, edge_count] = LOCAL_build_td_sparse_nn_graph(contact_pairs, n3);
-    [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, problem_size, n3, ...
-        active_bodies, adjacency, parslv, build_info);
+    % regularizes, and factors. Each component in the graph is handled separately
+    % on the solver side.
+    component_rows = LOCAL_contact_components(n3, contact_pairs);
+    component_states = cell(numel(component_rows), 1);
+    cache_status_list = strings(0, 1);
+    total_active_bodies = 0;
+    total_edges = 0;
+    total_block_entries = 0;
+    total_factor_nnz = 0;
+    total_assembly_time = 0;
+    total_condest_time = 0;
+    total_factor_time = 0;
+    max_condest = NaN;
+    component_sizes = zeros(numel(component_rows), 1);
+    all_degrees = zeros(0, 1);
 
-    % Build the final preconditioner state for LOCAL_apply_td_sparse_nn_preconditioner:
-    % keep the cached LU factorizations for the active bodies, but also retain the
-    % original block-diagonal preconditioner for every other body.
-    % See LOCAL_apply_td_sparse_nn_preconditioner for more details.
-    state = local_state;
-    state.num_dofs = problem_size;
-    state.base_prec = LOCAL_get_solver_option(parslv, 'prec', []);
+    for comp_idx = 1:numel(component_rows)
+        rows = component_rows{comp_idx};
+        [active_bodies, adjacency, edge_count] = LOCAL_build_td_sparse_nn_graph(contact_pairs(rows, :), n3);
+        [component_states{comp_idx}, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, problem_size, n3, ...
+            active_bodies, adjacency, parslv, build_info);
 
-    degrees = full(sum(adjacency, 2) - 1);
+        component_sizes(comp_idx) = numel(active_bodies);
+        total_active_bodies = total_active_bodies + numel(active_bodies);
+        total_edges = total_edges + max(0, edge_count - numel(active_bodies));
+        total_block_entries = total_block_entries + nnz(adjacency);
+        total_factor_nnz = total_factor_nnz + local_stats.factor_nnz;
+        total_assembly_time = total_assembly_time + local_stats.assembly_time;
+        total_condest_time = total_condest_time + local_stats.condest_time;
+        total_factor_time = total_factor_time + local_stats.factor_time;
+        cache_status_list(end+1, 1) = string(local_stats.cache_status);
+
+        if ~isnan(local_stats.condest_A_local)
+            if isnan(max_condest)
+                max_condest = local_stats.condest_A_local;
+            else
+                max_condest = max(max_condest, local_stats.condest_A_local);
+            end
+        end
+
+        if ~isempty(adjacency)
+            all_degrees = [all_degrees; full(sum(adjacency, 2) - 1)];
+        end
+    end
+
+    % Keep the original base preconditioner for the full system, then
+    % replace each connected active-body cluster by its more specific preconditioner.
+    state = struct( ...
+        'num_dofs', problem_size, ...
+        'base_prec', LOCAL_get_solver_option(parslv, 'prec', []), ...
+        'component_states', {component_states} ...
+    );
+
+    if isempty(all_degrees)
+        avg_degree = 0;
+    else
+        avg_degree = mean(max(all_degrees, 0));
+    end
+    if isempty(component_sizes)
+        max_component_size = 0;
+    else
+        max_component_size = max(component_sizes);
+    end
+    if isempty(cache_status_list)
+        cache_status = "none";
+    else
+        cache_status = strjoin(unique(cache_status_list, 'stable').', '/');
+    end
+
     stats = struct( ...
         'ok', true, ...
         'reason', '', ...
-        'cache_status', local_stats.cache_status, ...
+        'cache_status', cache_status, ...
         'sparse_inverse_method', sparse_inverse_method, ...
-        'num_active_bodies', numel(active_bodies), ...
-        'num_edges', edge_count - numel(active_bodies), ...
-        'avg_degree', mean(max(degrees, 0)), ...
-        'num_block_entries', nnz(adjacency), ...
-        'factor_nnz', local_stats.factor_nnz, ...
-        'assembly_time', local_stats.assembly_time, ...
-        'condest_time', local_stats.condest_time, ...
-        'condest_A_local', local_stats.condest_A_local, ...
-        'factor_time', local_stats.factor_time, ...
+        'num_components', numel(component_states), ...
+        'max_component_size', max_component_size, ...
+        'num_active_bodies', total_active_bodies, ...
+        'num_edges', total_edges, ...
+        'avg_degree', avg_degree, ...
+        'num_block_entries', total_block_entries, ...
+        'factor_nnz', total_factor_nnz, ...
+        'assembly_time', total_assembly_time, ...
+        'condest_time', total_condest_time, ...
+        'condest_A_local', max_condest, ...
+        'factor_time', total_factor_time, ...
         'build_time', toc(build_tic) ...
     );
 
     % Hand off preconditioner to parslv and log all debug information about it.
     parslv.prec = @(X) LOCAL_apply_td_sparse_nn_preconditioner(state, X);
-    fprintf(['\n %s sparse NN prec: inverse=%s cache=%s bodies=%d edges=%d ' ...
-        'avg_degree=%1.2f nnz_blocks=%d local_w=1 ' ...
+    fprintf(['\n %s sparse NN prec: inverse=%s cache=%s components=%d max_comp=%d bodies=%d edges=%d ' ...
+        'avg_degree=%1.2f nnz_blocks=%d local_w=component ' ...
         'build_time=%e assembly_time=%e condest_time=%e condest=%e factor_time=%e factor_nnz=%d \n'], ...
         label, stats.sparse_inverse_method, stats.cache_status, ...
-        stats.num_active_bodies, stats.num_edges, stats.avg_degree, stats.num_block_entries, stats.build_time, ...
+        stats.num_components, stats.max_component_size, stats.num_active_bodies, stats.num_edges, ...
+        stats.avg_degree, stats.num_block_entries, stats.build_time, ...
         stats.assembly_time, stats.condest_time, stats.condest_A_local, ...
         stats.factor_time, stats.factor_nnz);
 end
@@ -1501,7 +1559,10 @@ function [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, p
 
     cache_key = [];
     if reuse_local_state
-        cache_key = build_info.timestep_idx;
+        if ~isempty(build_info) && isfield(build_info, 'timestep_idx')
+            LOCAL_manage_td_sparse_nn_cache('set_context', sprintf('t=%d', build_info.timestep_idx), []);
+        end
+        cache_key = LOCAL_td_sparse_nn_cache_key(active_bodies, adjacency, build_info, parslv);
         cached_value = LOCAL_manage_td_sparse_nn_cache('get', cache_key, []);
         if ~isempty(cached_value)
             local_state = cached_value.local_state;
@@ -1556,6 +1617,29 @@ function [local_state, local_stats] = LOCAL_build_td_sparse_nn_local_state(TD, p
     if reuse_local_state
         LOCAL_manage_td_sparse_nn_cache('set', cache_key, struct('local_state', local_state, 'stats', local_stats));
     end
+end
+
+function cache_key = LOCAL_td_sparse_nn_cache_key(active_bodies, adjacency, build_info, parslv)
+    if isempty(active_bodies)
+        body_key = "none";
+        edge_key = "none";
+    else
+        body_key = strjoin(string(active_bodies(:).'), '-');
+        [edge_i, edge_j] = find(triu(adjacency, 1));
+        if isempty(edge_i)
+            edge_key = "none";
+        else
+            edge_key = strjoin(strcat(string(active_bodies(edge_i)), "-", string(active_bodies(edge_j))), ',');
+        end
+    end
+
+    if ~isfield(build_info, 'timestep_idx')
+        timestep_key = "t=unknown";
+    else
+        timestep_key = "t=" + string(build_info.timestep_idx);
+    end
+
+    cache_key = strjoin([timestep_key, "bodies="+body_key, "edges="+edge_key], "|");
 end
 
 function [active_bodies, adjacency, edge_count] = LOCAL_build_td_sparse_nn_graph(contact_pairs, n3)
@@ -1687,14 +1771,30 @@ end
 
 function Y = LOCAL_apply_td_sparse_nn_preconditioner(state, X)
     Y = LOCAL_apply_preconditioner(state.base_prec, X); % Apply block-diagonal preconditioner first
-    if isempty(state.active_dof_idx) % No active bodies
-        return;
-    end
+    if isfield(state, 'component_states')
+        % Replace the base preconditioner on each connected active-contact
+        % component by its the component-local sparse-NN solve, while
+        % leaving every other body-block on the original block-diagonal path.
+        for comp_idx = 1:numel(state.component_states)
+            component_state = state.component_states{comp_idx};
+            if isempty(component_state) || isempty(component_state.active_dof_idx)
+                continue;
+            end
 
-    % Only apply sparse NN preconditioner on active bodies (this also includes the block-diagonal)
-    rhs = X(state.active_dof_idx, :);
-    local_action = LOCAL_solve_td_sparse_nn_local_system(state, rhs);
-    Y(state.active_dof_idx, :) = local_action;
+            rhs = X(component_state.active_dof_idx, :);
+            local_action = LOCAL_solve_td_sparse_nn_local_system(component_state, rhs);
+            Y(component_state.active_dof_idx, :) = local_action;
+        end
+    else
+        if isempty(state.active_dof_idx) % No active bodies
+            return;
+        end
+
+        % Single-block path
+        rhs = X(state.active_dof_idx, :);
+        local_action = LOCAL_solve_td_sparse_nn_local_system(state, rhs);
+        Y(state.active_dof_idx, :) = local_action;
+    end
 end
 
 function local_correction = LOCAL_solve_td_sparse_nn_local_system(state, local_residual)
@@ -1920,10 +2020,12 @@ function [x, flag, relres, total_iters, iter, info] = LOCAL_run_augmented_solver
 end
 
 function value = LOCAL_manage_td_sparse_nn_cache(action, key, value_in)
-    persistent keys values
+    persistent initialized cached_key keys values
 
-    if isempty(keys)
-        keys = [];
+    if isempty(initialized)
+        initialized = true;
+        cached_key = "";
+        keys = strings(0, 1);
         values = {};
     end
 
@@ -1933,17 +2035,30 @@ function value = LOCAL_manage_td_sparse_nn_cache(action, key, value_in)
 
     switch action
         case 'reset'
-            keys = [];
+            cached_key = "";
+            keys = strings(0, 1);
             values = {};
             value = [];
+        case 'set_context'
+            new_key = string(key);
+            % Only keep sparse-NN local factorizations for the current
+            % timestep/solve context. Older component-local states are not
+            % reused once we enter a new timestep.
+            if cached_key ~= new_key
+                cached_key = new_key;
+                keys = strings(0, 1);
+                values = {};
+            end
+            value = [];
         case 'get'
-            idx = find(keys == key, 1);
+            idx = find(keys == string(key), 1);
             if isempty(idx)
                 value = [];
             else
                 value = values{idx};
             end
         case 'set'
+            key = string(key);
             idx = find(keys == key, 1);
             if isempty(idx)
                 keys(end+1) = key;
@@ -1953,7 +2068,7 @@ function value = LOCAL_manage_td_sparse_nn_cache(action, key, value_in)
             end
             value = [];
         case 'remove'
-            idx = find(keys == key, 1);
+            idx = find(keys == string(key), 1);
             if ~isempty(idx)
                 keys(idx) = [];
                 values(idx) = [];
