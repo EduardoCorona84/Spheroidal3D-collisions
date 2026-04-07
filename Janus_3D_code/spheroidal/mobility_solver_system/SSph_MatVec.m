@@ -321,7 +321,24 @@ elseif ~isempty(V) && isnumeric(V)
     % Actually do the matvec given a numeric input
     V = reshape(V,N,[]); % TODO: Remove this. Not sure why this is needed.
     Y = zeros(N,size(V,2));
-
+    use_parallel_near = LOCAL_use_parallel_matrixfree_stokes_near(params, dense, V, kerd, n3);
+    if use_parallel_near
+        pair_target_precomp = LOCAL_prebuild_parallel_stokes_pair_target_precomp( ...
+            params, neigh, Xv, Nor, C, MRot, rot);
+        near_rows = cell(n3, 1);
+        near_values = cell(n3, 1);
+        parfor body_ind = 1:n3
+            [near_rows{body_ind}, near_values{body_ind}] = ...
+                LOCAL_build_matrixfree_stokes_body_contribution( ...
+                    body_ind, V, params, neigh, Xv, Nor, W2, C, MRot, rot, ...
+                    Gmatrix_cache, slp_backend, tsl_backend, ...
+                    tsl_dealiasing_flag, tsl_dealiasing_pad, ...
+                    pair_target_precomp{body_ind});
+        end
+        for body_ind = 1:n3
+            Y(near_rows{body_ind}, :) = Y(near_rows{body_ind}, :) + near_values{body_ind};
+        end
+    else
     for body_ind=1:n3
         % Indices for source particle
         I_box = (1:Nb)+Nb*(body_ind-1);
@@ -584,6 +601,7 @@ elseif ~isempty(V) && isnumeric(V)
             Y(I_nghv,:) = (Y(I_nghv,:) + Ynear) - Kernel_Eval(Xv(I_nghv,:), Xv(I_box,:), parnear) * V(I_box,:);
         end
     end
+    end
 
     % If using FMM flag (dense==false), add far interactions via FMM
     if ~dense
@@ -624,7 +642,12 @@ end %% END SSph_MatVec
 function Ynear = LOCAL_apply_stokes_lp_near( ...
         pot, params, source_body_ind, neigh_body_inds, params_i, ...
         target_pts, target_normals, sig_x, sig_y, sig_z, source_Gmatrix, ...
-        slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad)
+        slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad, ...
+        pair_target_precomp_slots)
+    if nargin < 15
+        pair_target_precomp_slots = [];
+    end
+
     np = size(sig_x, 1);
     nrhs = size(sig_x, 2);
     Nb = 3 * np;
@@ -643,8 +666,13 @@ function Ynear = LOCAL_apply_stokes_lp_near( ...
         else
             X_eval_pair = reshape(target_pts(pair_pts, :), [], 3, 1);
             Nu_eval_pair = reshape(target_normals(pair_pts, :), [], 3, 1);
-            target_precomp = LOCAL_get_pair_target_precomp( ...
-                params, source_body_ind, target_body_ind, params_i, X_eval_pair);
+            if ~isempty(pair_target_precomp_slots) && numel(pair_target_precomp_slots) >= ngh_slot ...
+                    && ~isempty(pair_target_precomp_slots{ngh_slot})
+                target_precomp = pair_target_precomp_slots{ngh_slot};
+            else
+                target_precomp = LOCAL_get_pair_target_precomp( ...
+                    params, source_body_ind, target_body_ind, params_i, X_eval_pair);
+            end
         end
 
         switch pot
@@ -706,6 +734,228 @@ function target_precomp = LOCAL_get_pair_target_precomp(params, source_body_ind,
         spheroidal_cartesian_target_precompute(params.p, params_i.u0, params_i.a, params_i.oblate, X_eval_pair, true);
     cache_keys(end+1,1) = string(pair_key);
     cache_values{end+1,1} = target_precomp;
+end
+
+function use_parallel = LOCAL_use_parallel_matrixfree_stokes_near(params, dense, V, kerd, n3)
+    use_parallel = false;
+    if dense || isempty(V) || ~isnumeric(V) || kerd ~= 3
+        return;
+    end
+    if ~contains(params.flag_pot, 'Stk')
+        return;
+    end
+    if ~isfield(params, 'parallel_near') || ~params.parallel_near
+        return;
+    end
+    use_parallel = true;
+end
+
+function pair_target_precomp = LOCAL_prebuild_parallel_stokes_pair_target_precomp(params, neigh, Xv, Nor, C, MRot, rot)
+    n3 = params.n3;
+    p = params.p;
+    np = params.np;
+    Nb = params.Nb;
+    kerd = params.kerd;
+    pair_target_precomp = cell(n3, 1);
+
+    if ~ismember(params.flag_pot, {'SL_Stk_3D', 'TSL_Stk_3D'})
+        return;
+    end
+
+    for source_body_ind = 1:n3
+        neigh_body_inds = reshape(neigh{source_body_ind}, 1, []);
+        num_ngh = numel(neigh_body_inds);
+        pair_target_precomp{source_body_ind} = cell(num_ngh, 1);
+
+        body_shape_type = params.shape_type(source_body_ind);
+        if ~(strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate'))
+            continue;
+        end
+
+        [u0, a, oblate] = LOCAL_calculate_u0_a( ...
+            params.equ_radii(source_body_ind), ...
+            params.polar_radii(source_body_ind), ...
+            body_shape_type);
+        params_i = SpheroidalParameters();
+        params_i.sigma = zeros(np, 1);
+        params_i.p = p;
+        params_i.u0 = u0;
+        params_i.a = a;
+        params_i.oblate = oblate;
+        params_i.centers = [0 0 0];
+        params_i.thetas = 0;
+        params_i.phis = 0;
+        params_i.Rmat = eye(3);
+
+        I_nghv = repmat((1:Nb)', 1, num_ngh) + Nb * (repmat(neigh_body_inds, Nb, 1) - 1);
+        I_nghv = I_nghv(:);
+        target_pts = Xv(I_nghv(1:kerd:end), :);
+        if rot
+            target_pts = (target_pts - C(source_body_ind, :)) * MRot{source_body_ind};
+        else
+            target_pts = target_pts - repmat(C(source_body_ind, :), size(target_pts, 1), 1);
+        end
+
+        for ngh_slot = 1:num_ngh
+            target_body_ind = neigh_body_inds(ngh_slot);
+            if target_body_ind == source_body_ind
+                continue;
+            end
+
+            pair_pts = (1:np) + np * (ngh_slot - 1);
+            X_eval_pair = reshape(target_pts(pair_pts, :), [], 3, 1);
+            pair_target_precomp{source_body_ind}{ngh_slot} = ...
+                LOCAL_get_pair_target_precomp(params, source_body_ind, target_body_ind, params_i, X_eval_pair);
+        end
+    end
+end
+
+function [row_idx, body_value] = LOCAL_build_matrixfree_stokes_body_contribution( ...
+        body_ind, V, params, neigh, Xv, Nor, W2, C, MRot, rot, ...
+        Gmatrix_cache, slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad, ...
+        pair_target_precomp_slots)
+    kerd = params.kerd;
+    np = params.np;
+    Nb = params.Nb;
+    pot = params.flag_pot;
+    out = true;
+
+    nortrg = true;
+    switch pot(1:3)
+        case {'DL_','SDL','dDL'}
+            nortrg = false;
+    end
+
+    neigh_body_inds = reshape(neigh{body_ind}, 1, []);
+    num_ngh = numel(neigh_body_inds);
+    I_box = (1:Nb) + Nb * (body_ind - 1);
+    I_nghv = repmat((1:Nb)', 1, num_ngh) + Nb * (repmat(neigh_body_inds, Nb, 1) - 1);
+    I_nghv = I_nghv(:);
+
+    source_Gmatrix = [];
+    if ~isempty(Gmatrix_cache)
+        source_Gmatrix = Gmatrix_cache{body_ind};
+    end
+
+    target_pts = Xv(I_nghv(1:kerd:end), :);
+    target_normals = Nor(I_nghv(1:kerd:end), :);
+    if rot
+        target_pts = (target_pts - C(body_ind, :)) * MRot{body_ind};
+        target_normals = target_normals * MRot{body_ind};
+    else
+        target_pts = target_pts - repmat(C(body_ind, :), size(target_pts, 1), 1);
+    end
+
+    Vloc = V(I_box, :);
+    if rot
+        Vloc = LOCAL_rotate_interleaved_vectors(Vloc, MRot{body_ind});
+    end
+
+    body_shape_type = params.shape_type(body_ind);
+    if strcmp(body_shape_type, 'prolate') || strcmp(body_shape_type, 'oblate')
+        sig_x = Vloc(1:3:end, :);
+        sig_y = Vloc(2:3:end, :);
+        sig_z = Vloc(3:3:end, :);
+
+        [u0, a, oblate] = LOCAL_calculate_u0_a( ...
+            params.equ_radii(body_ind), params.polar_radii(body_ind), body_shape_type);
+        params_i = SpheroidalParameters();
+        params_i.sigma = sig_x;
+        params_i.p = params.p;
+        params_i.u0 = u0;
+        params_i.a = a;
+        params_i.oblate = oblate;
+        params_i.centers = [0 0 0];
+        params_i.thetas = 0;
+        params_i.phis = 0;
+        params_i.Rmat = eye(3);
+
+        Ynear = LOCAL_apply_stokes_lp_near( ...
+            pot, params, body_ind, neigh_body_inds, params_i, ...
+            target_pts, target_normals, sig_x, sig_y, sig_z, source_Gmatrix, ...
+            slp_backend, tsl_backend, tsl_dealiasing_flag, tsl_dealiasing_pad, ...
+            pair_target_precomp_slots);
+    elseif strcmp(body_shape_type, 'sphere')
+        switch pot(1:3)
+            case 'SL_'
+                pMat = 'SMat';
+            case 'SDL'
+                pMat = 'SDMat';
+            case 'dSL'
+                pMat = 'SpMat';
+            case 'TSL'
+                pMat = 'TSMat';
+            case 'DL_'
+                pMat = 'DMat';
+            case 'dDL'
+                pMat = 'DpMat';
+            case 'TDL'
+                pMat = 'TDMat';
+            otherwise
+                error('Unsupported pot for spherical near-eval.');
+        end
+
+        Xtrg = (1 / params.equ_radii(body_ind)) * target_pts;
+        [th, phi, rho] = cart2sph(Xtrg(:,1), Xtrg(:,2), Xtrg(:,3));
+        th(th < 0) = th(th < 0) + 2*pi;
+        phi = pi/2 - phi;
+
+        Nrtrg = Nor(I_nghv, :);
+        if rot
+            Nrtrg = Nrtrg * MRot{body_ind};
+        end
+
+        Vh_loc = VshAna([Vloc(1:3:end,:); Vloc(2:3:end,:); Vloc(3:3:end,:)], 'VW');
+
+        if num_ngh > 1
+            slf = find(neigh_body_inds == body_ind);
+            indv_off = [1:Nb*(slf-1) (Nb*slf+1):Nb*num_ngh].';
+            ind_off = [1:np*(slf-1) (np*slf+1):np*num_ngh].';
+
+            Ynear = zeros(Nb * num_ngh, size(Vh_loc, 2));
+            Ynear(Nb*(slf-1)+1:Nb*slf, :) = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+            if ~isempty(ind_off)
+                Ynear(indv_off, :) = Vsh_Kernel_Eval_off( ...
+                    Vh_loc, pMat, 0, out, rho(ind_off), phi(ind_off), th(ind_off), Nrtrg(indv_off, :));
+            end
+        else
+            Ynear = Vsh_Kernel_Eval_off(Vh_loc, pMat, 0, out, 1, [], [], []);
+        end
+
+        if size(Ynear, 2) > 1
+            Ynear = sum(Ynear, 2);
+        end
+
+        if strncmp(pot, 'SL_', 3)
+            Ynear = params.equ_radii(body_ind) * Ynear;
+        elseif strncmp(pot, 'dDL', 3)
+            Ynear = (1 / params.equ_radii(body_ind)) * Ynear;
+        end
+    else
+        error('Invalid body shape type; should be "sphere" or "prolate" or "oblate".');
+    end
+
+    if rot
+        Ynear = LOCAL_rotate_interleaved_vectors(Ynear, MRot{body_ind}.');
+    end
+
+    parnear = params;
+    if nortrg
+        parnear.nor = Nor(I_nghv, :);
+    else
+        parnear.nor = Nor(I_box, :);
+    end
+    parnear.W2 = W2(I_box);
+    if isfield(parnear, 'ci')
+        parnear.ci = repmat((1:kerd)', numel(I_nghv) / kerd, 1);
+    end
+    if isfield(parnear, 'cj')
+        parnear.cj = params.cj(I_box);
+    end
+    parnear.a = 0;
+
+    row_idx = I_nghv;
+    body_value = Ynear - Kernel_Eval(Xv(I_nghv, :), Xv(I_box, :), parnear) * V(I_box, :);
 end
 
 function Vrot = LOCAL_rotate_interleaved_vectors(V, row_rotation)

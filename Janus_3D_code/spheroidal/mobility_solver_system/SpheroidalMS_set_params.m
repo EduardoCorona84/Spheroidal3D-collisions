@@ -20,6 +20,7 @@ Inputs
     tsl_backend - (string, optional) 'cartesian' (default) or 'spheroidal'
     tsl_dealiasing - (bool, optional) enable dealiasing in TSL near-evaluation (default true)
     tsl_dealiasing_pad - (int, optional) padding for dealiasing
+    parallel_near - (bool, optional) enable parfor over for near-interactions
 
 Outputs
     parbd       - (struct) struct with rigid body parameters; see spheroidal_mobility for properties.
@@ -41,6 +42,7 @@ arguments
     opts.tsl_backend (1,1) string = "cartesian"
     opts.tsl_dealiasing (1,1) logical = true
     opts.tsl_dealiasing_pad (1,1) double = 4
+    opts.parallel_near (1,1) logical = false
     opts.MRot = []
 end
 
@@ -60,6 +62,7 @@ slp_backend = opts.slp_backend;
 tsl_backend = opts.tsl_backend;
 tsl_dealiasing = opts.tsl_dealiasing;
 tsl_dealiasing_pad = opts.tsl_dealiasing_pad;
+parallel_near = opts.parallel_near;
 MRot = LOCAL_normalize_rotations(opts.MRot, size(C,1));
 
 np=2*p*(p+1); 
@@ -162,7 +165,8 @@ parbd = struct(...
     'slp_backend', slp_backend, ...
     'tsl_backend', tsl_backend, ...
     'tsl_dealiasing', tsl_dealiasing, ...
-    'tsl_dealiasing_pad', tsl_dealiasing_pad ...
+    'tsl_dealiasing_pad', tsl_dealiasing_pad, ...
+    'parallel_near', parallel_near ...
 ); 
 
 parbd.W = W; 

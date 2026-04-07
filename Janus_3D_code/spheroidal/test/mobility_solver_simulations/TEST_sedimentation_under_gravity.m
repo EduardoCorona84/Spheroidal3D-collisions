@@ -5,23 +5,27 @@ One spheroid should not induce any rotation, but multiple spheroids might
 (even if they don't collide) due to pressure disturbances.
 %}
 
-addpath(genpath('../../../spheroidal'));
-addpath(genpath('../../../support'));
-addpath(genpath('../../../FMMLIB'));
+this_dir = fileparts(mfilename('fullpath'));
+repo_root = fileparts(fileparts(fileparts(this_dir)));
+
+addpath(genpath(fullfile(repo_root, 'spheroidal')));
+addpath(genpath(fullfile(repo_root, 'support')));
+addpath(genpath(fullfile(repo_root, 'FMMLIB')));
+addpath(genpath(fullfile(repo_root, 'LCPsolvers')));
 clear SSph_MatVec;
 
 %% SETUP
-scenario = '2body';
+scenario = '4body';
 
 % Simulation parameters
 kerd = 3; % Kernel dimension
 out = true; % outside vs inside sphere
-Nt = 200;
+Nt = 40;
 dt = 0.1;
-denseMV = true; % Dense vs FMM off diagonal 
+denseMV = false; % Dense vs FMM off diagonal 
 tdisc = 'euler';
-mdist = 2; % Collision parameter ?
-collision_eps = 1e-2;
+mdist = 1e-1; % Collision parameter ?
+collision_eps = 1e-1;
 
 % Spheroid parameters
 p  = 8; % Spharm degree p
@@ -35,13 +39,24 @@ switch scenario
         oblate = false;
     case '2body'
         n3 = 2;
-        equ_radii = [1/2 1];
+        equ_radii = [1/2 1/2];
         polar_radii = [1 1];
         C = [...
             -1 0 0; ...
             1.5 0 0; ...
         ];
         oblate = [false false];
+    case '4body'
+        n3 = 4;
+        equ_radii = [1/2 1/2 2/3 1/2];
+        polar_radii = [1 1 1 1];
+        C = [...
+            -1.5 0 0;
+            1.5 0 0;
+            0 0.6 0.2;
+            0 -0.6 0;  
+        ];
+        oblate = false(1, 4);
     otherwise
         error('Scenario not supported.');
 end
@@ -55,7 +70,7 @@ body_volumes = LOCAL_calculate_volume(n3, p, equ_radii, polar_radii, body_shape_
 % Tfun = @(t,C,varargin) [20*(body_volumes).^3; zeros(2,n3) ];
 % Ffun = @(t,C,q) zeros(3,n3);
 Tfun = @(t,C,q) zeros(3,n3);
-Ffun = @(t,C,varargin)  [zeros(2,n3) ; -2*(body_volumes).^3];
+Ffun = @(t,C,varargin)  [zeros(2,n3) ; -1*(body_volumes).^3];
 
 % Parameters for initial setup of bodies
 bodydist = struct( ...
@@ -73,7 +88,10 @@ parbd = struct( ...
     'mdist',mdist, ...
     'collision_eps',collision_eps, ...
     'out',out, ...
-    'bodydist', bodydist ...
+    'bodydist', bodydist, ...
+    'slp_backend', 'cartesian', ...
+    'tsl_backend', 'cartesian', ...
+    'parallel_near', true ...
 );
 
 % Parameters for linear solvers
@@ -81,9 +99,14 @@ parslv = struct(...
     'solver','gmres', ...
     'tol',tol, ...
     'maxit',200, ...
-    'rst',4, ...
+    'rst',16, ...
     'precond_type','bkdiag', ...
     'prec',[], ...
+    'td_sparse_nn', true, ...
+    'td_sparse_nn_reg', 1e-10, ...
+    'td_sparse_nn_inverse', 'lu', ...
+    'td_sparse_nn_extract_max_bodies', 2, ...
+    'td_sparse_nn_reuse_local_state', true, ...
     'colsolver','BBPGD', ... %% Collision parameters will need to be changed after update.
     'coltol',1e-4, ...
     'colmaxit',100, ...
@@ -115,7 +138,7 @@ Fparams.plotGrid = true;
 Fparams.plotColor = 'mu';
 Fparams.plotColorMode = 'inf';
 Fparams.plotForceVectors = true;
-Fparams.plotView = [45 0];
+Fparams.plotView = [35 15];
 Fparams.plotColorLimits = [0.5 1];
 
 

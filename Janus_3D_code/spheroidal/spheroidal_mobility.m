@@ -30,6 +30,7 @@ function spheroidal_mobility(fname,Fparams,init)
         Ct          - (double) n_b x 3 array of centers 
         collision_eps - (double) collision buffer/tolerance
         mdist       - (double) collision buffer for body-body interactions
+        parallel_near - (bool, optional) enable parallelism for matrix-free Stokes
     
     parslv - (struct) linear solver parameters such as 
          prec     - (string) preconditioner type, '' for unprec, 'bkdiag'
@@ -164,6 +165,7 @@ function spheroidal_mobility(fname,Fparams,init)
     end
 
     LOCAL_log_input_options(fname, Fparams, init);
+    LOCAL_start_parallel_threads(Fparams);
     LOCAL_manage_td_sparse_nn_cache('reset', [], []);
 
     %%(0.1) (optional) Load data in init, initialize output arrays
@@ -2166,6 +2168,27 @@ function spheroid_params = LOCAL_get_spheroid_params(body_idx, C, Mt, parbd)
             error('Unknown shape type.');
     end
     spheroid_params.b = spheroid_params.a;
+end
+
+function LOCAL_start_parallel_threads(Fparams)
+    if ~Fparams.parbd.parallel_near
+        return;
+    end
+    if Fparams.denseMV
+        return;
+    end
+
+    pool = gcp('nocreate');
+    if ~isempty(pool)
+        return;
+    end
+
+    try
+        fprintf('Starting parallel pool for matrix-free near evaluation using ''threads''.\n');
+        parpool('threads');
+    catch ME
+        error('Failed to start parallel pool with profile ''threads'': %s', ME.message);
+    end
 end
 
 
