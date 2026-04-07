@@ -137,16 +137,10 @@ function [lambda_int, lambda_surf, lambda_ext] = LOCAL_modSLPspectrum(p, u0, a, 
     sp = (p + 1)^2;
     cnm = 1j * a * c * sqrt(u0^2 - 1);
 
-    Rnm1_vec = zeros(1, sp);
-    Rnm3_vec = zeros(1, sp);
-
-    for j = 0:p
-        idx = j^2 + 1:(j + 1)^2;
-        R1_j = Rnm1(j, [], u0, c);
-        R3_j = Rnm3(j, [], u0, c);
-        Rnm1_vec(idx) = R1_j;
-        Rnm3_vec(idx) = R3_j;
-    end
+    [Rnm1_vec, ~, Rnm3_vec, ~] = ...
+        modified_laplace_eval_radial_sphwv(p, u0, c, false);
+    Rnm1_vec = reshape(Rnm1_vec, 1, sp);
+    Rnm3_vec = reshape(Rnm3_vec, 1, sp);
 
     lambda_int = cnm .* Rnm3_vec;
     lambda_surf = cnm .* (Rnm1_vec .* Rnm3_vec);

@@ -51,8 +51,10 @@ Tests for angular spheroidal wave function ASWFnm.
             modDLP_mat = Kernel_Eval(X_trg, X_src, KEparams);
             modDLPres = modDLP_mat * Snm_src;
 
-            [~, dR1_u0] = Rnm1(n, m, params.u0, gamma);
-            [R3_u, ~] = Rnm3(n, m, u_trg, gamma);
+            [~, dR1_u0, R3_u, ~] = ...
+                modified_laplace_test_radial_mode(p, n, m, [params.u0; u_trg], gamma, params.oblate);
+            dR1_u0 = dR1_u0(1);
+            R3_u = R3_u(2:end);
 
             cnm = 1j * gamma * (params.u0^2 - 1);
             eigenvalue = cnm * dR1_u0 .* R3_u;
@@ -116,8 +118,10 @@ Tests for angular spheroidal wave function ASWFnm.
             modDLP_mat = Kernel_Eval(X_trg, X_src, KEparams);
             modDLPres = modDLP_mat * Snm_src;
 
-            [~, dR3_u0] = Rnm3(n, m, params.u0, gamma);
-            [R1_u, ~] = Rnm1(n, m, u_trg, gamma);
+            [R1_u, ~, ~, dR3_u0] = ...
+                modified_laplace_test_radial_mode(p, n, m, [u_trg; params.u0], gamma, params.oblate);
+            R1_u = R1_u(1:end-1);
+            dR3_u0 = dR3_u0(end);
 
             cnm = 1j * gamma * (params.u0^2 - 1);
             eigenvalue = cnm * dR3_u0 .* R1_u;
@@ -159,10 +163,10 @@ Tests for angular spheroidal wave function ASWFnm.
             phi_trg = S_chk(:, 3);
 
             Snm_trg = ASWFnm(n, m, v_trg, phi_trg, gamma, p, 0);
-            [~, dR1_u0] = Rnm1(n, m, params.u0, gamma);
-            [~, dR3_u0] = Rnm3(n, m, params.u0, gamma);
-            [R1_u, ~] = Rnm1(n, m, u_trg, gamma);
-            [R3_u, ~] = Rnm3(n, m, u_trg, gamma);
+            [R1_u0, dR1_u0, R3_u0, dR3_u0] = ...
+                modified_laplace_test_radial_mode(p, n, m, params.u0, gamma, params.oblate);
+            [R1_u, ~, R3_u, ~] = ...
+                modified_laplace_test_radial_mode(p, n, m, u_trg, gamma, params.oblate);
 
             cnm = 1j * gamma * (params.u0^2 - 1);
             expected = (cnm * dR1_u0) .* R3_u .* Snm_trg;
@@ -203,8 +207,10 @@ Tests for angular spheroidal wave function ASWFnm.
             phi_trg = S_chk(:, 3);
 
             Snm_trg = ASWFnm(n, m, v_trg, phi_trg, gamma, p, 0);
-            [~, dR3_u0] = Rnm3(n, m, params.u0, gamma);
-            [R1_u, ~] = Rnm1(n, m, u_trg, gamma);
+            [R1_u, ~, ~, dR3_u0] = ...
+                modified_laplace_test_radial_mode(p, n, m, [u_trg; params.u0], gamma, params.oblate);
+            R1_u = R1_u(1:end-1);
+            dR3_u0 = dR3_u0(end);
 
             cnm = 1j * gamma * (params.u0^2 - 1);
             expected = (cnm * dR3_u0) .* R1_u .* Snm_trg;
@@ -236,8 +242,8 @@ Tests for angular spheroidal wave function ASWFnm.
 
             modDLPspectral = spheroidalModifiedDLP(params, lambda, []);
 
-            [R1, dR1] = Rnm1(n, m, params.u0, gamma);
-            [R3, dR3] = Rnm3(n, m, params.u0, gamma);
+            [R1, dR1, R3, dR3] = ...
+                modified_laplace_test_radial_mode(p, n, m, params.u0, gamma, params.oblate);
             cnm = 1j * gamma * (params.u0^2 - 1);
             eigenvalue = 0.5 * cnm * (R1 .* dR3 + R3 .* dR1);
             rel_err_analytic = norm(modDLPspectral - eigenvalue * params.sigma) / ...
@@ -301,8 +307,8 @@ function [rel_err_analytic, rel_err_RBS] = LOCAL_on_surface_error(p, lambda, u0,
     
     modDLPspectral = spheroidalModifiedDLP(params, lambda, []);
     
-    [R1, dR1] = Rnm1(n, m, params.u0, gamma);
-    [R3, dR3] = Rnm3(n, m, params.u0, gamma);
+    [R1, dR1, R3, dR3] = ...
+        modified_laplace_test_radial_mode(p, n, m, params.u0, gamma, params.oblate);
     cnm = 1j * gamma * (params.u0^2 - 1);
     eigenvalue = 0.5 * cnm * (R1 .* dR3 + R3 .* dR1);
     rel_err_analytic = norm(modDLPspectral - eigenvalue * params.sigma) / ...

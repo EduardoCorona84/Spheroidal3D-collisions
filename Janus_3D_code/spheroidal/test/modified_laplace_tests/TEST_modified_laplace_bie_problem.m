@@ -35,19 +35,19 @@ classdef TEST_modified_laplace_bie_problem < matlab.unittest.TestCase
         end
 
         function testBIESLPTargetReconstructionAtMultipleDistances(testCase)
-            distances = [1e-4, 1];
+            distances = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 1e-2, 1e-1, 1];
             u0 = 2/sqrt(3);
             rel_err = zeros(size(distances));
 
             for i = 1:numel(distances)
-                [~, ~, ~, condK, info] = modified_laplace_bie_problem( ...
-                    testCase.p, testCase.lambda, u0, distances(i), true, "exterior_dirichlet");
+                [~, ~, ~, ~, info] = modified_laplace_bie_problem( ...
+                    testCase.p, testCase.lambda, u0, distances(i), false, "exterior_dirichlet");
                 rel_err(i) = info.rel_soln_err;
             end
 
-            testCase.verifyLessThan(rel_err, 9e-5, ...
-                'Target evaluation is not sufficiently accurate for some target distances.');
-            testCase.verifyTrue(all(rel_err(2:end) < rel_err(1:end-1)), ...
+            testCase.verifyLessThan(rel_err, 8e-5, ...
+                'Near-singular target evaluation is not sufficiently accurate for some target distances.');
+            testCase.verifyTrue(all(diff(rel_err) < 0), ...
                 'Target error should decrease as targets move farther from the surface.');
         end
 
@@ -55,7 +55,7 @@ classdef TEST_modified_laplace_bie_problem < matlab.unittest.TestCase
             target_distance = 1e-1;
             u0 = 2/sqrt(3);
             [~, ~, ~, condK, info] = modified_laplace_bie_problem( ...
-                testCase.p, testCase.lambda, u0, target_distance, true, "exterior_neumann");
+                testCase.p, testCase.lambda, u0, target_distance, false, "exterior_neumann");
             testCase.verifyLessThan(info.rel_soln_err, 5e-5, ...
                 'Exterior Neumann solution is too inaccurate.');
         end

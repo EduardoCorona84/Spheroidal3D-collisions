@@ -37,8 +37,10 @@ classdef TEST_spheroidalModifiedSP < matlab.unittest.TestCase
             phi_trg = S(:, 3);
             Snm_trg = ASWFnm(n, m, v_trg, phi_trg, c, p, 0);
 
-            R1_u0 = Rnm1(n, m, u0, c);
-            [~, dR3_u] = Rnm3(n, m, u_trg, c);
+            [R1_u0, ~, ~, ~] = ...
+                modified_laplace_test_radial_mode(p, n, m, u0, c, false);
+            [~, ~, ~, dR3_u] = ...
+                modified_laplace_test_radial_mode(p, n, m, u_trg, c, false);
             anm = (1i * c * sqrt(u0^2 - 1)) .* sqrt((u_trg.^2 - 1) ./ (u_trg.^2 - v_trg.^2));
             expected = anm .* R1_u0 .* dR3_u .* Snm_trg;
 
@@ -73,8 +75,10 @@ classdef TEST_spheroidalModifiedSP < matlab.unittest.TestCase
             phi_trg = S(:, 3);
             Snm_trg = ASWFnm(n, m, v_trg, phi_trg, c, p, 0);
 
-            R3_u0 = Rnm3(n, m, u0, c);
-            [~, dR1_u] = Rnm1(n, m, u_trg, c);
+            [~, ~, R3_u0, ~] = ...
+                modified_laplace_test_radial_mode(p, n, m, u0, c, false);
+            [~, dR1_u, ~, ~] = ...
+                modified_laplace_test_radial_mode(p, n, m, u_trg, c, false);
             anm = (1i * c * sqrt(u0^2 - 1)) .* sqrt((u_trg.^2 - 1) ./ (u_trg.^2 - v_trg.^2));
             expected = anm .* R3_u0 .* dR1_u .* Snm_trg;
 
