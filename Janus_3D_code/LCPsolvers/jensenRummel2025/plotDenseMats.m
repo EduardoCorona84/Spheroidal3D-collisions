@@ -179,24 +179,25 @@ name = split(srcFile,'_');
 name = join(name,'\_');
 name = name{1};
 %%
-f1 = figure;
-subplot(1,1,1)
-h = heatmap(ps, tols, 100*boundHolds');
-h.CellLabelFormat = '%.0f';
-colormap(viridis)
-clim([0 100]);
-% title(name)
-set(f1, 'Position',  [0, 0, 1000,1000])
-xlabel('$p$')
-ylabel('$\epsilon_\mathrm{gmres}$')
-h.YDisplayLabels = arrayfun(@(x) sprintf('$10^{%g}$', log10(x)), tols, 'UniformOutput', false);
-set(gca,'Interpreter','latex')
-fontsize(f1, 40, 'points')
-sgtitle('$\|\mathbf{x} - \hat{\mathbf{x}}\|_\infty \leq c^\prime \|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$',...
-    'Interpreter', 'latex', 'FontSize', 50)
-boundFile = fullfile(basedir,'..','docs','fig', [prefix '_boundsHold.png']);
-disp(['Saving to ' boundFile])
-saveas(f1, boundFile);
+% TODO: turn this plot back on before we publish the code. 
+% f1 = figure;
+% subplot(1,1,1)
+% h = heatmap(ps, tols, 100*boundHolds');
+% h.CellLabelFormat = '%.0f';
+% colormap(viridis)
+% clim([0 100]);
+% % title(name)
+% set(f1, 'Position',  [0, 0, 1000,1000])
+% xlabel('$p$')
+% ylabel('$\epsilon_\mathrm{gmres}$')
+% h.YDisplayLabels = arrayfun(@(x) sprintf('$10^{%g}$', log10(x)), tols, 'UniformOutput', false);
+% set(gca,'Interpreter','latex')
+% fontsize(f1, 40, 'points')
+% sgtitle('$\|\mathbf{x} - \hat{\mathbf{x}}\|_\infty \leq c^\prime \|\mathbf{A} - \hat{\mathbf{A}}\|_\infty$',...
+%     'Interpreter', 'latex', 'FontSize', 50)
+% boundFile = fullfile(basedir,'..','docs','fig', [prefix '_boundsHold.png']);
+% disp(['Saving to ' boundFile])
+% saveas(f1, boundFile);
 %%
 f2 = figure;
 subplot(1,1,1)

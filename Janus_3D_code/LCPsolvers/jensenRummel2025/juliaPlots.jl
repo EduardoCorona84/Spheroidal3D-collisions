@@ -14,7 +14,7 @@ name2Display = Dict(
     "L-BFGS-B"=>"L-BFGS-B",
     "Monofidelity PQN"=>"Mono-PQN",
     "Min-Map Newton"=>"Min-Map Newton",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"B-PQN: p=3, ϵ=1e-5",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=3, ϵ=1e-5",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=4, ϵ=1e-6",
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN: p=6, ϵ=1e-6",
 ) 
@@ -25,9 +25,9 @@ name2LatexDisplay = Dict(
     "L-BFGS-B"=>"L-BFGS-B",
     "Min-Map Newton"=>"Min-Map Newton",
     "Monofidelity PQN"=>"Mono-PQN",
-    # "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>"  p=3,"*L"\epsilon_\mathrm{gmres}"*"=1e-5",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"Bi-PQN",
-    # "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"  p=6,"*L"\epsilon_\mathrm{gmres}"*"=1e-6",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN : "*L"p=3, \epsilon_\mathrm{gmres}=10^{-6}",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN : "*L"p=4, \epsilon_\mathrm{gmres}=10^{-6}",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>"B-PQN : "*L"p=6, \epsilon_\mathrm{gmres}=10^{-6}",
 ) 
 
 name2Color = Dict(
@@ -37,12 +37,11 @@ name2Color = Dict(
     "L-BFGS-B"=>colorant"#d62728",  # brick red
     "Monofidelity PQN"=>colorant"#9467bd",  # muted purple
     "Min-Map Newton"=>colorant"#8c564b",  # chestnut brown
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-5})\bigr)"=>colorant"#e377c2",  # raspberry yogurt pink
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#e377c2",  # raspberry yogurt pink
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#7f7f7f",  # middle gray
     "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"=>colorant"#bcbd22",  # curry yellow-green
 )
 font_size = 35
-# colorant"#17becf"   # blue-teal
 ##
 function _createBoxPlot(p,r,c,algoNames,metricName, results)
     for name in reverse(algoNames)
@@ -192,7 +191,7 @@ function createBoxPlotAndTable(algoNames,metrics,prefix,root,fig_dir, title_text
             # push!(row, @sprintf("%.2g (%.2g)",emvps_up_quantile[i], mvps_up_quantile[i]))
             push!(row, @sprintf("%.2g (%.2g)",emvps_maximum[i], mvps_maximum[i]))
         end
-        if contains(name,"B-PQN")
+        if contains(name,"B-PQN") && contains(name, "p=4")
             for i = 1:length(row)
                 row[i] = "\\textbf{$(row[i])}"
             end
@@ -214,11 +213,8 @@ end
 
 ## 
 fig_dir = "/Users/niru8088/scratch/Spheroidal3D-collisions/docs/fig"
-# poly-disperse
-# root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/resultsForRecord.01.31.2026";
-# prefix = "amphi.lcp.lattice.n_5.p_8.cDist_3.lcpSlvr_proxquasinewton.polyDisperseRatio_0.2";
-# mono-disperse 
-root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/goodData";
+# Paths to offline results 
+root = "/Users/niru8088/scratch/Spheroidal3D-collisions/Janus_3D_code/offlineResults";
 prefix = "amphi.lcp.lattice.n_5.p_8.cDist_2.5";
 postfix = "final"
 #
@@ -229,7 +225,9 @@ algoNames = [
     "L-BFGS-B",
     "Min-Map Newton",
     "Monofidelity PQN",
-    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=3, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=4, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)",
+    "B-PQN"*L"\bigl(\hat{\mathbf{A}}(p=6, \epsilon_{\mathrm{gmres}}=10^{-6})\bigr)"
 ]
 ## final 
 p = createBoxPlotAndTable(algoNames,["eMatVecs", "estimTime"], "$prefix.$postfix", root, fig_dir, "LCP Solver Comparison")
