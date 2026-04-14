@@ -57,7 +57,7 @@ else
 end
 
 if Fparams.denseMV
-    A_basic = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
+    A = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
     if nargout >1
         Abad = real((F'*Ck)*SD*(TD\((Bk'*(Ck*(Bk'*F))))));
     end
@@ -66,14 +66,14 @@ else
         warning('Not tested')
         S0 = @(x) reshape(Kernels.SSD0*(repmat(rd.',Nb,size(x,2)).*reshape(x,Nb,n3*size(x,2))),[],size(x,2)); 
         IT0 = @(x) reshape(Kernels.ITSSD0*reshape(x,Nb,n3*size(x,2)),[],size(x,2));
-        A_basic = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
+        A = @(x) real(F.'*(Ck*(S0(-IT0(Lapp(TD,Bf(x))+Lk*Bf(x))+Bf(x)))));
     else
         % TODO implement preconditioner
         parslv = Fparams.parslv;
         parslv.prec = []; 
         BkF = @(x) (Bk.')*(F*x);
         TD = @(x) Lapp(TD, x);
-        A_basic = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
+        A = @(x) real(F.'*(Ak*Lapp(SD,Lslv(TD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
     end
     if debug 
         typeMV = 'Vsh'; flag_pot ='SL_Stk_3D'; a=0; kerd = Fparams.parbd.kerd; DMV =[];
@@ -84,19 +84,20 @@ else
         Amat = real((F'*Ak)*SD*(TD\(Bk'*(Ck*(Bk'*F)))));
         AA = eye(n);
         for i = 1:n
-            AA(:,i) = A_basic(AA(:,i));
+            AA(:,i) = A(AA(:,i));
         end
         fprintf('relErr in MVP %.4g\n',norm(Amat-AA) / norm(Amat))
     end
     if nargout >1
         Abad = @(x) real(F.'*(Ck*Lapp(SD,Lslv(TD,-Lapp(TD,BkF(x))+Lk*BkF(x),parslv)+BkF(x))));
     end
-    A = @(x) A_verbose(x, A_basic, true);
+    A = @(x) A_verbose(x, A, true);
+end
 end
 
-function y = A_verbose(x, A_basic, verbose)
+function y = A_verbose(x, A, verbose)
     start = tic;
-    y = A_basic(x);
+    y = A(x);
     stop = toc(start);
     if verbose 
         fprintf('-- A[x] MVP time %.3g sec \n', stop)
